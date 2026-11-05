@@ -41,10 +41,39 @@ public class CommandPaletteViewModelTests : IDisposable
         vm.Open();
 
         Assert.True(vm.IsOpen);
-        Assert.Equal("新建任务", vm.Results[0].Title);
+        Assert.Contains(vm.Results, r => r.Title == "新建任务");
         Assert.Contains(vm.Results, r => r.Title == "写周报");
         Assert.DoesNotContain(vm.Results, r => r.Title == "已完成");
         Assert.Same(vm.Results[0], vm.SelectedItem);
+    }
+
+    [Fact]
+    public void Open_WithEmptyQuery_PutsContentBeforeCommands()
+    {
+        _service.ProjectsCreate(new CreateProjectInput { Name = "工作台重构" });
+        _service.TasksCreate(new CreateTaskInput { Title = "写周报" });
+
+        var vm = CreateVm();
+        vm.Open();
+
+        // 一屏只放得下九行左右，命令必须让位给项目与任务
+        Assert.Equal("项目", vm.Results[0].Hint);
+        Assert.Equal("写周报", vm.Results[1].Title);
+        Assert.True(
+            vm.Results.ToList().FindIndex(r => r.Title == "新建任务") > 1,
+            "命令应排在项目与任务之后");
+    }
+
+    [Fact]
+    public void Open_WithEmptyQuery_ShowsProjectsToo()
+    {
+        _service.ProjectsCreate(new CreateProjectInput { Name = "工作台重构" });
+
+        var vm = CreateVm();
+        vm.Open();
+
+        // 空查询也要露项目：只在有输入时才列，面板看上去就像「不认识项目」
+        Assert.Contains(vm.Results, r => r.Title == "工作台重构" && r.Hint == "项目");
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Microsoft.Data.Sqlite;
 using WorkStation.App.ViewModels;
 using WorkStation.App.Views;
@@ -229,6 +230,74 @@ public class UiSmokeTests : IDisposable
 
         var box = window.FindControl<TextBox>("QuickAddBox");
         Assert.Same(box, window.FocusManager?.GetFocusedElement());
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Board_TaskCard_DoubleClick_OpensEditor()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput { Title = "双击我" }).Data!;
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var card = window.GetVisualDescendants()
+            .OfType<Border>()
+            .First(b => b.Classes.Contains("board-card")
+                        && b.DataContext is BoardTaskCardViewModel c
+                        && c.Task.Id == task.Id);
+
+        var center = card.TranslatePoint(new Point(card.Bounds.Width / 2, card.Bounds.Height / 2), window);
+        Assert.NotNull(center);
+
+        // 两次快速按下-抬起：卡片按下时不再立即开拖拽会话，双击才到得了
+        for (var i = 0; i < 2; i++)
+        {
+            window.MouseDown(center!.Value, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(center.Value, MouseButton.Left, RawInputModifiers.None);
+        }
+
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(AppPage.Tasks, vm.Page);
+        Assert.True(vm.Tasks!.IsFormOpen, "双击卡片应打开编辑抽屉");
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Palette_ArrowDown_KeepsSelectionVisible()
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            _service.TasksCreate(new CreateTaskInput { Title = $"任务 {i:D2}" });
+        }
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.OpenPaletteCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var palette = window.GetVisualDescendants().OfType<CommandPaletteView>().Single();
+        var scroller = palette.FindControl<ScrollViewer>("ResultScroller");
+        Assert.NotNull(scroller);
+
+        // 面板里除了 8 个动作还有 6 个任务，向下走到底必须把列表带着滚
+        for (var i = 0; i < 12; i++)
+        {
+            Press(window, Key.Down);
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        Assert.True(
+            scroller!.Offset.Y > 0,
+            $"选中项移出可视区时列表应跟随滚动，实际 Offset.Y={scroller.Offset.Y}");
 
         window.Close();
     }

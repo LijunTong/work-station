@@ -61,6 +61,12 @@ public partial class CommandPaletteViewModel : ObservableObject
     private const int MaxTasks = 8;
     private const int MaxProjects = 5;
 
+    /// <summary>空查询时先露出的项目数。再多就把「最近任务」挤到第二屏了。</summary>
+    private const int EmptyQueryProjects = 4;
+
+    /// <summary>空查询时露出的任务数。与项目数合计正好一屏，命令从第二屏开始。</summary>
+    private const int EmptyQueryTasks = 5;
+
     private readonly WorkStationService _service;
     private readonly IReadOnlyList<PaletteAction> _actions;
 
@@ -141,6 +147,28 @@ public partial class CommandPaletteViewModel : ObservableObject
         var query = Query.Trim();
         Results.Clear();
 
+        if (query.Length == 0)
+        {
+            // 空查询：先给手头的事，再给命令。面板一屏只放得下 9 行左右，
+            // 命令排在前面会把项目和任务挤出可视区，看上去像「面板不认识项目」。
+            AddProjectResults(query);
+            AddTaskResults(query);
+            AddActionResults(query);
+        }
+        else
+        {
+            AddActionResults(query);
+            AddProjectResults(query);
+            AddTaskResults(query);
+        }
+
+        SelectedItem = Results.FirstOrDefault();
+        OnPropertyChanged(nameof(HasResults));
+        OnPropertyChanged(nameof(ShowEmpty));
+    }
+
+    private void AddActionResults(string query)
+    {
         foreach (var action in _actions.Where(a => query.Length == 0 || a.Matches(query)))
         {
             var captured = action;
@@ -151,13 +179,6 @@ public partial class CommandPaletteViewModel : ObservableObject
                 () => captured.Invoke(),
                 Activate));
         }
-
-        AddProjectResults(query);
-        AddTaskResults(query);
-
-        SelectedItem = Results.FirstOrDefault();
-        OnPropertyChanged(nameof(HasResults));
-        OnPropertyChanged(nameof(ShowEmpty));
     }
 
     private void AddProjectResults(string query)
@@ -165,7 +186,8 @@ public partial class CommandPaletteViewModel : ObservableObject
         var projects = _service.ProjectsList().Data ?? [];
         var matches = projects
             .Where(p => query.Length == 0 || p.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .Take(query.Length == 0 ? 0 : MaxProjects);
+            // 空查询也要露几个项目：面板第一屏看不到项目，用户会以为面板不认识项目
+            .Take(query.Length == 0 ? EmptyQueryProjects : MaxProjects);
 
         foreach (var project in matches)
         {
@@ -191,7 +213,7 @@ public partial class CommandPaletteViewModel : ObservableObject
         var tasks = (_service.TasksList(filter).Data ?? [])
             .OrderBy(t => string.IsNullOrEmpty(t.DueAt) ? 1 : 0)
             .ThenBy(t => t.DueAt, StringComparer.Ordinal)
-            .Take(query.Length == 0 ? 6 : MaxTasks);
+            .Take(query.Length == 0 ? EmptyQueryTasks : MaxTasks);
 
         var today = LocalTime.ToLocalDate(DateTime.Now);
 

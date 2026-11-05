@@ -29,9 +29,9 @@
                 Height="1"
                 Background="{DynamicResource LineBrush}" />
 
-        <ScrollViewer Grid.Row="2" MaxHeight="368" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Name="ResultScroller" Grid.Row="2" MaxHeight="368" VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="8,7,8,9">
-            <ItemsControl ItemsSource="{Binding Results}">
+            <ItemsControl Name="ResultList" ItemsSource="{Binding Results}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:PaletteItem">
                   <Button Classes="palette-row"
