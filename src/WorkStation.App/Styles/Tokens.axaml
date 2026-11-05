@@ -18,6 +18,8 @@
       <SolidColorBrush x:Key="BgPanelBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="BgSunkenBrush" Color="#EDEFF4" />
       <SolidColorBrush x:Key="BgHoverBrush" Color="#F1F3F8" />
+      <!-- 看板列：比页面深一档、比卡片浅一档，卡片才像「摆在托盘里」 -->
+      <SolidColorBrush x:Key="BgColumnBrush" Color="#EAEDF4" />
 
       <SolidColorBrush x:Key="LineBrush" Color="#E4E7EE" />
       <SolidColorBrush x:Key="LineStrongBrush" Color="#D3D8E2" />
@@ -51,6 +53,8 @@
       <SolidColorBrush x:Key="BgPanelBrush" Color="#161A21" />
       <SolidColorBrush x:Key="BgSunkenBrush" Color="#1C222C" />
       <SolidColorBrush x:Key="BgHoverBrush" Color="#1F2631" />
+      <!-- 深色下「抬升」靠变亮：页面 #0E1116 → 列 #131820 → 卡片 #161A21 -->
+      <SolidColorBrush x:Key="BgColumnBrush" Color="#131820" />
 
       <SolidColorBrush x:Key="LineBrush" Color="#262D39" />
       <SolidColorBrush x:Key="LineStrongBrush" Color="#34404F" />
@@ -104,5 +108,7 @@
   <!-- 页面统一左右内边距，改一处即全站对齐 -->
   <Thickness x:Key="PagePadding">28,0,28,24</Thickness>
   <Thickness x:Key="PageHeaderPadding">28,24,28,18</Thickness>
+  <!-- 看板列自带 12 的右侧间距，这里少给 12，最后一列的右缘才与标题、搜索框对齐 -->
+  <Thickness x:Key="BoardPadding">28,0,16,24</Thickness>
 
 </ResourceDictionary>

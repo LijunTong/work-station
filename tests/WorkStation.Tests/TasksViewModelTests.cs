@@ -41,28 +41,44 @@ public class TasksViewModelTests : IDisposable
     }
 
     [Fact]
-    public void QuickAdd_CreatesTaskAndClearsInput()
+    public void OpenEditor_BuildsFormForTaskOutsideCurrentFilter()
     {
+        var task = _service.TasksCreate(new CreateTaskInput { Title = "从看板点进来" }).Data!;
         var vm = CreateVm();
-        vm.QuickAddTitle = "记一件事";
+        vm.SearchText = "不存在的关键字";
 
-        vm.QuickAddCommand.Execute(null);
+        vm.OpenEditor(task);
 
-        Assert.Equal(string.Empty, vm.QuickAddTitle);
-        Assert.Single(_service.TasksList().Data!);
-        Assert.Single(vm.Groups);
-        Assert.Equal("无期限", vm.Groups[0].Title);
+        Assert.True(vm.IsFormOpen);
+        Assert.Equal(task.Id, vm.Form!.TaskId);
+        Assert.Equal("从看板点进来", vm.Form.Title);
     }
 
     [Fact]
-    public void QuickAdd_BlankInput_DoesNothing()
+    public void FocusProject_SetsFilterToThatProject()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "工作台" }).Data!;
+        _service.TasksCreate(new CreateTaskInput { Title = "项目内任务", ProjectId = project.Id });
+        _service.TasksCreate(new CreateTaskInput { Title = "独立任务" });
+
+        var vm = CreateVm();
+        vm.FocusProject(project.Id);
+
+        Assert.Equal(project.Id, vm.SelectedProject!.Id);
+        Assert.Equal(
+            ["项目内任务"],
+            vm.Groups.SelectMany(g => g.Tasks).Select(r => r.Title).ToArray());
+    }
+
+    [Fact]
+    public void FocusProject_UnknownId_KeepsCurrentFilter()
     {
         var vm = CreateVm();
-        vm.QuickAddTitle = "   ";
+        var before = vm.SelectedProject;
 
-        vm.QuickAddCommand.Execute(null);
+        vm.FocusProject("不存在的项目");
 
-        Assert.Empty(_service.TasksList().Data!);
+        Assert.Same(before, vm.SelectedProject);
     }
 
     [Fact]

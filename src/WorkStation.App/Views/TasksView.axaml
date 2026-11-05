@@ -10,35 +10,10 @@
     <KeyBinding Gesture="Ctrl+Enter" Command="{Binding SaveFormCommand}" />
   </UserControl.KeyBindings>
 
-  <Grid RowDefinitions="Auto,Auto,Auto,*">
-
-    <!-- 快速添加：合成框把「图标 + 输入 + 次操作」收成一行，比裸输入框更像一个动作 -->
-    <Border Grid.Row="0"
-            Classes="composer"
-            Margin="28,0,28,12">
-      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-        <TextBlock Text="＋"
-                   FontSize="15"
-                   Foreground="{DynamicResource TextFaintBrush}"
-                   VerticalAlignment="Center" />
-        <TextBox Grid.Column="1"
-                 Classes="bare"
-                 Text="{Binding QuickAddTitle, Mode=TwoWay}"
-                 PlaceholderText="记一件事，回车添加…"
-                 VerticalAlignment="Center">
-          <TextBox.KeyBindings>
-            <KeyBinding Gesture="Enter" Command="{Binding QuickAddCommand}" />
-          </TextBox.KeyBindings>
-        </TextBox>
-        <Button Grid.Column="2"
-                Content="详细新建"
-                Classes="ghost sm"
-                Command="{Binding NewTaskCommand}" />
-      </Grid>
-    </Border>
+  <Grid RowDefinitions="Auto,Auto,*">
 
     <!-- 筛选：状态用胶囊（选中态一眼可见），项目用下拉（选项会增长） -->
-    <Grid Grid.Row="1"
+    <Grid Grid.Row="0"
           Margin="28,0,28,6"
           ColumnDefinitions="Auto,Auto,*,Auto">
       <ItemsControl ItemsSource="{Binding StatusFilters}" VerticalAlignment="Center">
@@ -72,18 +47,20 @@
       <TextBox Grid.Column="3"
                Margin="12,0,0,0"
                Width="180"
+               HorizontalAlignment="Right"
+               Tag="SearchBox"
                Text="{Binding SearchText, Mode=TwoWay}"
                PlaceholderText="搜索标题或备注…" />
     </Grid>
 
-    <Border Grid.Row="2"
+    <Border Grid.Row="1"
             Classes="error-bar"
             IsVisible="{Binding HasError}"
             Margin="28,6,28,10">
       <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
     </Border>
 
-    <ScrollViewer Grid.Row="3">
+    <ScrollViewer Grid.Row="2">
       <StackPanel Margin="{DynamicResource PagePadding}">
 
         <ItemsControl ItemsSource="{Binding Groups}">
@@ -206,7 +183,7 @@
     </ScrollViewer>
 
     <!-- 表单抽屉 -->
-    <Border Grid.RowSpan="4"
+    <Border Grid.RowSpan="3"
             IsVisible="{Binding IsFormOpen}"
             Background="{DynamicResource ScrimBrush}">
       <Border Classes="drawer"
@@ -338,7 +315,7 @@
     </Border>
 
     <!-- 删除确认 -->
-    <Border Grid.RowSpan="4"
+    <Border Grid.RowSpan="3"
             IsVisible="{Binding IsDeleteConfirmOpen}"
             Background="{DynamicResource ScrimBrush}">
       <Border Classes="card" Width="430" Padding="24" VerticalAlignment="Center" HorizontalAlignment="Center">

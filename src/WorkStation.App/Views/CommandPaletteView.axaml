@@ -1,0 +1,97 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WorkStation.App.ViewModels"
+             x:Class="WorkStation.App.Views.CommandPaletteView"
+             x:DataType="vm:CommandPaletteViewModel"
+             x:CompileBindings="True">
+
+  <Border Background="{DynamicResource ScrimBrush}">
+    <Border Classes="palette"
+            Width="580"
+            VerticalAlignment="Top"
+            HorizontalAlignment="Center"
+            Margin="0,88,0,0">
+      <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="16,13,14,11">
+          <TextBox Name="SearchBox"
+                   Classes="bare"
+                   FontSize="15"
+                   Text="{Binding Query, Mode=TwoWay}"
+                   PlaceholderText="搜索任务、项目，或执行命令…"
+                   VerticalAlignment="Center" />
+          <Border Grid.Column="1" Classes="chip" VerticalAlignment="Center">
+            <TextBlock Text="Esc" />
+          </Border>
+        </Grid>
+
+        <Border Grid.Row="1"
+                Height="1"
+                Background="{DynamicResource LineBrush}" />
+
+        <ScrollViewer Grid.Row="2" MaxHeight="368" VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="8,7,8,9">
+            <ItemsControl ItemsSource="{Binding Results}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:PaletteItem">
+                  <Button Classes="palette-row"
+                          Classes.active="{Binding IsSelected}"
+                          Command="{Binding ActivateCommand}">
+                    <Grid ColumnDefinitions="26,*,Auto" ColumnSpacing="10">
+                      <Border Width="26"
+                              Height="26"
+                              CornerRadius="{DynamicResource RadiusSm}"
+                              Background="{DynamicResource BgSunkenBrush}"
+                              VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Glyph}"
+                                   FontSize="11.5"
+                                   Foreground="{DynamicResource TextDimBrush}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                      </Border>
+                      <TextBlock Grid.Column="1"
+                                 Text="{Binding Title}"
+                                 FontSize="{DynamicResource FontBody}"
+                                 TextTrimming="CharacterEllipsis"
+                                 VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2"
+                                 Text="{Binding Hint}"
+                                 FontSize="{DynamicResource FontMicro}"
+                                 Foreground="{DynamicResource TextFaintBrush}"
+                                 VerticalAlignment="Center" />
+                    </Grid>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="没有匹配的结果"
+                       IsVisible="{Binding ShowEmpty}"
+                       Classes="dim"
+                       FontSize="{DynamicResource FontSm}"
+                       HorizontalAlignment="Center"
+                       Margin="0,18" />
+          </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="3"
+                Padding="16,8"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource LineBrush}">
+          <StackPanel Orientation="Horizontal" Spacing="14">
+            <TextBlock Text="↑↓ 选择"
+                       FontSize="{DynamicResource FontMicro}"
+                       Foreground="{DynamicResource TextFaintBrush}" />
+            <TextBlock Text="Enter 执行"
+                       FontSize="{DynamicResource FontMicro}"
+                       Foreground="{DynamicResource TextFaintBrush}" />
+            <TextBlock Text="Esc 关闭"
+                       FontSize="{DynamicResource FontMicro}"
+                       Foreground="{DynamicResource TextFaintBrush}" />
+          </StackPanel>
+        </Border>
+
+      </Grid>
+    </Border>
+  </Border>
+</UserControl>

@@ -13,6 +13,9 @@
         Background="{DynamicResource BgBrush}">
 
   <Window.DataTemplates>
+    <DataTemplate DataType="vm:BoardViewModel">
+      <views:BoardView />
+    </DataTemplate>
     <DataTemplate DataType="vm:ProjectsViewModel">
       <views:ProjectsView />
     </DataTemplate>
@@ -53,23 +56,28 @@
 
         <StackPanel Grid.Row="1" Margin="12,0" Spacing="3">
           <Button Classes="nav"
-                  Classes.active="{Binding IsProjectsActive}"
-                  Command="{Binding ShowProjectsCommand}">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-              <!-- 看板列图标：三根高低不同的竖条 -->
+                  Classes.active="{Binding IsBoardActive}"
+                  Command="{Binding ShowBoardCommand}">
+            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
+              <!-- 看板列图标：三根竖条 -->
               <Canvas Width="16" Height="16" VerticalAlignment="Center">
-                <Rectangle Canvas.Left="0" Canvas.Top="4" Width="4" Height="10" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="6" Canvas.Top="1" Width="4" Height="13" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="12" Canvas.Top="6" Width="4" Height="8" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="0" Canvas.Top="2" Width="4" Height="12" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="6" Canvas.Top="5" Width="4" Height="9" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="12" Canvas.Top="3" Width="4" Height="11" RadiusX="1.5" RadiusY="1.5" />
               </Canvas>
-              <TextBlock Text="项目" VerticalAlignment="Center" />
-            </StackPanel>
+              <TextBlock Grid.Column="1" Text="看板" VerticalAlignment="Center" />
+              <Border Grid.Column="2"
+                      Classes="badge"
+                      IsVisible="{Binding HasOverdueBadge}">
+                <TextBlock Text="{Binding OverdueBadgeText}" />
+              </Border>
+            </Grid>
           </Button>
 
           <Button Classes="nav"
                   Classes.active="{Binding IsTasksActive}"
                   Command="{Binding ShowTasksCommand}">
-            <StackPanel Orientation="Horizontal" Spacing="10">
+            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
               <!-- 清单图标：三个圆点 + 三条横线 -->
               <Canvas Width="16" Height="16" VerticalAlignment="Center">
                 <Rectangle Canvas.Left="0" Canvas.Top="2" Width="3" Height="3" RadiusX="1.5" RadiusY="1.5" />
@@ -79,14 +87,28 @@
                 <Rectangle Canvas.Left="0" Canvas.Top="11" Width="3" Height="3" RadiusX="1.5" RadiusY="1.5" />
                 <Rectangle Canvas.Left="6" Canvas.Top="11.5" Width="6" Height="2" RadiusX="1" RadiusY="1" />
               </Canvas>
-              <TextBlock Text="任务" VerticalAlignment="Center" />
-            </StackPanel>
+              <TextBlock Grid.Column="1" Text="任务" VerticalAlignment="Center" />
+            </Grid>
+          </Button>
+
+          <Button Classes="nav"
+                  Classes.active="{Binding IsProjectsActive}"
+                  Command="{Binding ShowProjectsCommand}">
+            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
+              <!-- 项目图标：一张大卡 + 两张小卡 -->
+              <Canvas Width="16" Height="16" VerticalAlignment="Center">
+                <Rectangle Canvas.Left="0" Canvas.Top="2" Width="16" Height="4" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="0" Canvas.Top="8" Width="7" Height="6" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="9" Canvas.Top="8" Width="7" Height="6" RadiusX="1.5" RadiusY="1.5" />
+              </Canvas>
+              <TextBlock Grid.Column="1" Text="项目" VerticalAlignment="Center" />
+            </Grid>
           </Button>
 
           <Button Classes="nav"
                   Classes.active="{Binding IsSettingsActive}"
                   Command="{Binding ShowSettingsCommand}">
-            <StackPanel Orientation="Horizontal" Spacing="10">
+            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
               <!-- 滑块图标 -->
               <Canvas Width="16" Height="16" VerticalAlignment="Center">
                 <Rectangle Canvas.Left="0" Canvas.Top="3" Width="16" Height="1.5" RadiusX="0.75" RadiusY="0.75" />
@@ -96,12 +118,15 @@
                 <Rectangle Canvas.Left="4" Canvas.Top="5.7" Width="3" Height="5.2" RadiusX="1.5" RadiusY="1.5" />
                 <Rectangle Canvas.Left="9" Canvas.Top="10.2" Width="3" Height="5.2" RadiusX="1.5" RadiusY="1.5" />
               </Canvas>
-              <TextBlock Text="设置" VerticalAlignment="Center" />
-            </StackPanel>
+              <TextBlock Grid.Column="1" Text="设置" VerticalAlignment="Center" />
+            </Grid>
           </Button>
         </StackPanel>
 
-        <StackPanel Grid.Row="2" Margin="18,0,18,16" Spacing="3">
+        <StackPanel Grid.Row="2" Margin="18,0,18,16" Spacing="5">
+          <TextBlock Text="Ctrl + K 命令面板"
+                     FontSize="10.5"
+                     Foreground="{DynamicResource TextFaintBrush}" />
           <TextBlock Text="本地数据 · 不联网"
                      FontSize="10.5"
                      Foreground="{DynamicResource TextFaintBrush}" />
@@ -115,15 +140,92 @@
             BorderThickness="1,0,0,0">
       <Grid RowDefinitions="Auto,*">
 
-        <StackPanel Grid.Row="0"
-                    Margin="{DynamicResource PageHeaderPadding}"
-                    Spacing="3">
-          <TextBlock Text="{Binding PageTitle}" Classes="page-title" />
-          <TextBlock Text="{Binding PageSubtitle}" Classes="page-subtitle" />
-        </StackPanel>
+        <!-- 标题 + 常驻快速添加：记录一件事不该先想「我现在在哪个页面」 -->
+        <Grid Grid.Row="0"
+              Margin="{DynamicResource PageHeaderPadding}"
+              ColumnDefinitions="*,Auto"
+              ColumnSpacing="20">
+          <StackPanel Spacing="3" VerticalAlignment="Center">
+            <TextBlock Text="{Binding PageTitle}" Classes="page-title" />
+            <TextBlock Text="{Binding PageSubtitle}"
+                       Classes="page-subtitle"
+                       TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+
+          <Border Grid.Column="1"
+                  Classes="composer"
+                  Width="352"
+                  VerticalAlignment="Center">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9">
+              <TextBlock Text="＋"
+                         FontSize="15"
+                         Foreground="{DynamicResource TextFaintBrush}"
+                         VerticalAlignment="Center" />
+              <TextBox Name="QuickAddBox"
+                       Grid.Column="1"
+                       Classes="bare"
+                       Text="{Binding QuickAddTitle, Mode=TwoWay}"
+                       PlaceholderText="记一件事，回车添加…"
+                       VerticalAlignment="Center">
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter" Command="{Binding QuickAddCommand}" />
+                </TextBox.KeyBindings>
+              </TextBox>
+              <Button Grid.Column="2"
+                      Content="详细新建"
+                      Classes="ghost sm"
+                      Command="{Binding NewTaskCommand}" />
+            </Grid>
+          </Border>
+        </Grid>
 
         <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" />
       </Grid>
+    </Border>
+
+    <!-- 命令面板 -->
+    <views:CommandPaletteView Grid.ColumnSpan="2"
+                              DataContext="{Binding Palette}"
+                              IsVisible="{Binding IsOpen}" />
+
+    <!-- 快捷键帮助 -->
+    <Border Grid.ColumnSpan="2"
+            IsVisible="{Binding IsShortcutHelpOpen}"
+            Background="{DynamicResource ScrimBrush}">
+      <Border Classes="card" Width="430" Padding="26" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <StackPanel Spacing="16">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="快捷键" Classes="section-title" VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Content="✕"
+                    Classes="icon"
+                    Command="{Binding CloseShortcutHelpCommand}" />
+          </Grid>
+
+          <Grid ColumnDefinitions="96,*"
+                RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                RowSpacing="10">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="n" Classes="key" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="快速记录一件事" Classes="secondary" FontSize="{DynamicResource FontSm}" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="/" Classes="key" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="聚焦当前页的搜索框" Classes="secondary" FontSize="{DynamicResource FontSm}" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Ctrl + K" Classes="key" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="命令面板：跳转、新建、找任务" Classes="secondary" FontSize="{DynamicResource FontSm}" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="1 – 4" Classes="key" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="切换到对应页面" Classes="secondary" FontSize="{DynamicResource FontSm}" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Ctrl + Enter" Classes="key" />
+            <TextBlock Grid.Row="4" Grid.Column="1" Text="保存当前抽屉" Classes="secondary" FontSize="{DynamicResource FontSm}" />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Esc" Classes="key" />
+            <TextBlock Grid.Row="5" Grid.Column="1" Text="关闭抽屉 / 浮层" Classes="secondary" FontSize="{DynamicResource FontSm}" />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="?" Classes="key" />
+            <TextBlock Grid.Row="6" Grid.Column="1" Text="显示或隐藏这份帮助" Classes="secondary" FontSize="{DynamicResource FontSm}" />
+          </Grid>
+
+          <TextBlock Text="看板里拖动卡片到另一列，就是改状态。"
+                     Classes="dim"
+                     FontSize="{DynamicResource FontXs}" />
+        </StackPanel>
+      </Border>
     </Border>
 
     <!-- Toast：黑底白字在浅色主题里太扎眼，改用面板色 + 细边框 -->

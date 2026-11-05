@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using Avalonia;
 using System.Globalization;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -310,19 +309,7 @@ public sealed partial class ProjectCardViewModel : ObservableObject
         : AccentFallback;
 
     /// <summary>取不到主题资源时（例如纯 ViewModel 单测里没有 Application）退回一个中调蓝。</summary>
-    private static IBrush AccentFallback
-    {
-        get
-        {
-            if (Application.Current?.TryGetResource("AccentBrush", null, out var found) == true
-                && found is IBrush accent)
-            {
-                return accent;
-            }
-
-            return Brush.Parse("#2F62E8");
-        }
-    }
+    private static IBrush AccentFallback => ThemeBrushes.Get("AccentBrush", "#2F62E8");
 
     [RelayCommand]
     private void Edit() => _edit(this);
@@ -340,18 +327,7 @@ public sealed partial class ProjectCardViewModel : ObservableObject
         Action<ProjectCardViewModel> archive,
         Action<ProjectCardViewModel> delete)
     {
-        var counts = new TaskCounts
-        {
-            Total = tasks.Count,
-            Done = tasks.Count(t => t.Status == TaskStatus.Done),
-            Doing = tasks.Count(t => t.Status == TaskStatus.Doing),
-            Overdue = tasks.Count(t => t.Status is not (TaskStatus.Done or TaskStatus.Canceled)
-                                       && Formatting.IsOverdue(t.DueAt, Core.Time.LocalTime.ToLocalDateTime(DateTime.Now)))
-        };
-
-        var progress = project.ProgressMode == ProgressMode.Manual
-            ? Math.Clamp(project.ProgressManual ?? 0, 0, 100)
-            : ProgressCalculator.Compute(tasks);
+        var (counts, progress) = Core.Projects.ProjectSummary.Compute(project, tasks, DateTime.Now);
 
         return new ProjectCardViewModel(project, counts, progress, edit, archive, delete);
     }

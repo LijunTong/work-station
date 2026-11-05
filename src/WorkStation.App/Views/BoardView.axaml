@@ -1,0 +1,340 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WorkStation.App.ViewModels"
+             xmlns:controls="using:WorkStation.App.Controls"
+             x:Class="WorkStation.App.Views.BoardView"
+             x:DataType="vm:BoardViewModel"
+             x:CompileBindings="True">
+
+  <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+    <!-- 概览条：数字本身就是筛选入口，右侧切任务/项目看板 -->
+    <Grid Grid.Row="0" Margin="28,0,28,14" ColumnDefinitions="Auto,*,Auto">
+      <ItemsControl ItemsSource="{Binding OverviewChips}" VerticalAlignment="Center">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Orientation="Horizontal" Spacing="8" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:BoardChip">
+            <Button Classes="stat"
+                    Classes.active="{Binding IsSelected}"
+                    Command="{Binding SelectCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="7">
+                <TextBlock Text="{Binding CountText}"
+                           FontSize="15"
+                           FontWeight="SemiBold"
+                           Foreground="{Binding CountBrush}"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Label}"
+                           FontSize="{DynamicResource FontXs}"
+                           Foreground="{DynamicResource TextDimBrush}"
+                           VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Border Grid.Column="2" Classes="segment" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal">
+          <Button Content="任务看板"
+                  Classes="seg"
+                  Classes.active="{Binding IsTaskBoard}"
+                  Command="{Binding SwitchBoardCommand}"
+                  CommandParameter="Tasks" />
+          <Button Content="项目看板"
+                  Classes="seg"
+                  Classes.active="{Binding IsProjectBoard}"
+                  Command="{Binding SwitchBoardCommand}"
+                  CommandParameter="Projects" />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- 筛选行 -->
+    <Grid Grid.Row="1"
+          Margin="28,0,28,12"
+          ColumnDefinitions="Auto,Auto,Auto,*,Auto"
+          ColumnSpacing="10">
+      <ComboBox Width="150"
+                ItemsSource="{Binding ProjectOptions}"
+                SelectedItem="{Binding SelectedProject, Mode=TwoWay}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProjectOption">
+            <TextBlock Text="{Binding Name}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+
+      <ItemsControl Grid.Column="1" ItemsSource="{Binding PriorityChips}" VerticalAlignment="Center">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Orientation="Horizontal" Spacing="6" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:BoardChip">
+            <Button Content="{Binding Label}"
+                    Classes="filter"
+                    Classes.active="{Binding IsSelected}"
+                    Command="{Binding SelectCommand}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Button Grid.Column="4"
+              Content="清除筛选"
+              Classes="ghost sm"
+              IsVisible="{Binding HasFilter}"
+              Command="{Binding ClearFiltersCommand}" />
+
+      <TextBox Grid.Column="3"
+               Width="200"
+               HorizontalAlignment="Right"
+               Tag="SearchBox"
+               Text="{Binding SearchText, Mode=TwoWay}"
+               PlaceholderText="搜索标题或备注…" />
+    </Grid>
+
+    <Border Grid.Row="2"
+            Classes="error-bar"
+            IsVisible="{Binding HasError}"
+            Margin="28,0,28,10">
+      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+    </Border>
+
+    <!-- 任务看板 -->
+    <ItemsControl Grid.Row="3"
+                  IsVisible="{Binding IsTaskBoard}"
+                  Margin="{DynamicResource BoardPadding}"
+                  ItemsSource="{Binding Columns}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Columns="4" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:BoardColumnViewModel">
+            <Border Classes="column"
+                    Classes.droptarget="{Binding IsDragOver}"
+                    Margin="0,0,12,0"
+                    DragDrop.AllowDrop="True"
+                    DragDrop.DragOver="OnColumnDragOver"
+                    DragDrop.DragLeave="OnColumnDragLeave"
+                    DragDrop.Drop="OnColumnDrop">
+              <Grid RowDefinitions="Auto,*" RowSpacing="8">
+
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="2,2,2,0">
+                  <TextBlock Text="{Binding Title}"
+                             FontSize="{DynamicResource FontSm}"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             VerticalAlignment="Center" />
+                  <Border Grid.Column="1" Classes="chip" Margin="7,0,0,0" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding CountText}" />
+                  </Border>
+                  <Button Grid.Column="2"
+                          Content="{Binding DoneWindowLabel}"
+                          Classes="ghost sm"
+                          Padding="6,2"
+                          IsVisible="{Binding IsDone}"
+                          Command="{Binding ToggleDoneWindowCommand}" />
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                  <StackPanel>
+                    <ItemsControl ItemsSource="{Binding Cards}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BoardTaskCardViewModel">
+                          <Border Classes="board-card"
+                                  Margin="0,0,0,8"
+                                  Cursor="Hand"
+                                  DoubleTapped="OnTaskCardDoubleTapped"
+                                  PointerPressed="OnTaskCardPressed">
+                            <!-- 双击之外再给一个右键入口：拖拽会话有可能吞掉双击手势 -->
+                            <Border.ContextMenu>
+                              <ContextMenu DataContext="{Binding}">
+                                <MenuItem Header="编辑任务" Click="OnTaskCardEditMenu" />
+                              </ContextMenu>
+                            </Border.ContextMenu>
+                            <Grid ColumnDefinitions="3,*" ColumnSpacing="9">
+                              <Border Classes="priority-bar"
+                                      Background="{Binding PriorityBrush}"
+                                      IsVisible="{Binding HasPriority}" />
+                              <StackPanel Grid.Column="1" Spacing="5">
+                                <TextBlock Text="{Binding Title}"
+                                           FontSize="{DynamicResource FontBody}"
+                                           TextWrapping="Wrap"
+                                           MaxLines="2"
+                                           TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="5"
+                                            IsVisible="{Binding HasProject}">
+                                  <Ellipse Width="6"
+                                           Height="6"
+                                           Fill="{Binding ProjectBrush}"
+                                           VerticalAlignment="Center" />
+                                  <TextBlock Text="{Binding ProjectName}"
+                                             FontSize="{DynamicResource FontMicro}"
+                                             Foreground="{DynamicResource TextDimBrush}"
+                                             TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding BlockedText}"
+                                           IsVisible="{Binding HasBlockedReason}"
+                                           FontSize="{DynamicResource FontMicro}"
+                                           Foreground="{DynamicResource WarningBrush}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding FooterText}"
+                                           IsVisible="{Binding HasFooter}"
+                                           FontSize="{DynamicResource FontMicro}"
+                                           Classes.dim="{Binding !IsOverdue}"
+                                           Classes.urgent="{Binding IsOverdue}" />
+                              </StackPanel>
+                            </Grid>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="拖到这里"
+                               IsVisible="{Binding IsEmpty}"
+                               Classes="dim"
+                               FontSize="{DynamicResource FontXs}"
+                               HorizontalAlignment="Center"
+                               Margin="0,10,0,0" />
+                  </StackPanel>
+                </ScrollViewer>
+
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <!-- 项目看板 -->
+    <ItemsControl Grid.Row="3"
+                  IsVisible="{Binding IsProjectBoard}"
+                  Margin="{DynamicResource BoardPadding}"
+                  ItemsSource="{Binding ProjectColumns}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Columns="4" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:BoardProjectColumnViewModel">
+            <Border Classes="column"
+                    Classes.droptarget="{Binding IsDragOver}"
+                    Margin="0,0,12,0"
+                    DragDrop.AllowDrop="True"
+                    DragDrop.DragOver="OnColumnDragOver"
+                    DragDrop.DragLeave="OnColumnDragLeave"
+                    DragDrop.Drop="OnColumnDrop">
+              <Grid RowDefinitions="Auto,*" RowSpacing="8">
+
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="2,2,2,0">
+                  <TextBlock Text="{Binding Title}"
+                             FontSize="{DynamicResource FontSm}"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             VerticalAlignment="Center" />
+                  <Border Grid.Column="1" Classes="chip" Margin="7,0,0,0" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding CountText}" />
+                  </Border>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                  <StackPanel>
+                    <ItemsControl ItemsSource="{Binding Cards}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BoardProjectCardViewModel">
+                          <Border Classes="board-card"
+                                  Margin="0,0,0,8"
+                                  Cursor="Hand"
+                                  PointerPressed="OnProjectCardPressed">
+                            <StackPanel Spacing="8">
+
+                              <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="{Binding Name}"
+                                           FontSize="{DynamicResource FontBody}"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                                <Ellipse Grid.Column="1"
+                                         Width="7"
+                                         Height="7"
+                                         Fill="{Binding AccentBrush}"
+                                         IsVisible="{Binding HasColor}"
+                                         VerticalAlignment="Center"
+                                         Margin="6,0,0,0" />
+                              </Grid>
+
+                              <TextBlock Text="{Binding Description}"
+                                         IsVisible="{Binding HasDescription}"
+                                         FontSize="{DynamicResource FontMicro}"
+                                         Classes="dim"
+                                         MaxLines="2"
+                                         TextWrapping="Wrap"
+                                         TextTrimming="CharacterEllipsis" />
+
+                              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
+                                <Grid Width="38" Height="38">
+                                  <controls:ProgressRing Value="{Binding Progress}"
+                                                         Thickness="3.5"
+                                                         RingBrush="{Binding RingBrush}"
+                                                         TrackBrush="{DynamicResource BgSunkenBrush}" />
+                                  <TextBlock Text="{Binding ProgressText}"
+                                             FontSize="10"
+                                             FontWeight="SemiBold"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                </Grid>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                  <TextBlock Text="{Binding MetaText}"
+                                             FontSize="{DynamicResource FontMicro}"
+                                             Foreground="{DynamicResource TextSecondaryBrush}" />
+                                  <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <TextBlock Text="{Binding OverdueText}"
+                                               IsVisible="{Binding HasOverdue}"
+                                               FontSize="{DynamicResource FontMicro}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource DangerBrush}" />
+                                    <TextBlock Text="{Binding DueText}"
+                                               FontSize="{DynamicResource FontMicro}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Classes="dim" />
+                                  </StackPanel>
+                                </StackPanel>
+                              </Grid>
+
+                              <Button Content="进入任务看板 →"
+                                      Classes="ghost sm"
+                                      Padding="0,2"
+                                      HorizontalAlignment="Left"
+                                      Command="{Binding OpenTasksCommand}" />
+
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="拖到这里"
+                               IsVisible="{Binding IsEmpty}"
+                               Classes="dim"
+                               FontSize="{DynamicResource FontXs}"
+                               HorizontalAlignment="Center"
+                               Margin="0,10,0,0" />
+                  </StackPanel>
+                </ScrollViewer>
+
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+  </Grid>
+</UserControl>

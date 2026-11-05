@@ -1,5 +1,8 @@
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Microsoft.Data.Sqlite;
 using WorkStation.App.ViewModels;
@@ -69,7 +72,34 @@ public class UiSmokeTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void MainWindow_ShowsProjectsPage_ThenNavigates()
+    public void BoardView_LoadsXaml()
+    {
+        var vm = new BoardViewModel(_service, (_, _) => { });
+        vm.Reload();
+
+        var view = new BoardView { DataContext = vm };
+        view.Measure(new Size(1000, 700));
+        view.Arrange(new Rect(0, 0, 1000, 700));
+
+        Assert.NotNull(view.Content);
+        Assert.Equal(4, vm.Columns.Count);
+    }
+
+    [AvaloniaFact]
+    public void CommandPaletteView_LoadsXaml()
+    {
+        var vm = new CommandPaletteViewModel(_service, []);
+        vm.Open();
+
+        var view = new CommandPaletteView { DataContext = vm };
+        view.Measure(new Size(900, 600));
+        view.Arrange(new Rect(0, 0, 900, 600));
+
+        Assert.NotNull(view.Content);
+    }
+
+    [AvaloniaFact]
+    public void MainWindow_ShowsBoardPage_ThenNavigates()
     {
         var vm = new MainWindowViewModel(_service);
         var window = new MainWindow(vm);
@@ -78,14 +108,20 @@ public class UiSmokeTests : IDisposable
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(window.IsVisible);
-        Assert.IsType<ProjectsViewModel>(vm.CurrentPage);
-        Assert.Equal("项目", vm.PageTitle);
+        Assert.IsType<BoardViewModel>(vm.CurrentPage);
+        Assert.Equal("看板", vm.PageTitle);
 
         vm.ShowTasksCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
         Assert.IsType<TasksViewModel>(vm.CurrentPage);
         Assert.Equal("任务", vm.PageTitle);
+
+        vm.ShowProjectsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.IsType<ProjectsViewModel>(vm.CurrentPage);
+        Assert.Equal("项目", vm.PageTitle);
 
         vm.ShowSettingsCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
@@ -143,6 +179,56 @@ public class UiSmokeTests : IDisposable
         Assert.Equal(
             ["独立任务", "P1", "P2"],
             vm.Tasks.Form!.ProjectChoices.Select(o => o.Name).ToArray());
+
+        window.Close();
+    }
+
+    /// <summary>无头宿主下发一次按键。PhysicalKey 只用于输入法映射，这里传 None。</summary>
+    private static void Press(Window window, Key key, RawInputModifiers modifiers = RawInputModifiers.None) =>
+        window.KeyPress(key, modifiers, PhysicalKey.None, null);
+
+    [AvaloniaFact]
+    public void Keyboard_Shortcuts_NavigateAndTogglePalette()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        // 数字键切页
+        Press(window, Key.D2);
+        Dispatcher.UIThread.RunJobs();
+        Assert.IsType<TasksViewModel>(vm.CurrentPage);
+
+        Press(window, Key.D3);
+        Dispatcher.UIThread.RunJobs();
+        Assert.IsType<ProjectsViewModel>(vm.CurrentPage);
+
+        // Ctrl+K 打开、Esc 关闭
+        Press(window, Key.K, RawInputModifiers.Control);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(vm.Palette!.IsOpen);
+
+        Press(window, Key.Escape);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(vm.Palette.IsOpen);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Keyboard_N_FocusesQuickAdd()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        Press(window, Key.N);
+        Dispatcher.UIThread.RunJobs();
+
+        var box = window.FindControl<TextBox>("QuickAddBox");
+        Assert.Same(box, window.FocusManager?.GetFocusedElement());
 
         window.Close();
     }

@@ -61,9 +61,6 @@ public partial class TasksViewModel : ObservableObject
     private ProjectOption? _selectedProject;
 
     [ObservableProperty]
-    private string _quickAddTitle = string.Empty;
-
-    [ObservableProperty]
     private string _searchText = string.Empty;
 
     [ObservableProperty]
@@ -277,21 +274,23 @@ public partial class TasksViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void QuickAdd()
+    /// <summary>
+    /// 从看板或命令面板跳进来的编辑入口。任务可能不在当前筛选结果里，
+    /// 所以不能从 Groups 里找行，直接按实体构造表单。
+    /// </summary>
+    public void OpenEditor(TaskItem task)
     {
-        var title = QuickAddTitle.Trim();
-        if (title.Length == 0) return;
+        Form = TaskFormViewModel.ForEdit(task, ProjectOptions, SaveForm, CloseForm);
+        IsFormOpen = true;
+    }
 
-        var result = _service.TasksCreate(new CreateTaskInput { Title = title });
-        if (!result.Ok)
-        {
-            _toast(result.Error?.Message ?? "添加失败", true);
-            return;
-        }
+    /// <summary>按项目筛选。项目不在下拉里（已归档等）时静默忽略，避免把筛选重置成「全部」。</summary>
+    public void FocusProject(string projectId)
+    {
+        var option = ProjectOptions.FirstOrDefault(o => o.Id == projectId);
+        if (option is null) return;
 
-        QuickAddTitle = string.Empty;
-        Reload();
+        SelectedProject = option;
     }
 
     [RelayCommand]
