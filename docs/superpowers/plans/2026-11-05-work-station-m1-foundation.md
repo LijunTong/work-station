@@ -16,15 +16,15 @@
 
 > **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
 >
-> **最近更新：** 2026-11-05 · Task 11 完成（11/13）
+> **最近更新：** 2026-11-05 · Task 12 完成（12/13）
 
-**当前状态：M1 骨架与数据层进行中。13 个任务已完成 11 个，Task 11 项目管理页一次通过复审（VERDICT: PASS，0 Critical、0 Important，7 Minor 延后）。Task 12–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+**当前状态：M1 骨架与数据层进行中。13 个任务已完成 12 个，Task 12 任务页复审判定「需要修复」：1 个 Important（周日「本周」边界算错，brief 公式缺陷）已随 `dbcefdd` 修掉，同时补上设计文档 6.2 要求但简报遗漏的日期分组折叠、改正分组顺序；9 个 Minor 延后。Task 13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
 
 ### 里程碑总览
 
 | 里程碑 | 范围 | 状态 |
 | --- | --- | --- |
-| M1 | 骨架与数据层（13 任务） | 进行中 · 11/13 |
+| M1 | 骨架与数据层（13 任务） | 进行中 · 12/13 |
 | M2 | 看板与拖拽 | 未拆解 |
 | M3 | 提醒与报告 | 未拆解 |
 | M4 | 打磨与发布 | 未拆解 |
@@ -44,13 +44,13 @@
 | 9 | 渲染进程基础（API 客户端 / 主题 / 布局） | ✅ 完成 | `2e2b3e4` | 通过（0 Important，8 Minor 延后） | 6 |
 | 10 | 通用 UI 组件集 | ✅ 完成 | `3d9122f` | 通过（0 Important，8 Minor 延后） | 6 |
 | 11 | 项目管理页 | ✅ 完成 | `043555d` | 通过（0 Important，7 Minor 延后） | — |
-| 12 | 任务列表页与快速添加 | ⬜ 未开始 | — | — | — |
+| 12 | 任务列表页与快速添加 | ✅ 完成（1 轮修复） | `8bb30c9` `dbcefdd` | 通过（1 个 Important + 设计缺口已修，9 Minor 延后） | — |
 | 13 | 打包配置、README、M1 手测清单 | ⬜ 未开始 | — | — | — |
 | — | M1 收尾：全分支最终评审 + 修复波 | ⬜ 未开始 | — | — | — |
 
 合计 **128** 条用例全绿（12 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
 
-### 已交付代码（Task 1–11）
+### 已交付代码（Task 1–12）
 
 ```
 electron/
@@ -80,6 +80,7 @@ src/
 ├─ styles/global.css         设计令牌 + 布局骨架（浅/深两套）
 ├─ components/               Badge / ProgressRing / EmptyState / Field / Drawer / Modal
 ├─ features/projects/                  ProjectPage + ProjectForm（项目卡片/进度环/删除确认）
+├─ features/tasks/                     TaskPage + TaskForm + QuickAdd（日期分组折叠/已完结灰显/chip 筛选）
 └─ App.tsx / main.tsx / index.html   应用外壳（导航 + 主题恢复）
 tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14 · settings 16 · ipc 14 · preload 3 · result-parity 2 · ui 6 · format 6
 ```
@@ -140,7 +141,7 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 
 ### 当前待办
 
-1. **Task 12 任务列表页与快速添加** —— `TaskPage` / `TaskForm` / `QuickAdd`，日期分组折叠、已完成灰显不可反悔、chip 过滤、Ctrl+Enter 提交。必须复用 `@/lib/format` 的 `toLocalDateTime`/`toLocalDate`/`isOverdue`（禁止手拼日期串），日期分组与逾期判定都用它。
+1. ~~**Task 12 任务列表页与快速添加**~~ ✅ 已完成（`8bb30c9` + `dbcefdd`）。
 2. **Task 13 打包配置、README 与 M1 手测清单** —— `engines.node >= 22.5.0`、README、`docs/M1-手测清单.md`、`npm run build:win` 产出 portable exe，并按可脚本化配方逐项验证。
 3. **M1 收尾**：全分支最终评审 + 修复波（含延后 Minor 的统一评估）。
 
@@ -159,6 +160,7 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 - **Task 9**：`useAsync` 用 `[...deps, nonce]`（deps 定长是调用方契约，变长会触发 React 开发期警告）；`applyTheme` 对显式 light/dark 也求值 `systemPrefersDark()`（无 `window` 抛 ReferenceError，且 `setTheme` 先 set 后 apply，抛错后 store 与 dataset 不同步）；主题恢复无取消标志、无条件覆盖、空 catch 且只读一次；保存主题失败不回滚；`matchMedia` 查询串未被测试钉住（变异存活）；无 useAsync/App/SettingsPage 组件测试，`showToast` 断言钉死 `id: Date.now()`；首帧主题闪（`index.html` 未预置 `data-theme`，`electron/main.ts:17` 背景为深色）；未按字面跑 `npm run dev`。
 - **Task 10**：Drawer/Modal 缺 `role="dialog"`/`aria-modal`/`aria-labelledby`、无焦点管理与 body 滚动锁、关闭按钮可访问名只有 `×`；ProgressRing 对 `NaN` 无守卫；Badge 默认生成 `.badge-default` 但 CSS 无该规则；`global.css` 丢末尾换行；`formatHours` 负数 ties 朝 +∞、`NaN→"NaNh"`（`tasks.estimate/spent` 为 REAL 且无 CHECK ≥0）；`isOverdue` 相等边界无用例（`<`→`<=` 变异存活），parity 用例依赖非 UTC 时区；组件用全局 `React.ReactElement`；Field 隐式 label 只关联第一个控件。
 - **Task 11**：删除确认无 in-flight 保护（双击重复 IPC + 重复成功 toast，无数据损坏）；`tasksAsync.error` 从未渲染，tasks 故障时卡片静默按 0 任务/0% 渲染；错误态与「还没有项目」空状态同屏；`ProjectForm` 内联复制了 `CreateProjectInput` 的 9 字段结构；归档无二次确认、应用内无「取消归档」入口（repo 有 `unarchive` 未接入）；进度改 auto 保存会清掉原 `progressManual`；设计 6.1 的「进行中任务数」「颜色标签」未在卡片展示（颜色仅存 DB）；`reloadAll` 的 `useCallback` 依赖每次渲染都变（无效记忆化，无行为影响）。
+- **Task 12**：`canceled` 无筛选 chip 且与 `done` 同用绿色实心圈（视觉不可区分）；`TaskForm` 无 submitting 同步锁，同 tick 连发 Ctrl+Enter 会重复建任务（实测 3 次 → 3 条）；归档项目的任务显示「未知项目」、抽屉 select 回退「独立任务」（关联仍在）；`projectsAsync.error` 从未渲染；`estimate`/`spent` 输入 0 被写成 null；删除无 in-flight 保护；页面与 `groupOf` 零测试（本次周日边界缺陷即因无测试漏过）；QuickAdd 失败路径仅静态核对。
 ---
 
 ## Global Constraints
