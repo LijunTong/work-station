@@ -2,17 +2,22 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <RootNamespace>WorkStation.Tests</RootNamespace>
     <AssemblyName>WorkStation.Tests</AssemblyName>
+    <!-- 源码是 UTF-8 无 BOM；不声明代码页时 Roslyn 会按系统 ANSI（中文 Windows 是 GBK）解码，中文标识符直接读坏 -->
+    <CodePage>65001</CodePage>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="xunit" Version="2.9.3" />
+    <!-- Avalonia.Headless.XUnit 12.x 依赖 xunit v3，与 xunit v2 的类型同名冲突（CS0433），
+         因此整个测试项目统一走 v3：v3 的测试项目是可执行程序，需要 OutputType=Exe。 -->
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <!-- UI 层无头测试：加载真实 .axaml、实例化 ViewModel、模拟交互 -->
     <PackageReference Include="Avalonia.Headless" Version="12.1.5" />
@@ -26,6 +31,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- TaskStatus 与 System.Threading.Tasks.TaskStatus 同名，隐式 using 下会 CS0104 二义 -->
+    <Using Include="TaskStatus = WorkStation.Core.Models.TaskStatus" />
   </ItemGroup>
 
 </Project>
