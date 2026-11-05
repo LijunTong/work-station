@@ -40,6 +40,35 @@ describe('标签仓储', () => {
     expect(tags.list().map((t) => t.name)).toEqual(['a', 'b']);
   });
 
+  it('更新只覆盖传入的字段', () => {
+    const created = tags.create({ name: '原名', color: '#ff0000' });
+    const updated = tags.update(created.id, { name: '新名' });
+    expect(updated?.name).toBe('新名');
+    // 没传 color：必须保留原值，不能被 undefined 覆盖
+    expect(updated?.color).toBe('#ff0000');
+  });
+
+  it('更新可空字段时区分「没传」与「传了 null」', () => {
+    const created = tags.create({ name: '可空字段', color: '#ff0000' });
+    // 没传 color：保持原值
+    expect(tags.update(created.id, { name: '改名' })?.color).toBe('#ff0000');
+    // 传了 color: null：显式清空
+    expect(tags.update(created.id, { color: null })?.color).toBeNull();
+  });
+
+  it('更新不存在的标签返回 null', () => {
+    expect(tags.update('missing', { name: 'x' })).toBeNull();
+  });
+
+  it('仓储方法被解构后仍能调用（不依赖 this 绑定）', () => {
+    const { create, update, get } = tags;
+    const created = create({ name: '解构调用' });
+    expect(get(created.id)?.name).toBe('解构调用');
+    // 查不到的行返回 null（stmt.get() 返回 undefined，仓储统一归一成 null）
+    expect(get('missing')).toBeNull();
+    expect(update(created.id, { name: '解构改名' })?.name).toBe('解构改名');
+  });
+
   it('给任务设置多个标签', () => {
     const task = tasks.create({ title: '任务' });
     const a = tags.create({ name: 'a' });
