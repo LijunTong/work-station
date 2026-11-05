@@ -1,4 +1,4 @@
-# 发布脚本：按 RID 产出桌面三平台的可分发产物。
+﻿# 发布脚本：按 RID 产出桌面三平台的可分发产物。
 #
 #   用法：
 #     tools\publish.ps1                      # 一次出 win-x64 / osx-arm64 / linux-x64
@@ -25,22 +25,22 @@ if (-not (Test-Path -LiteralPath $project)) {
   throw "not found: $project"
 }
 
-foreach ($rid in $Rid) {
-  $out = Join-Path (Join-Path $root $OutDir) $rid
-  Write-Host "=== publish $rid -> $out"
+foreach ($runtime in $Rid) {
+  $out = Join-Path (Join-Path $root $OutDir) $runtime
+  Write-Host "=== publish $runtime -> $out"
   & dotnet publish $project `
     -c $Configuration `
-    -r $rid `
+    -r $runtime `
     --self-contained false `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:DebugType=None `
     -o $out
   if ($LASTEXITCODE -ne 0) {
-    throw "publish failed for $rid (exit $LASTEXITCODE)"
+    throw "publish failed for $runtime (exit $LASTEXITCODE)"
   }
   # SkiaSharp / HarfBuzzSharp 的原生包会附带 .pdb，那是调试符号，不进发布包
-  Get-ChildItem -LiteralPath $out -Filter *.pdb -File | Remove-Item -Force
+  Get-ChildItem -LiteralPath $out -Filter *.pdb -File | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
   $files = Get-ChildItem -LiteralPath $out -File
   $total = ($files | Measure-Object -Property Length -Sum).Sum
   Write-Host ("  {0} files, {1:N1} MB" -f $files.Count, ($total / 1MB))
