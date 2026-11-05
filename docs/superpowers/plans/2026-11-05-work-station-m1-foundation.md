@@ -3563,7 +3563,7 @@ git commit -m "feat: 添加渲染进程 API 客户端、主题系统与布局骨
   - `ProgressRing`：`{ value: number; size?: number; stroke?: number; label?: string }`
   - `EmptyState`：`{ title: string; hint?: string; action?: React.ReactNode }`
   - `Field`：`{ label: string; children: React.ReactNode; hint?: string }`
-  - `src/lib/format.ts` 导出 `formatPercent(value: number): string`、`formatHours(value: number | null): string`、`formatLocalDateTime(value: string | null): string`、`isOverdue(dueAt: string | null, nowLocalDateTime: string): boolean`、`toLocalDateTime(date: Date): string`
+  - `src/lib/format.ts` 导出 `formatPercent(value: number): string`、`formatHours(value: number | null): string`、`formatLocalDateTime(value: string | null): string`、`isOverdue(dueAt: string | null, nowLocalDateTime: string): boolean`、`toLocalDateTime(date: Date): string`、`toLocalDate(date: Date): string`
     - `toLocalDateTime` **必须与 `electron/util/time.ts` 逐字同口径**（`YYYY-MM-DDTHH:mm`，本地墙钟）。Task 8 的 `window.api.tasks.overdueCount(nowLocalDateTime)` 要渲染端自己算这个串，而 `src/` 下没有时间工具 —— 这是 Task 8 复审留下的跨任务缺口，由本任务补齐。两侧形状必须一致，靠 Step 2 的比对用例钉死。
 
 - [ ] **Step 1: 写格式化工具**
@@ -3595,8 +3595,12 @@ export function isOverdue(dueAt: string | null, nowLocalDateTime: string): boole
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
+export function toLocalDate(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 export function toLocalDateTime(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${toLocalDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 ```
 
@@ -3606,8 +3610,8 @@ export function toLocalDateTime(date: Date): string {
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { formatHours, formatLocalDateTime, formatPercent, isOverdue, toLocalDateTime } from '../src/lib/format';
-import { toLocalDateTime as mainToLocalDateTime } from '../electron/util/time';
+import { formatHours, formatLocalDateTime, formatPercent, isOverdue, toLocalDate, toLocalDateTime } from '../src/lib/format';
+import { toLocalDate as mainToLocalDate, toLocalDateTime as mainToLocalDateTime } from '../electron/util/time';
 
 describe('格式化工具', () => {
   it('formatPercent 四舍五入并夹在 0-100', () => {
@@ -3649,6 +3653,7 @@ describe('格式化工具', () => {
     for (const d of samples) {
       expect(toLocalDateTime(d)).toBe(mainToLocalDateTime(d));
       expect(toLocalDateTime(d)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+      expect(toLocalDate(d)).toBe(mainToLocalDate(d));
     }
     expect(toLocalDateTime(new Date(2026, 10, 5, 9, 7))).toBe('2026-11-05T09:07');
   });
@@ -4196,7 +4201,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Modal } from '@/components/Modal';
 import { ProgressRing } from '@/components/ProgressRing';
 import { call } from '@/lib/api';
-import { isOverdue } from '@/lib/format';
+import { isOverdue, toLocalDateTime } from '@/lib/format';
 import { computeProgress } from '@/lib/progress';
 import { useAsync } from '@/hooks/useAsync';
 import { useUiStore } from '@/store/ui';
@@ -4238,8 +4243,9 @@ export function ProjectPage(): React.ReactElement {
   const projects = projectsAsync.data ?? [];
   const tasks = tasksAsync.data ?? [];
 
-  const now = new Date();
-  const nowLocalDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  // 墙钟口径统一走 Task 10 的 toLocalDateTime（与主进程 electron/util/time.ts 同实现），
+  // 不要在页面里手拼日期串 —— 手拼副本会与主进程口径漂移。
+  const nowLocalDateTime = toLocalDateTime(new Date());
 
   const reloadAll = useCallback(() => {
     projectsAsync.reload();
@@ -4787,7 +4793,7 @@ import { Drawer } from '@/components/Drawer';
 import { EmptyState } from '@/components/EmptyState';
 import { Modal } from '@/components/Modal';
 import { call } from '@/lib/api';
-import { formatLocalDateTime, isOverdue } from '@/lib/format';
+import { formatLocalDateTime, isOverdue, toLocalDate, toLocalDateTime } from '@/lib/format';
 import { useAsync } from '@/hooks/useAsync';
 import { useUiStore } from '@/store/ui';
 import type { Project, Task, TaskStatus } from '@/types/entities';
@@ -4844,13 +4850,14 @@ export function TaskPage(): React.ReactElement {
   const projects = projectsAsync.data ?? [];
 
   const now = new Date();
-  const nowDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const nowDateTime = `${nowDate}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  // 墙钟串统一走 Task 10 的 toLocalDate / toLocalDateTime（与主进程同实现），不要手拼
+  const nowDate = toLocalDate(now);
+  const nowDateTime = toLocalDateTime(now);
   // 本周以周一为首日，结束于本周六
   const daysUntilSaturday = (6 - now.getDay() + 7) % 7;
   const weekEnd = new Date(now);
   weekEnd.setDate(weekEnd.getDate() + daysUntilSaturday);
-  const weekEndDate = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(weekEnd.getDate()).padStart(2, '0')}`;
+  const weekEndDate = toLocalDate(weekEnd);
 
   const visible = useMemo(
     () =>
