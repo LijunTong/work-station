@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WorkStation.App.ViewModels"
+             x:Class="WorkStation.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel"
+             x:CompileBindings="True">
+
+  <ScrollViewer Padding="24">
+    <StackPanel MaxWidth="720" HorizontalAlignment="Left" Spacing="16">
+
+      <Border Classes="panel" Padding="20">
+        <StackPanel Spacing="14">
+          <StackPanel Spacing="2">
+            <TextBlock Text="外观" FontSize="15" FontWeight="SemiBold" />
+            <TextBlock Text="切换即时生效，重启后保持。" Classes="dim" FontSize="12" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="跟随系统"
+                    Classes="sm"
+                    Classes.active="{Binding IsSystemTheme}"
+                    Command="{Binding SetThemeCommand}"
+                    CommandParameter="system" />
+            <Button Content="浅色"
+                    Classes="sm"
+                    Classes.active="{Binding IsLightTheme}"
+                    Command="{Binding SetThemeCommand}"
+                    CommandParameter="light" />
+            <Button Content="深色"
+                    Classes="sm"
+                    Classes.active="{Binding IsDarkTheme}"
+                    Command="{Binding SetThemeCommand}"
+                    CommandParameter="dark" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="panel" Padding="20">
+        <StackPanel Spacing="12">
+          <StackPanel Spacing="2">
+            <TextBlock Text="数据" FontSize="15" FontWeight="SemiBold" />
+            <TextBlock Text="全部数据保存在本机，不联网。退出应用后复制 data.db 即完成备份。"
+                       Classes="dim"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+          </StackPanel>
+
+          <StackPanel Spacing="3">
+            <TextBlock Text="数据库" Classes="label" />
+            <SelectableTextBlock Text="{Binding DatabasePath}" FontSize="12" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <StackPanel Spacing="3">
+            <TextBlock Text="备份目录" Classes="label" />
+            <SelectableTextBlock Text="{Binding BackupDirectory}" FontSize="12" TextWrapping="Wrap" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="panel" Padding="20">
+        <StackPanel Spacing="8">
+          <TextBlock Text="关于" FontSize="15" FontWeight="SemiBold" />
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+            <TextBlock Text="版本" Classes="label" Margin="0,0,16,4" />
+            <TextBlock Grid.Column="1" Text="{Binding Version}" FontSize="12" />
+            <TextBlock Grid.Row="1" Text="存储" Classes="label" Margin="0,0,16,0" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="SQLite 单文件 · WAL 模式" FontSize="12" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

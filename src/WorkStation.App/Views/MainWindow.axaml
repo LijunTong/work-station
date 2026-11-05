@@ -1,10 +1,109 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WorkStation.App.ViewModels"
+        xmlns:views="using:WorkStation.App.Views"
         x:Class="WorkStation.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        x:CompileBindings="True"
         Title="工作台 Work Station"
         Width="1280"
         Height="800"
         MinWidth="1024"
-        MinHeight="640">
-  <TextBlock Text="工作台 Work Station" />
+        MinHeight="640"
+        Background="{DynamicResource BgBrush}">
+
+  <Window.DataTemplates>
+    <DataTemplate DataType="vm:ProjectsViewModel">
+      <views:ProjectsView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:TasksViewModel">
+      <views:TasksView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:SettingsViewModel">
+      <views:SettingsView />
+    </DataTemplate>
+  </Window.DataTemplates>
+
+  <Grid ColumnDefinitions="208,*">
+
+    <!-- 侧边栏 -->
+    <Border Grid.Column="0"
+            Background="{DynamicResource BgPanelBrush}"
+            BorderBrush="{DynamicResource LineBrush}"
+            BorderThickness="0,0,1,0">
+      <Grid RowDefinitions="Auto,*,Auto">
+        <StackPanel Margin="18,20,18,16" Spacing="2">
+          <TextBlock Text="工作台" FontSize="18" FontWeight="Bold" />
+          <TextBlock Text="Work Station" Classes="dim" FontSize="11" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Margin="8,4" Spacing="2">
+          <Button Classes="nav"
+                  Classes.active="{Binding IsProjectsActive}"
+                  Command="{Binding ShowProjectsCommand}"
+                  Content="项目" />
+          <Button Classes="nav"
+                  Classes.active="{Binding IsTasksActive}"
+                  Command="{Binding ShowTasksCommand}"
+                  Content="任务" />
+          <Button Classes="nav"
+                  Classes.active="{Binding IsSettingsActive}"
+                  Command="{Binding ShowSettingsCommand}"
+                  Content="设置" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="2"
+                   Margin="18,0,18,16"
+                   Text="本地数据 · 无网络依赖"
+                   Classes="dim"
+                   FontSize="11" />
+      </Grid>
+    </Border>
+
+    <!-- 内容区 -->
+    <Grid Grid.Column="1" RowDefinitions="Auto,*">
+      <Border Grid.Row="0"
+              Padding="24,14"
+              BorderBrush="{DynamicResource LineBrush}"
+              BorderThickness="0,0,0,1">
+        <TextBlock Text="{Binding PageTitle}" FontSize="17" FontWeight="SemiBold" />
+      </Border>
+
+      <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" />
+    </Grid>
+
+    <!-- Toast -->
+    <Border Grid.ColumnSpan="2"
+            IsVisible="{Binding IsToastVisible}"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Margin="0,0,0,28"
+            Padding="16,10"
+            CornerRadius="8"
+            BorderThickness="1"
+            BorderBrush="{DynamicResource LineBrush}"
+            Background="{DynamicResource BgPanelBrush}"
+            BoxShadow="0 6 20 0 #33000000">
+      <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" MaxWidth="560" />
+    </Border>
+
+    <!-- 启动失败：整个界面替换为错误页，避免用户对着空窗口猜 -->
+    <Border Grid.ColumnSpan="2"
+            IsVisible="{Binding HasStartupError}"
+            Background="{DynamicResource BgBrush}">
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="560">
+        <TextBlock Text="无法启动工作台" FontSize="18" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding StartupError}"
+                   Classes="dim"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center" />
+        <TextBlock Text="数据库文件可能被占用或权限不足。检查数据目录后重新打开应用。"
+                   Classes="dim"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center" />
+      </StackPanel>
+    </Border>
+
+  </Grid>
 </Window>
