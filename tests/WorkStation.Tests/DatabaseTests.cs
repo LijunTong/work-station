@@ -48,8 +48,10 @@ public class DatabaseTests
     {
         using var connection = TestDb.OpenMigrated();
 
-        Database.WithTransaction(connection, () =>
-            TestDb.Execute(connection, "INSERT INTO settings (key, value) VALUES ('a', '1')"));
+        Database.WithTransaction(connection, (tx) =>
+        {
+            TestDb.Execute(connection, "INSERT INTO settings (key, value) VALUES ('a', '1')", tx);
+        });
 
         Assert.Equal(1L, TestDb.Scalar(connection, "SELECT COUNT(*) FROM settings"));
     }
@@ -60,9 +62,9 @@ public class DatabaseTests
         using var connection = TestDb.OpenMigrated();
 
         Assert.Throws<InvalidOperationException>(() =>
-            Database.WithTransaction<object?>(connection, () =>
+            Database.WithTransaction<object?>(connection, (tx) =>
             {
-                TestDb.Execute(connection, "INSERT INTO settings (key, value) VALUES ('a', '1')");
+                TestDb.Execute(connection, "INSERT INTO settings (key, value) VALUES ('a', '1')", tx);
                 throw new InvalidOperationException("boom");
             }));
 

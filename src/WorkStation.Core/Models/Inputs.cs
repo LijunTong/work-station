@@ -27,13 +27,14 @@ public sealed record UpdateProjectInput
 
     public Optional<string?> Description { get; init; } = Optional<string?>.None;
 
-    public Optional<ProjectStatus?> Status { get; init; } = Optional<ProjectStatus?>.None;
+    /// <summary>枚举字段不可置空：没传 = 保留原值。</summary>
+    public Optional<ProjectStatus> Status { get; init; } = Optional<ProjectStatus>.None;
 
-    public Optional<Priority?> Priority { get; init; } = Optional<Priority?>.None;
+    public Optional<Priority> Priority { get; init; } = Optional<Priority>.None;
 
     public Optional<string?> Color { get; init; } = Optional<string?>.None;
 
-    public Optional<ProgressMode?> ProgressMode { get; init; } = Optional<ProgressMode?>.None;
+    public Optional<ProgressMode> ProgressMode { get; init; } = Optional<ProgressMode>.None;
 
     public Optional<int?> ProgressManual { get; init; } = Optional<int?>.None;
 
@@ -78,9 +79,10 @@ public sealed record UpdateTaskInput
 
     public Optional<string?> Notes { get; init; } = Optional<string?>.None;
 
-    public Optional<TaskStatus?> Status { get; init; } = Optional<TaskStatus?>.None;
+    /// <summary>枚举字段不可置空：没传 = 保留原值。</summary>
+    public Optional<TaskStatus> Status { get; init; } = Optional<TaskStatus>.None;
 
-    public Optional<Priority?> Priority { get; init; } = Optional<Priority?>.None;
+    public Optional<Priority> Priority { get; init; } = Optional<Priority>.None;
 
     /// <summary>本地墙钟 YYYY-MM-DDTHH:mm，写入前会校验格式。</summary>
     public Optional<string?> DueAt { get; init; } = Optional<string?>.None;
@@ -94,6 +96,22 @@ public sealed record UpdateTaskInput
     public Optional<string?> BlockedReason { get; init; } = Optional<string?>.None;
 
     public Optional<int?> SortOrder { get; init; } = Optional<int?>.None;
+}
+
+/// <summary>新建标签。</summary>
+public sealed record CreateTagInput
+{
+    public required string Name { get; init; }
+
+    public string? Color { get; init; }
+}
+
+/// <summary>更新标签。Name 不可置空，Color 可以显式清空。</summary>
+public sealed record UpdateTagInput
+{
+    public Optional<string> Name { get; init; } = Optional<string>.None;
+
+    public Optional<string?> Color { get; init; } = Optional<string?>.None;
 }
 
 /// <summary>

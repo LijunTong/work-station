@@ -11,6 +11,14 @@ internal static class TestDb
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
+        // 外键必须显式开启：SQLite 默认关闭外键约束，
+        // 级联删除（删项目连带删任务、删标签解除关联）与外键报错都依赖它。
+        using (var pragma = connection.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA foreign_keys = ON";
+            pragma.ExecuteNonQuery();
+        }
+
         Database.RunMigrations(connection);
         return connection;
     }
@@ -45,11 +53,13 @@ internal static class TestDb
         return command.ExecuteScalar();
     }
 
-    /// <summary>执行一条 SQL（不取结果）。</summary>
-    public static void Execute(SqliteConnection connection, string sql)
+    /// <summary>执行一条 SQL（不取结果）。事务内调用时必须把事务对象传进来。</summary>
+    public static void Execute(SqliteConnection connection, string sql, SqliteTransaction? transaction = null)
     {
         using var command = connection.CreateCommand();
         command.CommandText = sql;
+        // 活动事务期间，Microsoft.Data.Sqlite 要求每条命令显式挂上同一个事务对象
+        if (transaction is not null) command.Transaction = transaction;
         command.ExecuteNonQuery();
     }
 }

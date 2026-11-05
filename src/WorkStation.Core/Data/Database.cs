@@ -177,21 +177,26 @@ public static class Database
         return $"{dbPath}.corrupt-{stamp}";
     }
 
-    /// <summary>事务包装（无返回值）。ROLLBACK 自身抛错不得顶掉原始异常。</summary>
-    public static void WithTransaction(SqliteConnection connection, Action action) =>
-        WithTransaction(connection, () =>
+    /// <summary>
+    /// 事务包装（无返回值）。ROLLBACK 自身抛错不得顶掉原始异常。
+    ///
+    /// 事务对象必须传给回调里的命令：Microsoft.Data.Sqlite 要求活动事务期间
+    /// 每条命令都显式设置 command.Transaction，否则报 "Transaction required"。
+    /// </summary>
+    public static void WithTransaction(SqliteConnection connection, Action<SqliteTransaction> action) =>
+        WithTransaction(connection, transaction =>
         {
-            action();
+            action(transaction);
             return true;
         });
 
     /// <summary>事务包装。ROLLBACK 自身抛错不得顶掉原始异常。</summary>
-    public static T WithTransaction<T>(SqliteConnection connection, Func<T> action)
+    public static T WithTransaction<T>(SqliteConnection connection, Func<SqliteTransaction, T> action)
     {
         using var transaction = connection.BeginTransaction(deferred: true);
         try
         {
-            var result = action();
+            var result = action(transaction);
             transaction.Commit();
             return result;
         }
