@@ -16,15 +16,15 @@
 
 > **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
 >
-> **最近更新：** 2026-11-05 · Task 7 完成（7/13）
+> **最近更新：** 2026-11-05 · Task 8 完成（8/13）
 
-**当前状态：M1 骨架与数据层进行中。13 个任务已完成 7 个，Task 7 设置仓储经 1 轮修复后复审通过（VERDICT: PASS）。Task 8–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+**当前状态：M1 骨架与数据层进行中。13 个任务已完成 8 个，Task 8 IPC 路由与 preload 桥接经 1 轮修复后复审通过（VERDICT: PASS）。Task 9–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
 
 ### 里程碑总览
 
 | 里程碑 | 范围 | 状态 |
 | --- | --- | --- |
-| M1 | 骨架与数据层（13 任务） | 进行中 · 7/13 |
+| M1 | 骨架与数据层（13 任务） | 进行中 · 8/13 |
 | M2 | 看板与拖拽 | 未拆解 |
 | M3 | 提醒与报告 | 未拆解 |
 | M4 | 打磨与发布 | 未拆解 |
@@ -40,7 +40,7 @@
 | 5 | 任务仓储 | ✅ 完成（1 轮修复） | `8ab6a27` `c7a7043` | 通过（4 个 Important 全部修复，复审 PASS） | 19 |
 | 6 | 标签仓储 | ✅ 完成（1 轮修复） | `4836699` `8f6eb9d` | 通过（1 个 Important 修复，复审 PASS） | 14 |
 | 7 | 设置仓储 | ✅ 完成（1 轮修复） | `5ce4a4d` `f1aca3d` | 通过（1 个 Important 修复，复审 PASS） | 16 |
-| 8 | IPC 路由与 preload 桥接 | ⬜ 未开始 | — | — | — |
+| 8 | IPC 路由与 preload 桥接 | ✅ 完成（1 轮修复） | `6dcd6c7` `65b3c36` | 通过（1 个 Important 修复，复审 PASS） | 19 |
 | 9 | 渲染进程基础（API 客户端 / 主题 / 布局） | ⬜ 未开始 | — | — | — |
 | 10 | 通用 UI 组件集 | ⬜ 未开始 | — | — | — |
 | 11 | 项目管理页 | ⬜ 未开始 | — | — | — |
@@ -48,9 +48,9 @@
 | 13 | 打包配置、README、M1 手测清单 | ⬜ 未开始 | — | — | — |
 | — | M1 收尾：全分支最终评审 + 修复波 | ⬜ 未开始 | — | — | — |
 
-合计 **97** 条用例全绿（7 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
+合计 **116** 条用例全绿（10 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
 
-### 已交付代码（Task 1–5）
+### 已交付代码（Task 1–8）
 
 ```
 electron/
@@ -63,13 +63,19 @@ electron/
 ├─ repositories/tasks.ts     任务仓储
 ├─ repositories/tags.ts      标签仓储
 ├─ repositories/settings.ts  设置仓储
+├─ lib/result.ts             ok / fail / toBool / nullable（主进程 Result）
+├─ ipc.ts                    26 个类型化 IPC 路由 + 统一错误包装
 ├─ main.ts                   窗口生命周期 + 损坏恢复 + 每日备份
-└─ preload.ts                脚手架（Task 8 重写）
+└─ preload.ts                contextBridge 暴露 window.api
 src/
 ├─ types/entities.ts         12 个导出类型
+├─ types/api.ts              window.api 契约 + 渲染端 Result 副本
+├─ types/channels.ts         26 个 IPC 通道名的运行时单一真源
+├─ types/env.d.ts            Window.api 全局声明
 ├─ lib/progress.ts           computeProgress（全项目唯一实现）
+├─ lib/api.ts                ApiError + call<T>（Result 解包）
 └─ App.tsx / main.tsx / index.html   渲染端脚手架
-tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14 · settings 16
+tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14 · settings 16 · ipc 14 · preload 3 · result-parity 2
 ```
 
 ### 实施中发现并修掉的真实缺陷
@@ -85,10 +91,11 @@ tests/                       time 7 · db 17 · projects 18 · progress 6 · tas
 7. **`app.whenReady().then()` 没有 `.catch()`** → DB 失败则进程活着、无窗口、零提示。
 8. **`src/lib/progress.ts` 用了 `@/types/entities` 别名**，主进程 program 无 `@` 别名 → TS2307。
 9. **`due_at` 无格式校验** → 误传 ISO UTC 串会让当天 18:00 到期的任务被判逾期（评审用 node:sqlite 实证了边界翻转）→ 现已在写入前 `isLocalDateTime` 校验并抛错。
+10. **IPC 边界在编译期被完全擦除** —— `ipcRenderer.invoke` 的签名是 `(channel: string, ...args: any[]) => Promise<any>`，26 个通道名在三处手抄、preload 侧零自动化覆盖；通道名写错只会在渲染端运行时变成 "No handler registered" → 现收敛为 `src/types/channels.ts` 运行时单一真源，注册集合与契约清单均由测试钉死，preload 逐方法覆盖。
 
 ### 关键决策
 
-产品层面的 13 条决策见设计文档；以下是实施阶段新增的 5 条：
+产品层面的 13 条决策见设计文档；以下是实施阶段新增的 6 条：
 
 | # | 决策 | 理由 |
 | --- | --- | --- |
@@ -97,6 +104,7 @@ tests/                       time 7 · db 17 · projects 18 · progress 6 · tas
 | 14 | 进度计算只保留一份于 `src/lib/progress.ts` | 主进程与渲染进程共用；逐字重复会被评审判为缺陷 |
 | 15 | `dueAt` 写入前必须格式校验 | 静默错判比显式失败危险得多 |
 | 16 | 不提前写 M2/M3/M4 计划 | 任务拆分依赖前一里程碑的真实代码结构 |
+| 17 | IPC 通道名收敛为 `src/types/channels.ts` 运行时单一真源 | Electron 的 invoke 对 channel 字符串零校验；主进程/preload/测试三处手抄必然漂移 |
 
 ### 跨任务事实（已实测，勿重新踩）
 
@@ -107,12 +115,17 @@ tests/                       time 7 · db 17 · projects 18 · progress 6 · tas
 - 迁移版本号有「空洞」语义：先发 v3 再补 v2，`filter(version > current)` 会**静默丢弃 v2 且不报错**。补版本号不会补跑缺失的迁移。
 - Electron 二进制直连 GitHub 仅 45–105 KB/s，需 `ELECTRON_MIRROR` 指向 npmmirror（已用 `checksums.json` 校验 sha256 与官方 Release 一致，未改仓库文件）。
 - 本机 npm 10.9.7 有已知 arborist 崩溃 bug（npm/cli#9787），**仅在无锁文件时触发**；锁文件已生成，后续任务不再受影响。
+- Electron 的 `ipcRenderer.invoke` 返回 `Promise<any>`，preload 里的接口断言**不产生任何编译期校验** → 通道名与 Result 形状只能靠运行时常量 + 测试守。
+- `electron.vite.config.ts` 只给 renderer 段配了 `@` 别名，主进程/preload 段没有，`tsconfig.node.json` 也无 `paths` → `electron/**` import `src/` 必须用相对路径。
+- `withTransaction` **不可重入**（嵌套 `BEGIN` 抛 "cannot start a transaction within a transaction"，已实测）→ IPC handler 不得再包外层事务；M1 不做跨仓储原子操作。
+- `tests/preload.test.ts` 的副作用 import 会把 `electron/preload.ts` 拉进渲染端 `tsconfig.json` program，那里启用了 `noUnusedLocals`/`noUnusedParameters`（比 `tsconfig.node.json` 严）→ 主进程侧被测试引入的文件必须无未使用声明。
+- 渲染端没有墙钟工具：`window.api.tasks.overdueCount(nowLocalDateTime)` 要求渲染端自算 `YYYY-MM-DDTHH:mm` → Task 10 必须补一个与主进程同口径的 `toLocalDateTime`。
 
 ### 验证方式
 
 ```powershell
 cd "E:\Joont\AI Agent Workspace\work-station"
-npm test                            # 97 用例全绿
+npm test                            # 116 用例全绿（10 个测试文件）
 npm run typecheck                   # tsc 双 program 无错
 npm run build                       # electron-vite 三端构建
 npm run build:win                   # electron-builder portable exe（Task 1 实测 104.7MB 可启动）
@@ -121,8 +134,8 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 
 ### 当前待办
 
-1. **Task 8 IPC 与 preload** —— 收尾必须重跑 `npm run typecheck`：`src/lib/progress.ts` 会在这一步首次进入主进程 program，此前 `@` 别名问题不会触发。`TaskFilter.tagIds` 是 Task 5 新增的对外签名，IPC 层需按新签名接入；仓储抛的裸 `Error`（无错误码）需在此映射为用户可见错误。**另需落实 Task 6 评审的 4 条裁决**：handler 不开外层事务（`withTransaction` 不可重入）、迁移先于仓储构造、`setTaskTags` 未知 id 抛错而非静默忽略、渲染进程只能经 `window.api` 访问数据。**另需避开简报 Step 2 / Step 6 的两处缺陷**：`projects:list` 的 handler 必须把入参 `options` 透传给仓储（简报写死 `{ includeArchived: false }` 会让 UI 永远取不到归档项目）；`electron/main.ts` 必须复用现有的 `resolveDbPath()` 并保留 `recoverIfCorrupt` 与 `runDailyBackup` 调用（简报 Step 6 的样例是单级 `..` 指向 `out/.data`，且漏掉了这两步，照抄会回归 Task 3 已修的 dev 库路径，并丢掉损坏恢复与每日备份）。
-2. **Task 9–13** 渲染端与打包。
+1. **Task 9 渲染进程基础** —— `useAsync` / Zustand UI store / 主题与布局骨架。必须落实 Task 8 的 5 条裁决：渲染进程只能经 `window.api`（不碰 DB/文件系统）；`Result<T>` 失败经 `call<T>` 转成 `ApiError` 并由 UI 展示；`app:info` 已可由设置页消费；IPC 入参不做运行时校验（错误文案是 SQLite 英文原文，UI 需兜底）；`projects:remove` 是级联硬删，UI 必须二次确认。另注意：`electron/main.ts` 的模块作用域副作用仍未收进 `main()`（Task 1 延后项）。
+2. **Task 10–13** 通用组件、项目管理页、任务列表页、打包与手测清单。Task 10 必须补渲染端 `toLocalDateTime`（`tasks.overdueCount` 需要墙钟串），并与 `src/lib/progress.ts` 的逾期口径保持一致。
 3. **M1 收尾**：全分支最终评审 + 修复波。
 
 ### 延后 Minor 清单
@@ -136,6 +149,7 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 - **Task 5**：`includeDone:false` 只排除 done 不排除 canceled，与本仓储对 canceled 的处理不一致；`status` 与 `includeDone` 不可组合，后者被 `else if` 静默吞掉；`countOverdue` 入参无格式护栏（误传日期串会少算）；**读取侧仍无格式护栏** —— `dueBefore`/`dueAfter`/`countOverdue` 传日期串或 ISO 串仍会静默比错（写入侧同类风险已修掉，读取侧是另一半）；`row.c ?? 0` 是无效防御；`ALL_STATUSES.filter(...)` 计算两次；`countByStatus` 对未知 status 直接写键；测试里有恒真断言；`create` 不能指定 `sortOrder`，排序要两次写入；`update` 对不存在的任务 + 非法 `dueAt` 返回 null 而非抛错，两条错误契约不对称（Task 8 的 IPC 错误映射需注意）；`assertLocalDateTime` 抛裸 `Error` 无错误码，Task 8 需自行映射为用户可见错误；测试里 `clock.nowIsoCalls` 未在 `beforeEach` 重置，当前无断言依赖它。
 - **Task 6**：`setTaskTags` 的失败路径无用例钉死也无契约文档 —— 未知 id 时抛原始 `ERR_SQLITE_ERROR: FOREIGN KEY constraint failed`（已实测，事务回滚后旧关联保留）；`listTagTaskIds` 无 `ORDER BY`，当前靠索引碰巧有序但不是契约；`create`/`update` 不校验空名与重名，校验应落在 Task 8 的 IPC 层；`listTaskTags`/`listTagTaskIds` 每次调用重新 prepare，与上提工厂闭包的风格不一致；`tags.remove()` 对不存在 id 返回 `false` 的路径无断言（房屋模式 `projects.test.ts` 同时覆盖 true/false）。
 - **Task 7**：`JSON.stringify` 对函数/Symbol 同样返回 `undefined` → `set` 传这类值仍抛绑定错误（现实路径不可达）；`getAll()` 用对象字面量累积，键名 `__proto__` 会静默丢键并劫持返回对象的原型（改用 `Object.create(null)` 可修）；新钉死的「按 key 升序」契约在整数样式键上不成立（JS 把数组索引样式键按数值升序提前，与 SQL 序分叉）；`remove` 每次现场 prepare（沿用房屋模式）；`node:sqlite` 的 ExperimentalWarning 噪音全仓库存在，非本任务引入。
+- **Task 8**：`handle()` 仍收裸 `string`，已导出的 `IpcChannel` 类型未接到入口 → 通道名拼错仍靠测试而非 `tsc` 发现；preload 的 `settings.get<T>` 用 `as` 满足渲染端 program 的 `noUnusedLocals`，改用显式返回类型注解更稳，且 `tests/preload.test.ts` 把 preload 拉进 `tsconfig.json` program 的副作用应注明；`Result` 漂移守卫只在 `npm run typecheck` 生效（`npm test` / `build` 不红，仓库无 CI，建议加 `check` 脚本）；preload 测试的方法→channel 表是手工清单，新增方法复用已有 channel 时不会红（应从实际 `api` 对象递归收集方法名）；首轮 8 条 Minor（handler 只挡同步抛出、`describeError` 的 `??` 死代码、两个逾期数采样时刻不同源、IPC 入参无运行时校验、`settings.get<T>` 纯调用方断言、mock 保真度、`dbPath` 暴露绝对路径、报告行号偏差）保留。
 
 ---
 
@@ -2726,7 +2740,7 @@ interface WorkStationApi {
 
 其中 `TaskCounts` 定义为 `{ total: number; done: number; doing: number; overdue: number }`。
 
-- [ ] **Step 1: 定义渲染端类型**
+- [x] **Step 1: 定义渲染端类型**
 
 `src/types/api.ts`：
 
@@ -2856,7 +2870,7 @@ export interface WorkStationApi {
 }
 ```
 
-- [ ] **Step 2: 写 IPC 路由**
+- [x] **Step 2: 写 IPC 路由**
 
 `electron/ipc.ts`：
 
@@ -2946,7 +2960,7 @@ import type {
 import type { TaskStatus } from '../src/types/entities';
 ```
 
-- [ ] **Step 3: 重写 preload**
+- [x] **Step 3: 重写 preload**
 
 `electron/preload.ts`：
 
@@ -3009,7 +3023,7 @@ const api: WorkStationApi = {
 contextBridge.exposeInMainWorld('api', api);
 ```
 
-- [ ] **Step 4: 重写全局类型声明**
+- [x] **Step 4: 重写全局类型声明**
 
 `src/types/env.d.ts`：
 
@@ -3027,7 +3041,7 @@ declare global {
 export {};
 ```
 
-- [ ] **Step 5: 写渲染端 API 客户端**
+- [x] **Step 5: 写渲染端 API 客户端**
 
 `src/lib/api.ts`：
 
@@ -3053,7 +3067,7 @@ export async function call<T>(fn: () => Promise<Result<T>>): Promise<T> {
 }
 ```
 
-- [ ] **Step 6: 主进程注册 IPC**
+- [x] **Step 6: 主进程注册 IPC**
 
 改 `electron/main.ts`，在创建窗口前注册：
 
@@ -3068,7 +3082,7 @@ runMigrations(db);
 registerIpc(db, dbPath);
 ```
 
-- [ ] **Step 7: 类型检查**
+- [x] **Step 7: 类型检查**
 
 ```bash
 npm run typecheck
@@ -3076,7 +3090,7 @@ npm run typecheck
 
 Expected: 退出码 0，无类型错误。若 `electron/ipc.ts` 报类型不匹配，检查该文件顶部的类型导入是否包含 `CreateProjectInput`、`CreateTaskInput`、`TaskFilter`、`UpdateProjectInput`、`UpdateTaskInput` 与 `TaskStatus`。
 
-- [ ] **Step 8: 冒烟验证**
+- [x] **Step 8: 冒烟验证**
 
 ```bash
 npm run dev
@@ -3084,7 +3098,7 @@ npm run dev
 
 Expected: 窗口正常弹出，无 `contextBridge` 或 `ipcRenderer` 相关报错。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add -A
