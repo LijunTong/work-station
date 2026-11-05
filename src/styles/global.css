@@ -457,3 +457,23 @@ select:focus {
 }
 
 .task-due-overdue { color: var(--danger); }
+
+/* 日期分组标题按钮：去掉按钮默认外观，保留 .task-group-title 的排版 */
+.task-group-toggle {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.task-group-toggle:hover { color: var(--text); }
+
+.task-group-arrow {
+  display: inline-block;
+  width: 12px;
+  margin-right: 2px;
+}

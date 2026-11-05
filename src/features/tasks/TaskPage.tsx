@@ -52,6 +52,11 @@ const GROUP_LABEL: Record<GroupKey, string> = {
   someday: '无期限'
 };
 
+// 列表渲染顺序遵循设计文档：今日 / 逾期 / 本周 / 以后 / 无期限
+const GROUP_ORDER: GroupKey[] = ['today', 'overdue', 'week', 'later', 'someday'];
+
+type CollapseKey = GroupKey | 'completed';
+
 export function TaskPage(): React.ReactElement {
   const showToast = useUiStore((s) => s.showToast);
 
@@ -63,6 +68,8 @@ export function TaskPage(): React.ReactElement {
   const [submitting, setSubmitting] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
+  // 记录被折叠的分组；默认全部展开
+  const [collapsed, setCollapsed] = useState<Set<CollapseKey>>(() => new Set<CollapseKey>());
 
   const tasks = tasksAsync.data ?? [];
   const projects = projectsAsync.data ?? [];
@@ -71,10 +78,10 @@ export function TaskPage(): React.ReactElement {
   // 墙钟串统一走 Task 10 的 toLocalDate / toLocalDateTime（与主进程同实现），不要手拼
   const nowDate = toLocalDate(now);
   const nowDateTime = toLocalDateTime(now);
-  // 本周以周一为首日，结束于本周六
-  const daysUntilSaturday = (6 - now.getDay() + 7) % 7;
+  // 本周以周一为首日、结束于周日
+  const daysUntilSunday = now.getDay() === 0 ? 0 : 7 - now.getDay();
   const weekEnd = new Date(now);
-  weekEnd.setDate(weekEnd.getDate() + daysUntilSaturday);
+  weekEnd.setDate(weekEnd.getDate() + daysUntilSunday);
   const weekEndDate = toLocalDate(weekEnd);
 
   const visible = useMemo(
@@ -101,6 +108,18 @@ export function TaskPage(): React.ReactElement {
     () => visible.filter((task) => task.status === 'done' || task.status === 'canceled'),
     [visible]
   );
+
+  const toggleGroup = (key: CollapseKey): void => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const reload = useCallback(() => {
     tasksAsync.reload();
@@ -216,6 +235,31 @@ export function TaskPage(): React.ReactElement {
     );
   };
 
+  const renderGroup = (
+    key: CollapseKey,
+    label: string,
+    bucket: Task[]
+  ): React.ReactElement => {
+    const isCollapsed = collapsed.has(key);
+    return (
+      <div key={key} className="task-group">
+        <button
+          type="button"
+          className="task-group-title task-group-toggle"
+          aria-expanded={!isCollapsed}
+          onClick={() => toggleGroup(key)}
+        >
+          <span className="task-group-arrow" aria-hidden="true">
+            {isCollapsed ? '▸' : '▾'}
+          </span>
+          {label}
+          <span className="task-group-count">{bucket.length}</span>
+        </button>
+        {!isCollapsed && <ul className="task-list">{bucket.map(renderTask)}</ul>}
+      </div>
+    );
+  };
+
   return (
     <section className="task-page">
       <header className="page-header">
@@ -256,32 +300,36 @@ export function TaskPage(): React.ReactElement {
       {tasksAsync.loading && <p className="placeholder">加载中…</p>}
       {tasksAsync.error && <p className="error-text">{tasksAsync.error}</p>}
 
-      {!tasksAsync.loading && tasks.length === 0 && (
+      {!tasksAsync.loading && !tasksAsync.error && tasks.length === 0 && (
         <EmptyState title="还没有任务" hint="用上面的输入框记第一条" />
       )}
 
-      {(Object.keys(GROUP_LABEL) as GroupKey[]).map((key) => {
+      {!tasksAsync.loading &&
+        !tasksAsync.error &&
+        tasks.length > 0 &&
+        visible.length === 0 && (
+          <EmptyState
+            title="没有符合条件的任务"
+            hint="换个筛选条件试试"
+            action={
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setStatusFilter([])}
+              >
+                清除筛选
+              </button>
+            }
+          />
+        )}
+
+      {GROUP_ORDER.map((key) => {
         const bucket = groups.get(key);
         if (!bucket || bucket.length === 0) return null;
-        return (
-          <div key={key} className="task-group">
-            <h3 className="task-group-title">
-              {GROUP_LABEL[key]}
-              <span className="task-group-count">{bucket.length}</span>
-            </h3>
-            <ul className="task-list">{bucket.map(renderTask)}</ul>
-          </div>
-        );
+        return renderGroup(key, GROUP_LABEL[key], bucket);
       })}
 
-      {completed.length > 0 && (
-        <div className="task-group">
-          <h3 className="task-group-title">
-            已完结<span className="task-group-count">{completed.length}</span>
-          </h3>
-          <ul className="task-list">{completed.map(renderTask)}</ul>
-        </div>
-      )}
+      {completed.length > 0 && renderGroup('completed', '已完结', completed)}
 
       <Drawer
         open={drawerOpen}
