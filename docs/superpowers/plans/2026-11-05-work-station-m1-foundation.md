@@ -140,9 +140,10 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 
 ### 当前待办
 
-1. **Task 12 任务列表页与快速添加** —— `TaskPage` / `TaskForm` / `QuickAdd`，日期分组折叠、已完成灰显不可反悔、chip 过滤、Ctrl+Enter 提交。必须复用 `@/lib/format` 的 `toLocalDateTime`/`toLocalDate`（禁止手拼）、`src/lib/progress.ts` 的 `computeProgress`（禁止复制）。
+1. **Task 12 任务列表页与快速添加** —— `TaskPage` / `TaskForm` / `QuickAdd`，日期分组折叠、已完成灰显不可反悔、chip 过滤、Ctrl+Enter 提交。必须复用 `@/lib/format` 的 `toLocalDateTime`/`toLocalDate`/`isOverdue`（禁止手拼日期串），日期分组与逾期判定都用它。
 2. **Task 13 打包配置、README 与 M1 手测清单** —— `engines.node >= 22.5.0`、README、`docs/M1-手测清单.md`、`npm run build:win` 产出 portable exe，并按可脚本化配方逐项验证。
 3. **M1 收尾**：全分支最终评审 + 修复波（含延后 Minor 的统一评估）。
+
 ### 延后 Minor 清单
 
 记账于 SDD 账本，暂不处理，留到 M1 收尾统一评估：
