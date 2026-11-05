@@ -16,15 +16,15 @@
 
 > **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
 >
-> **最近更新：** 2026-11-05 · Task 5 完成（5/13）
+> **最近更新：** 2026-11-05 · Task 6 完成（6/13）
 
-**当前状态：M1 骨架与数据层进行中。13 个任务已完成 5 个，Task 5 的 4 个 Important 已修复并通过复审（VERDICT: PASS）。Task 6–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+**当前状态：M1 骨架与数据层进行中。13 个任务已完成 6 个，Task 6 标签仓储经 1 轮修复后复审通过（VERDICT: PASS）。Task 7–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
 
 ### 里程碑总览
 
 | 里程碑 | 范围 | 状态 |
 | --- | --- | --- |
-| M1 | 骨架与数据层（13 任务） | 进行中 · 5/13 |
+| M1 | 骨架与数据层（13 任务） | 进行中 · 6/13 |
 | M2 | 看板与拖拽 | 未拆解 |
 | M3 | 提醒与报告 | 未拆解 |
 | M4 | 打磨与发布 | 未拆解 |
@@ -38,7 +38,7 @@
 | 3 | 数据库连接、迁移与完整性检查 | ✅ 完成 | `2aac476` `0412c8a` `f830e26` | 通过（2 轮修复） | 17 |
 | 4 | 项目仓储与进度计算 | ✅ 完成 | `1660c77` `4b6d88c` | 通过（1 轮修复） | 18 + 6 |
 | 5 | 任务仓储 | ✅ 完成（1 轮修复） | `8ab6a27` `c7a7043` | 通过（4 个 Important 全部修复，复审 PASS） | 19 |
-| 6 | 标签仓储 | ⬜ 未开始 | — | — | — |
+| 6 | 标签仓储 | ✅ 完成（1 轮修复） | `4836699` `8f6eb9d` | 通过（1 个 Important 修复，复审 PASS） | 14 |
 | 7 | 设置仓储 | ⬜ 未开始 | — | — | — |
 | 8 | IPC 路由与 preload 桥接 | ⬜ 未开始 | — | — | — |
 | 9 | 渲染进程基础（API 客户端 / 主题 / 布局） | ⬜ 未开始 | — | — | — |
@@ -48,7 +48,7 @@
 | 13 | 打包配置、README、M1 手测清单 | ⬜ 未开始 | — | — | — |
 | — | M1 收尾：全分支最终评审 + 修复波 | ⬜ 未开始 | — | — | — |
 
-合计 **67** 条用例全绿（5 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
+合计 **81** 条用例全绿（6 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
 
 ### 已交付代码（Task 1–5）
 
@@ -61,13 +61,14 @@ electron/
 ├─ util/id.ts                newId
 ├─ repositories/projects.ts  项目仓储
 ├─ repositories/tasks.ts     任务仓储
+├─ repositories/tags.ts      标签仓储
 ├─ main.ts                   窗口生命周期 + 损坏恢复 + 每日备份
 └─ preload.ts                脚手架（Task 8 重写）
 src/
 ├─ types/entities.ts         12 个导出类型
 ├─ lib/progress.ts           computeProgress（全项目唯一实现）
 └─ App.tsx / main.tsx / index.html   渲染端脚手架
-tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19
+tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14
 ```
 
 ### 实施中发现并修掉的真实缺陷
@@ -110,7 +111,7 @@ tests/                       time 7 · db 17 · projects 18 · progress 6 · tas
 
 ```powershell
 cd "E:\Joont\AI Agent Workspace\work-station"
-npm test                            # 67 用例全绿
+npm test                            # 81 用例全绿
 npm run typecheck                   # tsc 双 program 无错
 npm run build                       # electron-vite 三端构建
 npm run build:win                   # electron-builder portable exe（Task 1 实测 104.7MB 可启动）
@@ -119,11 +120,10 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 
 ### 当前待办
 
-1. **Task 6 标签仓储** —— 照抄 Task 4/5 的定稿仓储模板（`type XxxRow`、闭包不依赖 `this`、可空字段 update 语义、冻结时钟）。
-2. **Task 7 设置仓储** —— 同上。
-3. **Task 8 IPC 与 preload** —— 收尾必须重跑 `npm run typecheck`：`src/lib/progress.ts` 会在这一步首次进入主进程 program，此前 `@` 别名问题不会触发。`TaskFilter.tagIds` 是 Task 5 新增的对外签名，IPC 层需按新签名接入；仓储抛的裸 `Error`（无错误码）需在此映射为用户可见错误。
-4. **Task 9–13** 渲染端与打包。
-5. **M1 收尾**：全分支最终评审 + 修复波。
+1. **Task 7 设置仓储** —— 照抄 Task 4/5 的定稿仓储模板（`type XxxRow`、闭包不依赖 `this`、可空字段 update 语义、冻结时钟）。
+2. **Task 8 IPC 与 preload** —— 收尾必须重跑 `npm run typecheck`：`src/lib/progress.ts` 会在这一步首次进入主进程 program，此前 `@` 别名问题不会触发。`TaskFilter.tagIds` 是 Task 5 新增的对外签名，IPC 层需按新签名接入；仓储抛的裸 `Error`（无错误码）需在此映射为用户可见错误。**另需落实 Task 6 评审的 4 条裁决**：handler 不开外层事务（`withTransaction` 不可重入）、迁移先于仓储构造、`setTaskTags` 未知 id 抛错而非静默忽略、渲染进程只能经 `window.api` 访问数据。
+3. **Task 9–13** 渲染端与打包。
+4. **M1 收尾**：全分支最终评审 + 修复波。
 
 ### 延后 Minor 清单
 
@@ -134,6 +134,7 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 - **Task 3**：损坏快照 stamp 只到天、同日二次损坏会覆盖上次快照；`copyFileSync` 备份非原子；`reminders.kind='task_due'` 但 `task_id` 可空、缺跨列约束；`db.close()` 自身抛错被吞；回滚失败原因完全不可观测；`runMigrations`（包装+cause）与 `withTransaction`（原样重抛）错误契约不一致；`main.ts` 用 `String(error)` 丢弃堆栈；测试里 PRAGMA foreign_keys 断言恒真、给虚假安全感；测试的 `rmSync` 在 Windows 遇未关闭句柄会把单条失败升级为套件级失败。
 - **Task 4**：`countTasks` 的类型断言漏 `| undefined`；`create` 硬编码 `sort_order=0` → 「把项目置顶」目前无法表达（留给 M2）；`projects:remove` 是级联硬删且无二次确认（Task 8 的 UI 需要知道这是破坏性操作）；`projects.dueDate` 无格式校验 —— 存的是本地日历日，当前无人把它与墙钟串比较暂无错判，但 M2 项目到期徽标落地前必须明确格式约定。
 - **Task 5**：`includeDone:false` 只排除 done 不排除 canceled，与本仓储对 canceled 的处理不一致；`status` 与 `includeDone` 不可组合，后者被 `else if` 静默吞掉；`countOverdue` 入参无格式护栏（误传日期串会少算）；**读取侧仍无格式护栏** —— `dueBefore`/`dueAfter`/`countOverdue` 传日期串或 ISO 串仍会静默比错（写入侧同类风险已修掉，读取侧是另一半）；`row.c ?? 0` 是无效防御；`ALL_STATUSES.filter(...)` 计算两次；`countByStatus` 对未知 status 直接写键；测试里有恒真断言；`create` 不能指定 `sortOrder`，排序要两次写入；`update` 对不存在的任务 + 非法 `dueAt` 返回 null 而非抛错，两条错误契约不对称（Task 8 的 IPC 错误映射需注意）；`assertLocalDateTime` 抛裸 `Error` 无错误码，Task 8 需自行映射为用户可见错误；测试里 `clock.nowIsoCalls` 未在 `beforeEach` 重置，当前无断言依赖它。
+- **Task 6**：`setTaskTags` 的失败路径无用例钉死也无契约文档 —— 未知 id 时抛原始 `ERR_SQLITE_ERROR: FOREIGN KEY constraint failed`（已实测，事务回滚后旧关联保留）；`listTagTaskIds` 无 `ORDER BY`，当前靠索引碰巧有序但不是契约；`create`/`update` 不校验空名与重名，校验应落在 Task 8 的 IPC 层；`listTaskTags`/`listTagTaskIds` 每次调用重新 prepare，与上提工厂闭包的风格不一致；`tags.remove()` 对不存在 id 返回 `false` 的路径无断言（房屋模式 `projects.test.ts` 同时覆盖 true/false）。
 
 ---
 
