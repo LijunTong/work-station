@@ -141,6 +141,40 @@ describe('数据库迁移', () => {
     db.close();
   });
 
+  it('事务已被自动回滚后迁移失败时，保留原始原因而不被 cannot rollback 顶掉', () => {
+    const db = freshDb();
+    const originalLength = MIGRATIONS.length;
+    const failing: Migration = {
+      version: 98,
+      name: 'auto-rolled-back-migration',
+      sql: `
+        ROLLBACK;
+        INSERT INTO no_such_table (id) VALUES ('x');
+      `
+    };
+    MIGRATIONS.push(failing);
+
+    let caught: unknown;
+    try {
+      runMigrations(db);
+    } catch (error) {
+      caught = error;
+    } finally {
+      MIGRATIONS.length = originalLength;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    const message = (caught as Error).message;
+    // 原始失败原因必须保留
+    expect(message).toContain('no such table');
+    // 且不能被回滚失败的信息顶掉
+    expect(message).not.toContain('cannot rollback');
+    // 原始异常对象本身也要保留下来
+    expect((caught as Error).cause).toBeInstanceOf(Error);
+    expect(((caught as Error).cause as Error).message).toContain('no such table');
+    db.close();
+  });
+
   it('迁移后的库通过完整性检查', () => {
     const db = freshDb();
     runMigrations(db);

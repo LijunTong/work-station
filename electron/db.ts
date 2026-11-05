@@ -48,9 +48,15 @@ export function runMigrations(db: DatabaseSync): void {
       db.exec(`PRAGMA user_version = ${migration.version}`);
       db.exec('COMMIT');
     } catch (error) {
-      db.exec('ROLLBACK');
+      try {
+        db.exec('ROLLBACK');
+      } catch {
+        // 事务可能已被 SQLite 在致命错误（SQLITE_FULL / SQLITE_IOERR）下自动回滚，
+        // 此时 ROLLBACK 本身会抛错；不能让它顶掉原始的迁移失败原因
+      }
       throw new Error(
-        `迁移失败 (version=${migration.version} ${migration.name}): ${(error as Error).message}`
+        `迁移失败 (version=${migration.version} ${migration.name}): ${(error as Error).message}`,
+        { cause: error }
       );
     }
     applied = migration.version;
