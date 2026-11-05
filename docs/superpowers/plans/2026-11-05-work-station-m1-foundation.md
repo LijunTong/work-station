@@ -16,15 +16,15 @@
 
 > **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
 >
-> **最近更新：** 2026-11-05 · Task 8 完成（8/13）
+> **最近更新：** 2026-11-05 · Task 9 完成（9/13）
 
-**当前状态：M1 骨架与数据层进行中。13 个任务已完成 8 个，Task 8 IPC 路由与 preload 桥接经 1 轮修复后复审通过（VERDICT: PASS）。Task 9–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+**当前状态：M1 骨架与数据层进行中。13 个任务已完成 9 个，Task 9 渲染进程基础（API 客户端 / 主题 / 布局）一次通过复审（VERDICT: PASS，0 Critical、0 Important）。Task 10–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
 
 ### 里程碑总览
 
 | 里程碑 | 范围 | 状态 |
 | --- | --- | --- |
-| M1 | 骨架与数据层（13 任务） | 进行中 · 8/13 |
+| M1 | 骨架与数据层（13 任务） | 进行中 · 9/13 |
 | M2 | 看板与拖拽 | 未拆解 |
 | M3 | 提醒与报告 | 未拆解 |
 | M4 | 打磨与发布 | 未拆解 |
@@ -41,14 +41,14 @@
 | 6 | 标签仓储 | ✅ 完成（1 轮修复） | `4836699` `8f6eb9d` | 通过（1 个 Important 修复，复审 PASS） | 14 |
 | 7 | 设置仓储 | ✅ 完成（1 轮修复） | `5ce4a4d` `f1aca3d` | 通过（1 个 Important 修复，复审 PASS） | 16 |
 | 8 | IPC 路由与 preload 桥接 | ✅ 完成（1 轮修复） | `6dcd6c7` `65b3c36` | 通过（1 个 Important 修复，复审 PASS） | 19 |
-| 9 | 渲染进程基础（API 客户端 / 主题 / 布局） | ⬜ 未开始 | — | — | — |
+| 9 | 渲染进程基础（API 客户端 / 主题 / 布局） | ✅ 完成 | `2e2b3e4` | 通过（0 Important，8 Minor 延后） | 6 |
 | 10 | 通用 UI 组件集 | ⬜ 未开始 | — | — | — |
 | 11 | 项目管理页 | ⬜ 未开始 | — | — | — |
 | 12 | 任务列表页与快速添加 | ⬜ 未开始 | — | — | — |
 | 13 | 打包配置、README、M1 手测清单 | ⬜ 未开始 | — | — | — |
 | — | M1 收尾：全分支最终评审 + 修复波 | ⬜ 未开始 | — | — | — |
 
-合计 **116** 条用例全绿（10 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
+合计 **122** 条用例全绿（11 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
 
 ### 已交付代码（Task 1–8）
 
@@ -74,8 +74,12 @@ src/
 ├─ types/env.d.ts            Window.api 全局声明
 ├─ lib/progress.ts           computeProgress（全项目唯一实现）
 ├─ lib/api.ts                ApiError + call<T>（Result 解包）
-└─ App.tsx / main.tsx / index.html   渲染端脚手架
-tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14 · settings 16 · ipc 14 · preload 3 · result-parity 2
+├─ store/ui.ts               theme / page / toast + 主题解析与落盘
+├─ hooks/useAsync.ts         异步加载 hook（loading / error / reload）
+├─ styles/global.css         设计令牌 + 布局骨架（浅/深两套）
+├─ features/settings/SettingsPage.tsx  主题设置页
+└─ App.tsx / main.tsx / index.html   应用外壳（导航 + 主题恢复）
+tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14 · settings 16 · ipc 14 · preload 3 · result-parity 2 · ui 6
 ```
 
 ### 实施中发现并修掉的真实缺陷
@@ -3559,7 +3563,8 @@ git commit -m "feat: 添加渲染进程 API 客户端、主题系统与布局骨
   - `ProgressRing`：`{ value: number; size?: number; stroke?: number; label?: string }`
   - `EmptyState`：`{ title: string; hint?: string; action?: React.ReactNode }`
   - `Field`：`{ label: string; children: React.ReactNode; hint?: string }`
-  - `src/lib/format.ts` 导出 `formatPercent(value: number): string`、`formatHours(value: number | null): string`、`formatLocalDateTime(value: string | null): string`、`isOverdue(dueAt: string | null, nowLocalDateTime: string): boolean`
+  - `src/lib/format.ts` 导出 `formatPercent(value: number): string`、`formatHours(value: number | null): string`、`formatLocalDateTime(value: string | null): string`、`isOverdue(dueAt: string | null, nowLocalDateTime: string): boolean`、`toLocalDateTime(date: Date): string`
+    - `toLocalDateTime` **必须与 `electron/util/time.ts` 逐字同口径**（`YYYY-MM-DDTHH:mm`，本地墙钟）。Task 8 的 `window.api.tasks.overdueCount(nowLocalDateTime)` 要渲染端自己算这个串，而 `src/` 下没有时间工具 —— 这是 Task 8 复审留下的跨任务缺口，由本任务补齐。两侧形状必须一致，靠 Step 2 的比对用例钉死。
 
 - [ ] **Step 1: 写格式化工具**
 
@@ -3587,6 +3592,12 @@ export function isOverdue(dueAt: string | null, nowLocalDateTime: string): boole
   if (!dueAt) return false;
   return dueAt < nowLocalDateTime;
 }
+
+const pad = (n: number): string => String(n).padStart(2, '0');
+
+export function toLocalDateTime(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 ```
 
 - [ ] **Step 2: 写格式化工具测试**
@@ -3595,7 +3606,8 @@ export function isOverdue(dueAt: string | null, nowLocalDateTime: string): boole
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { formatHours, formatLocalDateTime, formatPercent, isOverdue } from '../src/lib/format';
+import { formatHours, formatLocalDateTime, formatPercent, isOverdue, toLocalDateTime } from '../src/lib/format';
+import { toLocalDateTime as mainToLocalDateTime } from '../electron/util/time';
 
 describe('格式化工具', () => {
   it('formatPercent 四舍五入并夹在 0-100', () => {
@@ -3625,6 +3637,21 @@ describe('格式化工具', () => {
     expect(isOverdue('2026-11-05T11:00', '2026-11-05T10:00')).toBe(false);
     expect(isOverdue(null, '2026-11-05T10:00')).toBe(false);
   });
+
+  it('toLocalDateTime 与主进程同口径', () => {
+    // 钉死「渲染端补齐」这件事：同一批时刻，两边输出必须逐字相同
+    const samples = [
+      new Date(2026, 10, 5, 14, 30),
+      new Date(2026, 0, 1, 0, 0),
+      new Date(2026, 11, 31, 23, 59),
+      new Date(2026, 2, 9, 7, 5)
+    ];
+    for (const d of samples) {
+      expect(toLocalDateTime(d)).toBe(mainToLocalDateTime(d));
+      expect(toLocalDateTime(d)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    }
+    expect(toLocalDateTime(new Date(2026, 10, 5, 9, 7))).toBe('2026-11-05T09:07');
+  });
 });
 ```
 
@@ -3634,7 +3661,7 @@ describe('格式化工具', () => {
 npx vitest run tests/format.test.ts
 ```
 
-Expected: PASS，5 个用例全绿（`format.ts` 是纯函数，实现已在 Step 1 给出，失败请检查拼写）。
+Expected: PASS，6 个用例全绿（`format.ts` 是纯函数，实现已在 Step 1 给出，失败请检查拼写）。
 
 - [ ] **Step 4: 写组件**
 
