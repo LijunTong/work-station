@@ -1,5 +1,23 @@
 # 工作台 Work Station · M1 骨架与数据层 实施计划
 
+> **⚠️ 技术栈已迁移（2026-11-05，决策 #14）**：本文件的任务拆分是按 Electron + React + TypeScript 写的，实际实现已改为 **Avalonia 12.1.5 + .NET 10 + C#**。下方 Task 1–13 的描述仅作历史参考，**不再逐条执行**；对应能力已在新的工程结构里重写并交付：
+>
+> | 原任务 | Avalonia 实现位置 | 状态 |
+> | --- | --- | --- |
+> | Task 2 共享类型与工具 | `Core/Models`、`Core/Time/LocalTime.cs`、`Core/Formatting.cs`、`Core/ProgressCalculator.cs`、`Core/TaskGrouping.cs` | 完成，有单测 |
+> | Task 3 数据库与迁移 | `Core/Data/Database.cs`、`Core/Data/Migrations.cs`、`Core/Data/AppPaths.cs` | 完成，有单测 |
+> | Task 4–7 四仓储 | `Core/Data/Repositories/*.cs` | 完成，有单测 |
+> | Task 8 IPC | **整层消失**（单进程直接调用），由 `Core/Services/WorkStationService.cs` 承担 Result 契约 | 完成，有单测 |
+> | Task 9 布局与主题 | `App/Views/MainWindow.axaml`、`App/Styles/*`、`App/ViewModels/MainWindowViewModel.cs` | 完成 |
+> | Task 10 通用组件 | `App/Controls/ProgressRing.cs` + `Styles/App.axaml` 中的卡片/抽屉/胶囊/任务行样式 | 完成 |
+> | Task 11 项目页 | `App/Views/ProjectsView.axaml` + `App/ViewModels/ProjectsViewModel.cs` | 完成 |
+> | Task 12 任务页 | `App/Views/TasksView.axaml` + `App/ViewModels/TasksViewModel.cs` | 完成 |
+> | Task 13 打包与文档 | `tools/publish.ps1`、`README.md`、`docs/M1-手测清单.md` | 完成 |
+>
+> 验证方式改为：`dotnet build` / `dotnet test`（165 用例，含 Avalonia Headless UI 冒烟）/ `tools\publish.ps1 -Rid win-x64`（单文件 31.3 MB）。
+> M2–M4 应按 Avalonia 结构重新拆解，不要复用下方 Electron 阶段的任务边界。
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 搭起 Electron + React + TypeScript 的工程骨架，建立基于 `node:sqlite` 的完整数据层与仓储层，做出可用的项目列表页与任务列表页，并打通 Windows portable exe 打包链路。
