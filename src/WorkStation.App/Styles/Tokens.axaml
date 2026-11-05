@@ -1,0 +1,43 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- 设计令牌：逐字取自原 Electron 版的 src/styles/global.css。
+       浅/深两套各写一份 ThemeDictionary，控件侧一律用 DynamicResource 引用，
+       切换 RequestedThemeVariant 即时生效，无需重启。 -->
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="BgBrush" Color="#f6f7f9" />
+      <SolidColorBrush x:Key="BgPanelBrush" Color="#ffffff" />
+      <SolidColorBrush x:Key="BgHoverBrush" Color="#eef0f4" />
+      <SolidColorBrush x:Key="LineBrush" Color="#e2e5ea" />
+      <SolidColorBrush x:Key="TextBrush" Color="#1c1f24" />
+      <SolidColorBrush x:Key="TextDimBrush" Color="#6b7280" />
+      <SolidColorBrush x:Key="AccentBrush" Color="#3b6ef5" />
+      <SolidColorBrush x:Key="AccentTextBrush" Color="#ffffff" />
+      <SolidColorBrush x:Key="DangerBrush" Color="#d94b4b" />
+      <SolidColorBrush x:Key="WarningBrush" Color="#d98a1f" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="#2f9e6e" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="BgBrush" Color="#14161a" />
+      <SolidColorBrush x:Key="BgPanelBrush" Color="#1c1f25" />
+      <SolidColorBrush x:Key="BgHoverBrush" Color="#262a31" />
+      <SolidColorBrush x:Key="LineBrush" Color="#2e333b" />
+      <SolidColorBrush x:Key="TextBrush" Color="#e6e8eb" />
+      <SolidColorBrush x:Key="TextDimBrush" Color="#9aa3af" />
+      <SolidColorBrush x:Key="AccentBrush" Color="#5b86ff" />
+      <SolidColorBrush x:Key="AccentTextBrush" Color="#0d1014" />
+      <SolidColorBrush x:Key="DangerBrush" Color="#ef6b6b" />
+      <SolidColorBrush x:Key="WarningBrush" Color="#e0a04a" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="#48bb87" />
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- 跨平台字体栈：Windows 优先微软雅黑，macOS 走苹方，Linux 用随包分发的 Noto Sans SC 兜底 -->
+  <FontFamily x:Key="AppFontFamily">Microsoft YaHei UI, PingFang SC, Noto Sans SC, Segoe UI, system-ui</FontFamily>
+  <CornerRadius x:Key="AppRadius">8</CornerRadius>
+  <x:Double x:Key="AppFontSize">14</x:Double>
+
+</ResourceDictionary>

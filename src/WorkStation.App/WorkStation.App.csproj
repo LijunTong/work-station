@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WorkStation.App</RootNamespace>
+    <!-- 保持 ASCII：中文 exe 名会让 WPF/Avalonia 生成的资源 URI 全部失效 -->
+    <AssemblyName>WorkStation</AssemblyName>
+    <Version>0.1.0</Version>
+    <!-- 编译期校验绑定路径：写错 x:DataType 下的属性名在 build 期就报错 -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.5" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WorkStation.Core\WorkStation.Core.csproj" />
+  </ItemGroup>
+
+  <!-- 中文字体等资源放在仓库根 assets/ 下，按需嵌入 -->
+  <ItemGroup>
+    <AvaloniaResource Include="..\..\assets\fonts\**" Link="Assets/Fonts/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,66 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- 控件基础样式：把 Electron 版 global.css 的通用规则搬过来。
+       Avalonia 用 CSS 类选择器（Button.accent）而不是 WPF 的 x:Key + BasedOn。 -->
+
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource BgBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}" />
+    <Setter Property="FontSize" Value="{DynamicResource AppFontSize}" />
+  </Style>
+
+  <Style Selector="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.dim">
+    <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
+  </Style>
+
+  <Style Selector="Border.panel">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource AppRadius}" />
+  </Style>
+
+  <Style Selector="Button">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource AppRadius}" />
+    <Setter Property="Padding" Value="10,6" />
+  </Style>
+
+  <Style Selector="Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <Style Selector="Button.danger">
+    <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <Style Selector="Button.sm">
+    <Setter Property="Padding" Value="8,3" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+
+  <!-- Avalonia 没有独立的 TextArea 类型：多行文本框同样是 TextBox（AcceptsReturn + TextWrapping） -->
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource AppRadius}" />
+    <Setter Property="Padding" Value="6,4" />
+  </Style>
+
+</Styles>

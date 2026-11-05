@@ -1,0 +1,10 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WorkStation.App.Views.MainWindow"
+        Title="工作台 Work Station"
+        Width="1280"
+        Height="800"
+        MinWidth="1024"
+        MinHeight="640">
+  <TextBlock Text="工作台 Work Station" />
+</Window>

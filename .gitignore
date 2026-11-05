@@ -1,8 +1,13 @@
-node_modules/
-out/
-dist/
+# .NET
+bin/
+obj/
+*.user
+packages/
+
+# 本地数据与运行时
 .data/
 .superpowers/
 *.log
-build/icon.ico
-build/icon.png
+
+# 发布产物
+dist/
