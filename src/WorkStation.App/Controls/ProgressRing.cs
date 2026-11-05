@@ -80,7 +80,8 @@ public class ProgressRing : Control
         if (value <= 0) return;
 
         var brush = RingBrush ?? Brushes.Transparent;
-        var pen = new Pen(brush, thickness);
+        // 圆头收尾：平头会让弧的末端看起来像被切了一刀，短进度时尤其明显
+        var pen = new Pen(brush, thickness, null, PenLineCap.Round);
 
         if (value >= 100)
         {

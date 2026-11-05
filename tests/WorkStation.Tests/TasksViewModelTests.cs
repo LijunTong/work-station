@@ -225,4 +225,45 @@ public class TasksViewModelTests : IDisposable
         Assert.False(vm.IsDeleteConfirmOpen);
         Assert.Null(_service.TasksGet(task.Id).Data);
     }
+
+    [Fact]
+    public void StatusChip_TogglesSelectionFlags()
+    {
+        _service.TasksCreate(new CreateTaskInput { Title = "做着的", Status = TaskStatus.Doing });
+        _service.TasksCreate(new CreateTaskInput { Title = "没动的" });
+        var vm = CreateVm();
+
+        // 初始只有「全部」是高亮的，否则一排胶囊全是选中态就没法看
+        Assert.Single(vm.StatusFilters, f => f.IsSelected);
+        Assert.True(vm.StatusFilters[0].IsSelected);
+
+        var doing = vm.StatusFilters.Single(f => f.Key == "doing");
+        doing.SelectCommand.Execute(null);
+
+        Assert.Same(doing, vm.SelectedStatusFilter);
+        Assert.True(doing.IsSelected);
+        Assert.False(vm.StatusFilters[0].IsSelected);
+        Assert.Equal(["做着的"], vm.Groups.SelectMany(g => g.Tasks).Select(r => r.Title).ToArray());
+    }
+
+    [Fact]
+    public void Row_MetaText_JoinsProjectPriorityAndStatus()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "工作台" }).Data!;
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "有项目有优先级",
+            ProjectId = project.Id,
+            Priority = Priority.High,
+        });
+        _service.TasksCreate(new CreateTaskInput { Title = "什么都没设", Priority = Priority.None });
+
+        var vm = CreateVm();
+        var rows = vm.Groups.SelectMany(g => g.Tasks).ToDictionary(r => r.Title);
+
+        Assert.Equal("工作台 · 高优先级", rows["有项目有优先级"].MetaText);
+
+        // 三项都为空时整行隐藏，避免留下孤零零的分隔符或高度
+        Assert.False(rows["什么都没设"].HasMeta);
+    }
 }

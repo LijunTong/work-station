@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia;
 using System.Globalization;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -287,6 +288,41 @@ public sealed partial class ProjectCardViewModel : ObservableObject
                              && Project.Status != ProjectStatus.Done;
 
     public IBrush AccentBrush => ParseColor(Project.Color);
+
+    /// <summary>
+    /// 状态圆点。这里刻意用「中间调」而不是主题色板里的语义色：
+    /// 同一份 hex 要同时在白底和 #161A21 上看得清，浅色系的 semantic 色在深色主题会糊。
+    /// </summary>
+    public IBrush StatusBrush => Project.Status switch
+    {
+        ProjectStatus.Active => Brush.Parse("#2F62E8"),
+        ProjectStatus.Planning => Brush.Parse("#8B95A6"),
+        ProjectStatus.Paused => Brush.Parse("#C08A2E"),
+        _ => Brush.Parse("#0F8A62")
+    };
+
+    /// <summary>
+    /// 进度环跟随项目色；项目没配色时回落到强调色 —— 早先直接绑 AccentBrush，
+    /// 无色的项目环会解析成 Transparent，整个环直接消失。
+    /// </summary>
+    public IBrush RingBrush => HasColor
+        ? ParseColor(Project.Color)
+        : AccentFallback;
+
+    /// <summary>取不到主题资源时（例如纯 ViewModel 单测里没有 Application）退回一个中调蓝。</summary>
+    private static IBrush AccentFallback
+    {
+        get
+        {
+            if (Application.Current?.TryGetResource("AccentBrush", null, out var found) == true
+                && found is IBrush accent)
+            {
+                return accent;
+            }
+
+            return Brush.Parse("#2F62E8");
+        }
+    }
 
     [RelayCommand]
     private void Edit() => _edit(this);

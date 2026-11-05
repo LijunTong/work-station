@@ -7,7 +7,7 @@
         x:CompileBindings="True"
         Title="工作台 Work Station"
         Width="1280"
-        Height="800"
+        Height="820"
         MinWidth="1024"
         MinHeight="640"
         Background="{DynamicResource BgBrush}">
@@ -24,85 +24,147 @@
     </DataTemplate>
   </Window.DataTemplates>
 
-  <Grid ColumnDefinitions="208,*">
+  <Grid ColumnDefinitions="236,*">
 
     <!-- 侧边栏 -->
-    <Border Grid.Column="0"
-            Background="{DynamicResource BgPanelBrush}"
-            BorderBrush="{DynamicResource LineBrush}"
-            BorderThickness="0,0,1,0">
+    <Border Grid.Column="0" Background="{DynamicResource BgPanelBrush}">
       <Grid RowDefinitions="Auto,*,Auto">
-        <StackPanel Margin="18,20,18,16" Spacing="2">
-          <TextBlock Text="工作台" FontSize="18" FontWeight="Bold" />
-          <TextBlock Text="Work Station" Classes="dim" FontSize="11" />
+
+        <StackPanel Margin="18,20,18,22" Spacing="10" Orientation="Horizontal">
+          <Border Width="28"
+                  Height="28"
+                  CornerRadius="8"
+                  Background="{DynamicResource AccentBrush}"
+                  VerticalAlignment="Center">
+            <TextBlock Text="工"
+                       FontSize="14"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource AccentTextBrush}"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
+          </Border>
+          <StackPanel Spacing="1" VerticalAlignment="Center">
+            <TextBlock Text="工作台" FontSize="14" FontWeight="SemiBold" />
+            <TextBlock Text="Work Station"
+                       FontSize="10.5"
+                       Foreground="{DynamicResource TextFaintBrush}" />
+          </StackPanel>
         </StackPanel>
 
-        <StackPanel Grid.Row="1" Margin="8,4" Spacing="2">
+        <StackPanel Grid.Row="1" Margin="12,0" Spacing="3">
           <Button Classes="nav"
                   Classes.active="{Binding IsProjectsActive}"
-                  Command="{Binding ShowProjectsCommand}"
-                  Content="项目" />
+                  Command="{Binding ShowProjectsCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <!-- 看板列图标：三根高低不同的竖条 -->
+              <Canvas Width="16" Height="16" VerticalAlignment="Center">
+                <Rectangle Canvas.Left="0" Canvas.Top="4" Width="4" Height="10" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="6" Canvas.Top="1" Width="4" Height="13" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="12" Canvas.Top="6" Width="4" Height="8" RadiusX="1.5" RadiusY="1.5" />
+              </Canvas>
+              <TextBlock Text="项目" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
           <Button Classes="nav"
                   Classes.active="{Binding IsTasksActive}"
-                  Command="{Binding ShowTasksCommand}"
-                  Content="任务" />
+                  Command="{Binding ShowTasksCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <!-- 清单图标：三个圆点 + 三条横线 -->
+              <Canvas Width="16" Height="16" VerticalAlignment="Center">
+                <Rectangle Canvas.Left="0" Canvas.Top="2" Width="3" Height="3" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="6" Canvas.Top="2.5" Width="10" Height="2" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="0" Canvas.Top="6.5" Width="3" Height="3" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="6" Canvas.Top="7" Width="10" Height="2" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="0" Canvas.Top="11" Width="3" Height="3" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="6" Canvas.Top="11.5" Width="6" Height="2" RadiusX="1" RadiusY="1" />
+              </Canvas>
+              <TextBlock Text="任务" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
           <Button Classes="nav"
                   Classes.active="{Binding IsSettingsActive}"
-                  Command="{Binding ShowSettingsCommand}"
-                  Content="设置" />
+                  Command="{Binding ShowSettingsCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <!-- 滑块图标 -->
+              <Canvas Width="16" Height="16" VerticalAlignment="Center">
+                <Rectangle Canvas.Left="0" Canvas.Top="3" Width="16" Height="1.5" RadiusX="0.75" RadiusY="0.75" />
+                <Rectangle Canvas.Left="0" Canvas.Top="7.5" Width="16" Height="1.5" RadiusX="0.75" RadiusY="0.75" />
+                <Rectangle Canvas.Left="0" Canvas.Top="12" Width="16" Height="1.5" RadiusX="0.75" RadiusY="0.75" />
+                <Rectangle Canvas.Left="10" Canvas.Top="1.2" Width="3" Height="5.2" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="4" Canvas.Top="5.7" Width="3" Height="5.2" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="9" Canvas.Top="10.2" Width="3" Height="5.2" RadiusX="1.5" RadiusY="1.5" />
+              </Canvas>
+              <TextBlock Text="设置" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
         </StackPanel>
 
-        <TextBlock Grid.Row="2"
-                   Margin="18,0,18,16"
-                   Text="本地数据 · 无网络依赖"
-                   Classes="dim"
-                   FontSize="11" />
+        <StackPanel Grid.Row="2" Margin="18,0,18,16" Spacing="3">
+          <TextBlock Text="本地数据 · 不联网"
+                     FontSize="10.5"
+                     Foreground="{DynamicResource TextFaintBrush}" />
+        </StackPanel>
       </Grid>
     </Border>
 
     <!-- 内容区 -->
-    <Grid Grid.Column="1" RowDefinitions="Auto,*">
-      <Border Grid.Row="0"
-              Padding="24,14"
-              BorderBrush="{DynamicResource LineBrush}"
-              BorderThickness="0,0,0,1">
-        <TextBlock Text="{Binding PageTitle}" FontSize="17" FontWeight="SemiBold" />
-      </Border>
+    <Border Grid.Column="1"
+            BorderBrush="{DynamicResource LineBrush}"
+            BorderThickness="1,0,0,0">
+      <Grid RowDefinitions="Auto,*">
 
-      <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" />
-    </Grid>
+        <StackPanel Grid.Row="0"
+                    Margin="{DynamicResource PageHeaderPadding}"
+                    Spacing="3">
+          <TextBlock Text="{Binding PageTitle}" Classes="page-title" />
+          <TextBlock Text="{Binding PageSubtitle}" Classes="page-subtitle" />
+        </StackPanel>
 
-    <!-- Toast -->
+        <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" />
+      </Grid>
+    </Border>
+
+    <!-- Toast：黑底白字在浅色主题里太扎眼，改用面板色 + 细边框 -->
     <Border Grid.ColumnSpan="2"
             IsVisible="{Binding IsToastVisible}"
             HorizontalAlignment="Center"
             VerticalAlignment="Bottom"
-            Margin="0,0,0,28"
-            Padding="16,10"
-            CornerRadius="8"
+            Margin="0,0,0,32"
+            Padding="16,11"
+            CornerRadius="{DynamicResource RadiusMd}"
             BorderThickness="1"
-            BorderBrush="{DynamicResource LineBrush}"
+            BorderBrush="{DynamicResource LineStrongBrush}"
             Background="{DynamicResource BgPanelBrush}"
-            BoxShadow="0 6 20 0 #33000000">
-      <TextBlock Text="{Binding ToastMessage}" TextWrapping="Wrap" MaxWidth="560" />
+            BoxShadow="0 8 26 0 #26000000">
+      <TextBlock Text="{Binding ToastMessage}"
+                 TextWrapping="Wrap"
+                 MaxWidth="560"
+                 FontSize="{DynamicResource FontSm}" />
     </Border>
 
     <!-- 启动失败：整个界面替换为错误页，避免用户对着空窗口猜 -->
     <Border Grid.ColumnSpan="2"
             IsVisible="{Binding HasStartupError}"
             Background="{DynamicResource BgBrush}">
-      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="560">
-        <TextBlock Text="无法启动工作台" FontSize="18" FontWeight="SemiBold" />
-        <TextBlock Text="{Binding StartupError}"
-                   Classes="dim"
-                   TextWrapping="Wrap"
-                   TextAlignment="Center" />
-        <TextBlock Text="数据库文件可能被占用或权限不足。检查数据目录后重新打开应用。"
-                   Classes="dim"
-                   FontSize="12"
-                   TextWrapping="Wrap"
-                   TextAlignment="Center" />
-      </StackPanel>
+      <Border Classes="card"
+              Width="480"
+              Padding="28"
+              VerticalAlignment="Center"
+              HorizontalAlignment="Center">
+        <StackPanel Spacing="10">
+          <TextBlock Text="无法启动工作台" Classes="section-title" />
+          <TextBlock Text="{Binding StartupError}"
+                     Foreground="{DynamicResource TextSecondaryBrush}"
+                     FontSize="{DynamicResource FontSm}"
+                     TextWrapping="Wrap" />
+          <TextBlock Text="数据库文件可能被占用或权限不足。检查数据目录后重新打开应用。"
+                     Classes="dim"
+                     FontSize="{DynamicResource FontXs}"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
     </Border>
 
   </Grid>

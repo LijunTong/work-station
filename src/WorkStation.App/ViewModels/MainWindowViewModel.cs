@@ -45,6 +45,10 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _pageTitle = "项目";
 
+    /// <summary>标题下的补充说明。没有它，标题栏只剩一个词，界面显得没有信息密度。</summary>
+    [ObservableProperty]
+    private string _pageSubtitle = "管理项目与整体进度";
+
     [ObservableProperty]
     private bool _isToastVisible;
 
@@ -89,6 +93,7 @@ public partial class MainWindowViewModel : ObservableObject
         ThemeMode = Settings.InitialTheme;
         CurrentPage = Projects;
         PageTitle = "项目";
+        PageSubtitle = "管理项目与整体进度";
 
         _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _toastTimer.Tick += (_, _) =>
@@ -135,16 +140,19 @@ public partial class MainWindowViewModel : ObservableObject
         {
             case AppPage.Projects:
                 PageTitle = "项目";
+                PageSubtitle = "管理项目与整体进度";
                 CurrentPage = Projects;
                 Projects?.Reload();
                 break;
             case AppPage.Tasks:
                 PageTitle = "任务";
+                PageSubtitle = "今天要做的事，和工作台里攒下的事";
                 CurrentPage = Tasks;
                 Tasks?.Reload();
                 break;
             case AppPage.Settings:
                 PageTitle = "设置";
+                PageSubtitle = "外观偏好与本地数据位置";
                 CurrentPage = Settings;
                 Settings?.Reload();
                 break;

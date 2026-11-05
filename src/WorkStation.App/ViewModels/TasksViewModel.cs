@@ -37,14 +37,15 @@ public partial class TasksViewModel : ObservableObject
 
         StatusFilters =
         [
-            new StatusFilter("all", "全部状态", null),
-            new StatusFilter("todo", "待办", TaskStatus.Todo),
-            new StatusFilter("doing", "进行中", TaskStatus.Doing),
-            new StatusFilter("blocked", "已阻塞", TaskStatus.Blocked),
-            new StatusFilter("done", "已完成", TaskStatus.Done),
-            new StatusFilter("canceled", "已取消", TaskStatus.Canceled)
+            new StatusFilter("all", "全部", null, f => SelectedStatusFilter = f),
+            new StatusFilter("todo", "待办", TaskStatus.Todo, f => SelectedStatusFilter = f),
+            new StatusFilter("doing", "进行中", TaskStatus.Doing, f => SelectedStatusFilter = f),
+            new StatusFilter("blocked", "已阻塞", TaskStatus.Blocked, f => SelectedStatusFilter = f),
+            new StatusFilter("done", "已完成", TaskStatus.Done, f => SelectedStatusFilter = f),
+            new StatusFilter("canceled", "已取消", TaskStatus.Canceled, f => SelectedStatusFilter = f)
         ];
         _selectedStatusFilter = StatusFilters[0];
+        StatusFilters[0].IsSelected = true;
     }
 
     public ObservableCollection<TaskGroupViewModel> Groups { get; } = [];
@@ -88,7 +89,15 @@ public partial class TasksViewModel : ObservableObject
 
     public bool HasError => Error is not null;
 
-    partial void OnSelectedStatusFilterChanged(StatusFilter value) => Reload();
+    partial void OnSelectedStatusFilterChanged(StatusFilter value)
+    {
+        foreach (var filter in StatusFilters)
+        {
+            filter.IsSelected = ReferenceEquals(filter, value);
+        }
+
+        Reload();
+    }
 
     partial void OnSelectedProjectChanged(ProjectOption? value)
     {
@@ -378,7 +387,31 @@ public partial class TasksViewModel : ObservableObject
     }
 }
 
-public sealed record StatusFilter(string Key, string Label, TaskStatus? Status);
+/// <summary>
+/// 状态筛选项。做成对象而不是 record：胶囊要直接绑「选中态」和「点击命令」，
+/// 否则得在 XAML 里塞比较转换器，还得再绕回父 DataContext 才能发命令。
+/// </summary>
+public sealed partial class StatusFilter : ObservableObject
+{
+    public StatusFilter(string key, string label, TaskStatus? status, Action<StatusFilter> select)
+    {
+        Key = key;
+        Label = label;
+        Status = status;
+        SelectCommand = new RelayCommand(() => select(this));
+    }
+
+    public string Key { get; }
+
+    public string Label { get; }
+
+    public TaskStatus? Status { get; }
+
+    public IRelayCommand SelectCommand { get; }
+
+    [ObservableProperty]
+    private bool _isSelected;
+}
 
 public sealed record ProjectOption(string? Id, string Name, bool IsArchived = false)
 {
@@ -417,6 +450,9 @@ public partial class TaskGroupViewModel : ObservableObject
     public string CountText => Count.ToString(CultureInfo.InvariantCulture);
 
     public string ArrowGlyph => IsExpanded ? "▾" : "▸";
+
+    /// <summary>逾期组用告警色标题；其余组保持中性，避免整页都在喊。</summary>
+    public bool IsUrgent => Key == "overdue";
 
     partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ArrowGlyph));
 
@@ -489,6 +525,15 @@ public sealed partial class TaskRowViewModel : ObservableObject
         _ => string.Empty
     };
 
+    /// <summary>优先级色条。中间调，浅/深两套主题下都能分辨。</summary>
+    public IBrush PriorityBrush => Task.Priority switch
+    {
+        Priority.High => Brush.Parse("#D9534F"),
+        Priority.Medium => Brush.Parse("#D9932B"),
+        Priority.Low => Brush.Parse("#8A94A6"),
+        _ => Brushes.Transparent
+    };
+
     public string PriorityMark => Task.Priority switch
     {
         Priority.High => "高",
@@ -505,12 +550,33 @@ public sealed partial class TaskRowViewModel : ObservableObject
 
     public bool HasProject => ProjectName is not null;
 
-    public IBrush? PriorityBrush => Task.Priority switch
+    /// <summary>
+    /// 行内第二行文字。合成一个属性而不是在 XAML 里拼三段 + 分隔符：
+    /// 分隔符的显隐条件互相牵连，摆在视图里必然出错，而且会留下孤儿「·」。
+    /// </summary>
+    public string MetaText
     {
-        Priority.High => Brush.Parse("#ef6b6b"),
-        Priority.Medium => Brush.Parse("#e0a04a"),
-        _ => null
-    };
+        get
+        {
+            var parts = new List<string>(3);
+            if (ProjectName is not null) parts.Add(ProjectName);
+
+            var priority = PriorityMark switch
+            {
+                "高" => "高优先级",
+                "中" => "中优先级",
+                "低" => "低优先级",
+                _ => null
+            };
+            if (priority is not null) parts.Add(priority);
+
+            if (IsFinished) parts.Add(StatusText);
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public bool HasMeta => MetaText.Length > 0;
 
     [RelayCommand]
     private void Complete() => _complete(this);
