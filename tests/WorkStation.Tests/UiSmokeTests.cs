@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -217,6 +218,39 @@ public class UiSmokeTests : IDisposable
         window.Close();
     }
 
+    /// <summary>
+    /// 合成框里「占位文字」和「详细新建」必须落在同一条中心线上。
+    ///
+    /// TextBox 的 TextPresenter 默认会被 MinHeight 撑满整个输入框高度，而文字是贴着
+    /// 行框顶部绘制的，于是占位文字比同一行的按钮文字高 2.5px——肉眼就是「没对齐」。
+    /// 这里同时守住「中心线一致」和「行框没有被撑满」两件事。
+    /// </summary>
+    [AvaloniaFact]
+    public void Composer_TextAndButtonShareOneCenterLine()
+    {
+        var window = new MainWindow(new MainWindowViewModel(_service)) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var composer = window.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("composer"));
+        var box = composer.GetVisualDescendants().OfType<TextBox>().First();
+        var presenter = box.GetVisualDescendants().OfType<TextPresenter>().First();
+        var content = composer.GetVisualDescendants().OfType<Button>().First()
+            .GetVisualDescendants().OfType<ContentPresenter>().First();
+
+        double Center(Control control) =>
+            control.TranslatePoint(default, composer)!.Value.Y + control.Bounds.Height / 2;
+
+        Assert.InRange(Math.Abs(Center(presenter) - Center(content)), 0, 1.0);
+        Assert.True(
+            presenter.Bounds.Height < box.Bounds.Height,
+            $"文字行被撑满输入框高度（{presenter.Bounds.Height} vs {box.Bounds.Height}），文字会贴顶绘制");
+
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void Keyboard_N_FocusesQuickAdd()
     {
@@ -264,6 +298,68 @@ public class UiSmokeTests : IDisposable
 
         Assert.Equal(AppPage.Tasks, vm.Page);
         Assert.True(vm.Tasks!.IsFormOpen, "双击卡片应打开编辑抽屉");
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void PaletteNewProject_RendersProjectDrawer()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.OpenPaletteCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        vm.Palette!.Results.Single(r => r.Title == "新建项目" && r.Hint == "动作")
+            .ActivateCommand.Execute(null);
+
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        // 抽屉必须真的长出来：只断言 IsFormOpen 会漏掉「表单为空 / 高度塌成 0」
+        var drawer = window.GetVisualDescendants()
+            .OfType<Border>()
+            .FirstOrDefault(b => b.Classes.Contains("drawer"));
+
+        Assert.NotNull(drawer);
+        Assert.True(drawer!.IsVisible, "抽屉应可见");
+        Assert.True(drawer.Bounds.Width > 300, $"抽屉宽度异常：{drawer.Bounds}");
+        Assert.True(drawer.Bounds.Height > 300, $"抽屉高度异常：{drawer.Bounds}");
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void PaletteNewProject_ClickedByMouse_OpensDrawer()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.OpenPaletteCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var row = window.GetVisualDescendants()
+            .OfType<Button>()
+            .First(b => b.DataContext is PaletteItem { Title: "新建项目" });
+
+        var center = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window);
+        Assert.NotNull(center);
+
+        window.MouseDown(center!.Value, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(center.Value, MouseButton.Left, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(AppPage.Projects, vm.Page);
+        Assert.True(vm.Projects!.IsFormOpen, "点「新建项目」应打开项目抽屉");
+        Assert.False(vm.Palette!.IsOpen, "执行后面板应关闭");
 
         window.Close();
     }

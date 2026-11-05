@@ -152,6 +152,19 @@ public class MainWindowViewModelTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void PaletteNewProject_OpensProjectDrawer()
+    {
+        var vm = new MainWindowViewModel(_service);
+
+        vm.OpenPaletteCommand.Execute(null);
+        vm.Palette!.Results.Single(r => r.Title == "新建项目" && r.Hint == "动作")
+            .ActivateCommand.Execute(null);
+
+        Assert.Equal(AppPage.Projects, vm.Page);
+        Assert.True(vm.Projects!.IsFormOpen, "从面板点「新建项目」应打开项目抽屉");
+    }
+
+    [AvaloniaFact]
     public void NewTask_NavigatesAndOpensDrawer()
     {
         var vm = new MainWindowViewModel(_service);

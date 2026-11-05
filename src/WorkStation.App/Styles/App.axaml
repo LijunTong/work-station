@@ -183,6 +183,9 @@
     <Setter Property="Padding" Value="0" />
     <Setter Property="MinHeight" Value="24" />
     <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
+    <!-- 必须显式居中：默认按顶部排列时，文字行会被 MinHeight 撑出 24px 高，
+         行框内文字贴在顶部绘制，占位文字比同一行的按钮文字高 2.5px -->
+    <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
 
   <Style Selector="ComboBox">
