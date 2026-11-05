@@ -23,6 +23,9 @@
     <DataTemplate DataType="vm:TasksViewModel">
       <views:TasksView />
     </DataTemplate>
+    <DataTemplate DataType="vm:RemindersViewModel">
+      <views:RemindersView />
+    </DataTemplate>
     <DataTemplate DataType="vm:SettingsViewModel">
       <views:SettingsView />
     </DataTemplate>
@@ -103,6 +106,22 @@
                 <Rectangle Canvas.Left="9" Canvas.Top="8" Width="7" Height="6" RadiusX="1.5" RadiusY="1.5" />
               </Canvas>
               <TextBlock Grid.Column="1" Text="项目" VerticalAlignment="Center" />
+            </Grid>
+          </Button>
+
+          <Button Classes="nav"
+                  Classes.active="{Binding IsRemindersActive}"
+                  Command="{Binding ShowRemindersCommand}">
+            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
+              <!-- 提醒用矢量图标：铃铛的轮廓用矩形拼不出来，
+                   颜色仍然靠按钮的 Foreground 继承，选中态一样会变蓝 -->
+              <controls:Icon Kind="Bell" Size="16" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="提醒" VerticalAlignment="Center" />
+              <Border Grid.Column="2"
+                      Classes="badge"
+                      IsVisible="{Binding HasReminderBadge}">
+                <TextBlock Text="{Binding ReminderBadgeText}" />
+              </Border>
             </Grid>
           </Button>
 
@@ -214,7 +233,7 @@
             <TextBlock Grid.Row="1" Grid.Column="1" Text="聚焦当前页的搜索框" Classes="secondary" FontSize="{DynamicResource FontSm}" />
             <TextBlock Grid.Row="2" Grid.Column="0" Text="Ctrl + K" Classes="key" />
             <TextBlock Grid.Row="2" Grid.Column="1" Text="命令面板：跳转、新建、找任务" Classes="secondary" FontSize="{DynamicResource FontSm}" />
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="1 – 4" Classes="key" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="1 – 5" Classes="key" />
             <TextBlock Grid.Row="3" Grid.Column="1" Text="切换到对应页面" Classes="secondary" FontSize="{DynamicResource FontSm}" />
             <TextBlock Grid.Row="4" Grid.Column="0" Text="Ctrl + Enter" Classes="key" />
             <TextBlock Grid.Row="4" Grid.Column="1" Text="保存当前抽屉" Classes="secondary" FontSize="{DynamicResource FontSm}" />

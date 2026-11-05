@@ -75,6 +75,35 @@ public class UiSmokeTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void RemindersView_LoadsXaml_WithAllThreeGroups()
+    {
+        var fired = _service.RemindersCreate(new CreateReminderInput
+        {
+            Title = "该处理了",
+            RemindAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Now.AddHours(-1))
+        }).Data!;
+        _service.RemindersSetStatus(fired.Id, ReminderStatus.Fired);
+
+        _service.RemindersCreate(new CreateReminderInput
+        {
+            Title = "以后再说",
+            RemindAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Now.AddDays(1))
+        });
+
+        var vm = new RemindersViewModel(_service, (_, _) => { });
+        vm.Reload();
+
+        var view = new RemindersView { DataContext = vm };
+        view.Measure(new Size(1000, 700));
+        view.Arrange(new Rect(0, 0, 1000, 700));
+
+        Assert.NotNull(view.Content);
+        Assert.True(view.Bounds.Width > 0);
+        Assert.Single(vm.Triggered);
+        Assert.Single(vm.Upcoming);
+    }
+
+    [AvaloniaFact]
     public void BoardView_LoadsXaml()
     {
         var vm = new BoardViewModel(_service, (_, _) => { });
@@ -125,6 +154,12 @@ public class UiSmokeTests : IDisposable
 
         Assert.IsType<ProjectsViewModel>(vm.CurrentPage);
         Assert.Equal("项目", vm.PageTitle);
+
+        vm.ShowRemindersCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.IsType<RemindersViewModel>(vm.CurrentPage);
+        Assert.Equal("提醒", vm.PageTitle);
 
         vm.ShowSettingsCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
@@ -367,6 +402,22 @@ public class UiSmokeTests : IDisposable
 
         vm.ShowProjectsCommand.Execute(null);
         Inspect("项目");
+
+        // 提醒页的图标按钮只存在于行上，先造一条待处理 + 一条待触发
+        var fired = _service.RemindersCreate(new CreateReminderInput
+        {
+            Title = "巡检提醒",
+            RemindAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Now.AddHours(-1))
+        }).Data!;
+        _service.RemindersSetStatus(fired.Id, ReminderStatus.Fired);
+        _service.RemindersCreate(new CreateReminderInput
+        {
+            Title = "巡检待触发",
+            RemindAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Now.AddDays(1))
+        });
+
+        vm.ShowRemindersCommand.Execute(null);
+        Inspect("提醒");
 
         Assert.Empty(problems);
         window.Close();

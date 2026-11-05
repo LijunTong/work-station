@@ -17,7 +17,9 @@ public enum IconKind
     Close,
     Plus,
     Calendar,
-    Settings
+    Settings,
+    Bell,
+    Check
 }
 
 /// <summary>
@@ -129,6 +131,18 @@ public sealed class Icon : Control
                 Line(context, pen, 2.6, 7.2, 13.4, 7.2);
                 Line(context, pen, 5.6, 2.6, 5.6, 4.6);
                 Line(context, pen, 10.4, 2.6, 10.4, 4.6);
+                break;
+
+            // 提醒：钟形轮廓 + 底下一个小摆锤。摆锤单独画一段弧，
+            // 收在两个竖边之内，13px 下不会糊成一个块
+            case IconKind.Bell:
+                Stroke(context, pen, "M8 2.6 A3.6 3.6 0 0 1 11.6 6.2 L11.6 8.9 L13 11.2 L3 11.2 L4.4 8.9 L4.4 6.2 A3.6 3.6 0 0 1 8 2.6 Z");
+                Stroke(context, pen, "M6.6 11.4 A1.5 1.5 0 0 0 9.4 11.4");
+                break;
+
+            // 完成：一个勾。图标本身不画圆，容器（行内按钮）决定它长什么样
+            case IconKind.Check:
+                Stroke(context, pen, "M3.4 8.6 L6.5 11.6 L12.8 4.8");
                 break;
 
             // 设置：三条滑轨 + 三个把手，和侧边栏原来手绘的那组图形同一套画法

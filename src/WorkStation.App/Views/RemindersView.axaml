@@ -1,0 +1,268 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WorkStation.App.ViewModels"
+             xmlns:controls="using:WorkStation.App.Controls"
+             x:Class="WorkStation.App.Views.RemindersView"
+             x:DataType="vm:RemindersViewModel"
+             x:CompileBindings="True">
+
+  <UserControl.Resources>
+    <!-- 三组共用同一套行模板：提醒行只有「状态标签 + 几个动作」这点差别，
+         复制三份以后改一处忘两处 -->
+    <DataTemplate x:Key="ReminderRow" x:DataType="vm:ReminderRowViewModel">
+      <Border Classes="task-row" Classes.alert="{Binding IsTriggered}">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+
+          <!-- 待处理用一条琥珀色竖条打头：没有它，这一组和「待触发」长得一模一样 -->
+          <Border Width="3"
+                  CornerRadius="1.5"
+                  Margin="0,2"
+                  Background="{DynamicResource WarningBrush}"
+                  IsVisible="{Binding IsTriggered}" />
+
+          <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Title}"
+                       FontSize="{DynamicResource FontBody}"
+                       TextWrapping="Wrap"
+                       MaxLines="2"
+                       TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal" Spacing="5">
+              <TextBlock Text="{Binding TimeText}"
+                         FontSize="{DynamicResource FontMicro}"
+                         Classes.urgent="{Binding IsOverdue}"
+                         Classes.dim="{Binding !IsOverdue}" />
+              <TextBlock Text="·"
+                         FontSize="{DynamicResource FontMicro}"
+                         Classes="dim" />
+              <TextBlock Text="{Binding MetaText}"
+                         FontSize="{DynamicResource FontMicro}"
+                         Classes="dim"
+                         TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel Grid.Column="2"
+                      Orientation="Horizontal"
+                      Spacing="2"
+                      VerticalAlignment="Center">
+            <Border Classes="chip">
+              <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" />
+            </Border>
+
+            <Button Classes="icon sm"
+                    IsVisible="{Binding IsActionable}"
+                    Command="{Binding CompleteCommand}"
+                    ToolTip.Tip="标记已处理">
+              <controls:Icon Kind="Check" Size="13" />
+            </Button>
+
+            <Button Classes="icon sm"
+                    IsVisible="{Binding IsTriggered}"
+                    Command="{Binding SnoozeCommand}"
+                    ToolTip.Tip="10 分钟后再提醒">
+              <controls:Icon Kind="Clock" Size="13" />
+            </Button>
+
+            <Button Classes="icon sm"
+                    IsVisible="{Binding IsActionable}"
+                    Command="{Binding DismissCommand}"
+                    ToolTip.Tip="忽略这条提醒">
+              <controls:Icon Kind="Close" Size="12" />
+            </Button>
+
+            <Button Classes="icon sm dangerish"
+                    Command="{Binding DeleteCommand}"
+                    ToolTip.Tip="删除提醒">
+              <controls:Icon Kind="Trash" Size="13" />
+            </Button>
+          </StackPanel>
+
+        </Grid>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <Grid RowDefinitions="Auto,*">
+
+    <!-- 顶部：说明 + 新建 -->
+    <Grid Grid.Row="0" Margin="28,0,28,14" ColumnDefinitions="*,Auto">
+      <TextBlock Text="任务到点前会自动提醒；下面这些是已经弹过的和手动排的。"
+                 Classes="dim"
+                 FontSize="{DynamicResource FontXs}"
+                 VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis" />
+
+      <Button Grid.Column="1"
+              Classes="primary"
+              Command="{Binding NewReminderCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <controls:Icon Kind="Plus" Size="12" />
+          <TextBlock Text="新建提醒" />
+        </StackPanel>
+      </Button>
+    </Grid>
+
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Margin="{DynamicResource PagePadding}" Spacing="18">
+
+        <Border Classes="error-bar" IsVisible="{Binding HasError}">
+          <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+        </Border>
+
+        <!-- 待处理 -->
+        <StackPanel Spacing="4" IsVisible="{Binding HasTriggered}">
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,2">
+            <TextBlock Text="待处理" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <Border Classes="chip">
+              <TextBlock Text="{Binding TriggeredCountText}" />
+            </Border>
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Triggered}"
+                        ItemTemplate="{StaticResource ReminderRow}" />
+        </StackPanel>
+
+        <!-- 待触发 -->
+        <StackPanel Spacing="4" IsVisible="{Binding HasUpcoming}">
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,2">
+            <TextBlock Text="待触发" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <Border Classes="chip">
+              <TextBlock Text="{Binding UpcomingCountText}" />
+            </Border>
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Upcoming}"
+                        ItemTemplate="{StaticResource ReminderRow}" />
+        </StackPanel>
+
+        <!-- 已处理 -->
+        <StackPanel Spacing="4" IsVisible="{Binding HasHandled}">
+          <TextBlock Text="已处理" FontSize="13" FontWeight="SemiBold" Margin="8,6,0,2" />
+          <ItemsControl ItemsSource="{Binding Handled}"
+                        ItemTemplate="{StaticResource ReminderRow}" />
+        </StackPanel>
+
+        <!-- 空态 -->
+        <Border Classes="card"
+                IsVisible="{Binding ShowEmpty}"
+                Padding="28,32"
+                HorizontalAlignment="Stretch">
+          <StackPanel Spacing="8" HorizontalAlignment="Center">
+            <controls:Icon Kind="Bell"
+                           Size="26"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource TextFaintBrush}" />
+            <TextBlock Text="还没有提醒"
+                       FontSize="{DynamicResource FontBody}"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="在任务里填上截止时间与「提前提醒」，到点就会弹出来；也可以在这里手动排一条。"
+                       Classes="dim"
+                       FontSize="{DynamicResource FontXs}"
+                       MaxWidth="420"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- 新建抽屉 -->
+    <Border Grid.RowSpan="2"
+            IsVisible="{Binding IsFormOpen}"
+            Background="{DynamicResource ScrimBrush}">
+      <Border Classes="drawer" Width="460" HorizontalAlignment="Right">
+        <ContentControl Content="{Binding Form}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:ReminderFormViewModel">
+              <Grid RowDefinitions="Auto,*,Auto">
+
+                <Border Grid.Row="0"
+                        Padding="22,18"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource LineBrush}">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding TitleText}" Classes="section-title" VerticalAlignment="Center" />
+                    <Button Grid.Column="1"
+                            Classes="icon"
+                            Command="{Binding CancelCommand}"
+                            ToolTip.Tip="关闭（Esc）">
+                      <controls:Icon Kind="Close" Size="13" />
+                    </Button>
+                  </Grid>
+                </Border>
+
+                <ScrollViewer Grid.Row="1">
+                  <StackPanel Margin="22,18,22,22" Spacing="16">
+
+                    <StackPanel Spacing="0">
+                      <TextBlock Text="提醒什么" Classes="label" />
+                      <TextBox Text="{Binding Title, Mode=TwoWay}" PlaceholderText="交电费 / 站起来活动一下…" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="0">
+                      <TextBlock Text="什么时候" Classes="label" />
+                      <controls:DueDateField SelectedDate="{Binding Date, Mode=TwoWay}"
+                                             SelectedTime="{Binding Time, Mode=TwoWay}"
+                                             Watermark="选个时间" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="0">
+                      <TextBlock Text="重复" Classes="label" />
+                      <ComboBox ItemsSource="{x:Static vm:ReminderFormViewModel.RepeatOptions}"
+                                SelectedIndex="{Binding RepeatIndex, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch" />
+                    </StackPanel>
+
+                    <TextBlock Text="重复的提醒到点后会自动排下一次；「稍后提醒」会把它推后 10 分钟。"
+                               Classes="dim"
+                               FontSize="{DynamicResource FontXs}"
+                               TextWrapping="Wrap" />
+
+                    <Border Classes="error-bar"
+                            IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+                    </Border>
+
+                  </StackPanel>
+                </ScrollViewer>
+
+                <Border Grid.Row="2"
+                        Padding="22,14"
+                        BorderThickness="0,1,0,0"
+                        BorderBrush="{DynamicResource LineBrush}">
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                    <Button Content="取消" Command="{Binding CancelCommand}" />
+                    <Button Content="保存" Classes="primary" Command="{Binding SaveCommand}" />
+                  </StackPanel>
+                </Border>
+
+              </Grid>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+      </Border>
+    </Border>
+
+    <!-- 删除确认 -->
+    <Border Grid.RowSpan="2"
+            IsVisible="{Binding IsDeleteConfirmOpen}"
+            Background="{DynamicResource ScrimBrush}">
+      <Border Classes="card" Width="420" Padding="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <StackPanel Spacing="14">
+          <TextBlock Text="删除这条提醒？" Classes="section-title" />
+          <TextBlock Text="{Binding PendingDelete.Title}"
+                     FontWeight="SemiBold"
+                     TextWrapping="Wrap" />
+          <TextBlock Text="删除后不再提醒，也不会留在「已处理」里。"
+                     Classes="dim"
+                     FontSize="{DynamicResource FontSm}" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="取消" Command="{Binding CancelDeleteCommand}" />
+            <Button Content="删除" Classes="danger" Command="{Binding ConfirmDeleteCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+
+  </Grid>
+</UserControl>

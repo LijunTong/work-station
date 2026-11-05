@@ -42,6 +42,59 @@
         </StackPanel>
       </Border>
 
+      <!-- 提醒 -->
+      <Border Classes="group-panel" Padding="20,18">
+        <StackPanel Spacing="14">
+          <StackPanel Spacing="3">
+            <TextBlock Text="提醒" FontSize="14" FontWeight="SemiBold" />
+            <TextBlock Text="到点会在窗口右下角弹出。关掉窗口后应用驻留托盘，提醒照常触发。"
+                       Classes="dim"
+                       FontSize="{DynamicResource FontXs}"
+                       TextWrapping="Wrap" />
+          </StackPanel>
+
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+              <TextBlock Text="每日站会提醒" FontSize="{DynamicResource FontBody}" />
+              <TextBlock Text="每天固定时间汇报昨日完成、逾期和今晚到期。"
+                         Classes="dim"
+                         FontSize="{DynamicResource FontXs}" />
+            </StackPanel>
+            <CheckBox Grid.Column="1"
+                      Content="开启"
+                      IsChecked="{Binding DailyReviewEnabled, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+          </Grid>
+
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock Text="站会时间"
+                       Classes="dim"
+                       FontSize="{DynamicResource FontSm}"
+                       VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1"
+                      Width="112"
+                      ItemsSource="{Binding DailyReviewTimeOptions}"
+                      SelectedItem="{Binding DailyReviewTime, Mode=TwoWay}"
+                      IsEnabled="{Binding DailyReviewEnabled}" />
+          </Grid>
+
+          <Border Height="1" Background="{DynamicResource LineBrush}" />
+
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="2" VerticalAlignment="Center">
+              <TextBlock Text="关闭窗口时驻留托盘" FontSize="{DynamicResource FontBody}" />
+              <TextBlock Text="关掉就是退出：不再接收提醒，直到下次打开。"
+                         Classes="dim"
+                         FontSize="{DynamicResource FontXs}" />
+            </StackPanel>
+            <CheckBox Grid.Column="1"
+                      Content="驻留"
+                      IsChecked="{Binding CloseToTray, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
       <!-- 数据 -->
       <Border Classes="group-panel" Padding="20,18">
         <StackPanel Spacing="14">

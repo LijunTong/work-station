@@ -9,6 +9,8 @@
     <!-- 保持 ASCII：中文 exe 名会让 WPF/Avalonia 生成的资源 URI 全部失效 -->
     <AssemblyName>WorkStation</AssemblyName>
     <Version>1.0.1</Version>
+    <!-- exe 与窗口图标：托盘也复用同一份 Assets/app.png -->
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <!-- 源码是 UTF-8 无 BOM；不声明代码页时 Roslyn 会按系统 ANSI（中文 Windows 是 GBK）解码，中文标识符直接读坏 -->
     <CodePage>65001</CodePage>
     <!-- 编译期校验绑定路径：写错 x:DataType 下的属性名在 build 期就报错 -->
@@ -25,6 +27,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WorkStation.Core\WorkStation.Core.csproj" />
+  </ItemGroup>
+
+  <!-- 单元测试要验单实例的互斥量判定，只放开给测试程序集 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="WorkStation.Tests" />
+  </ItemGroup>
+
+  <!-- 应用图标：托盘与窗口共用，按 avares://WorkStation/Assets/app.png 取 -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\app.png" />
   </ItemGroup>
 
   <!-- 中文字体等资源放在仓库根 assets/ 下，按需嵌入 -->

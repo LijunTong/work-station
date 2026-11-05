@@ -118,4 +118,105 @@ public class WorkStationServiceTests : IDisposable
         // 取消的任务不参与进度分母：1 / 2 = 50%
         Assert.Equal(50, ProgressCalculator.Compute(tasks));
     }
+
+    // ---------- 提醒 ----------
+
+    private static string Local(DateTime value) => Core.Time.LocalTime.ToLocalDateTime(value);
+
+    [Fact]
+    public void CreateTask_WithLead_SchedulesReminder()
+    {
+        var due = DateTime.Today.AddDays(1).AddHours(18);
+
+        var task = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "写周报",
+            DueAt = Local(due),
+            RemindBefore = 60
+        }).Data!;
+
+        var reminder = Assert.Single(_service.RemindersList(ReminderScope.Upcoming).Data!);
+        Assert.Equal(task.Id, reminder.TaskId);
+        Assert.Equal(Local(due.AddHours(-1)), reminder.RemindAt);
+    }
+
+    [Fact]
+    public void UpdateTask_ClearingDue_RemovesPendingReminder()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "改期",
+            DueAt = Local(DateTime.Today.AddDays(1).AddHours(18)),
+            RemindBefore = 30
+        }).Data!;
+
+        _service.TasksUpdate(task.Id, new UpdateTaskInput { DueAt = Optional<string?>.Some(null) });
+
+        Assert.Empty(_service.RemindersList(ReminderScope.Upcoming).Data!);
+    }
+
+    [Fact]
+    public void TasksSetStatus_Done_RemovesPendingReminder()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "做完了",
+            DueAt = Local(DateTime.Today.AddDays(1).AddHours(18)),
+            RemindBefore = 30
+        }).Data!;
+
+        _service.TasksSetStatus(task.Id, TaskStatus.Done);
+
+        Assert.Empty(_service.RemindersList(ReminderScope.Upcoming).Data!);
+    }
+
+    [Fact]
+    public void RemindersSync_RepairsDriftFromDirectSqlEdit()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "被外部改了截止时间",
+            DueAt = Local(DateTime.Today.AddDays(1).AddHours(18)),
+            RemindBefore = 60
+        }).Data!;
+        Assert.Single(_service.RemindersList(ReminderScope.Upcoming).Data!);
+
+        // 模拟「应用没开时用别的工具改了库」
+        TestDb.Execute(_connection,
+            $"UPDATE tasks SET due_at = '{Local(DateTime.Today.AddDays(2).AddHours(9))}' WHERE id = '{task.Id}'");
+
+        var changed = _service.RemindersSync();
+
+        Assert.True(changed.Data >= 1);
+        var reminder = Assert.Single(_service.RemindersList(ReminderScope.Upcoming).Data!);
+        Assert.Equal(Local(DateTime.Today.AddDays(2).AddHours(8)), reminder.RemindAt);
+    }
+
+    [Fact]
+    public void DailyReviewSet_InvalidTime_ReturnsValidationFailed()
+    {
+        var result = _service.DailyReviewSet(new DailyReviewSettings { Enabled = true, Time = "25:00" });
+
+        Assert.False(result.Ok);
+        Assert.Equal(ErrorCodes.ValidationFailed, result.Error?.Code);
+    }
+
+    [Fact]
+    public void DailyReviewSettings_DefaultToEnabledNineOClock()
+    {
+        var settings = _service.DailyReviewGet().Data!;
+
+        Assert.True(settings.Enabled);
+        Assert.Equal("09:00", settings.Time);
+    }
+
+    [Fact]
+    public void CloseToTray_DefaultsTrue_AndPersists()
+    {
+        Assert.True(_service.CloseToTrayGet().Data);
+
+        _service.CloseToTraySet(false);
+
+        Assert.False(_service.CloseToTrayGet().Data);
+    }
 }

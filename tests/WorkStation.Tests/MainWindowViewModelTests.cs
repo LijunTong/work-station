@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Microsoft.Data.Sqlite;
+using WorkStation.App.Services;
 using WorkStation.App.ViewModels;
 using WorkStation.Core.Models;
 using WorkStation.Core.Services;
@@ -201,5 +202,120 @@ public class MainWindowViewModelTests : IDisposable
 
         vm.CloseShortcutHelpCommand.Execute(null);
         Assert.False(vm.IsShortcutHelpOpen);
+    }
+
+    // ---------- 提醒 ----------
+
+    [AvaloniaFact]
+    public void RemindersPage_NavigatesAndLoads()
+    {
+        var vm = new MainWindowViewModel(_service);
+
+        vm.ShowRemindersCommand.Execute(null);
+
+        Assert.Equal(AppPage.Reminders, vm.Page);
+        Assert.IsType<RemindersViewModel>(vm.CurrentPage);
+        Assert.True(vm.IsRemindersActive);
+        Assert.False(vm.IsProjectsActive);
+        Assert.Equal("提醒", vm.PageTitle);
+    }
+
+    [AvaloniaFact]
+    public void ReminderBadge_CountsOnlyTriggeredOnes()
+    {
+        var pending = _service.RemindersCreate(new CreateReminderInput
+        {
+            Title = "还没到点",
+            RemindAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Now.AddHours(2))
+        }).Data!;
+
+        var vm = new MainWindowViewModel(_service);
+        Assert.False(vm.HasReminderBadge);
+
+        // 到点弹出但还没处理：徽标出现
+        _service.RemindersSetStatus(pending.Id, ReminderStatus.Fired);
+        vm.RefreshBadge();
+
+        Assert.Equal(1, vm.ReminderCount);
+        Assert.True(vm.HasReminderBadge);
+        Assert.Equal("1", vm.ReminderBadgeText);
+    }
+
+    [AvaloniaFact]
+    public void StartReminderPump_FiresOverdueReminder_AndClickOpensTask()
+    {
+        // 站会提醒默认开启，会让本用例多出一条通知：先关掉，只验任务提醒
+        _service.DailyReviewSet(new DailyReviewSettings { Enabled = false, Time = "09:00" });
+
+        // 昨天 09:00 截止、提前 1 小时：提醒时刻早就过了
+        var task = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "补一条周报",
+            DueAt = Yesterday,
+            RemindBefore = 60
+        }).Data!;
+
+        var sink = new RecordingSink();
+        var vm = new MainWindowViewModel(_service);
+        vm.AttachNotifications(sink);
+        vm.StartReminderPump(startTimer: false);
+        vm.StopReminderPump();
+
+        Assert.Single(sink.Shown);
+        Assert.Equal("任务提醒", sink.Shown[0].Title);
+        Assert.Contains("补一条周报", sink.Shown[0].Message);
+        Assert.Equal(1, vm.ReminderCount);
+
+        // 点通知：回到任务页并打开这条任务的编辑抽屉
+        sink.Shown[0].Click();
+
+        Assert.Equal(AppPage.Tasks, vm.Page);
+        Assert.True(vm.Tasks!.IsFormOpen);
+        Assert.Equal(task.Id, vm.Tasks.Form!.TaskId);
+    }
+
+    [AvaloniaFact]
+    public void BoardReminderChip_NavigatesToRemindersPage()
+    {
+        var vm = new MainWindowViewModel(_service);
+
+        var chip = vm.Board!.OverviewChips.Single(c => c.Key == "reminders");
+        chip.SelectCommand.Execute(null);
+
+        Assert.Equal(AppPage.Reminders, vm.Page);
+    }
+
+    [AvaloniaFact]
+    public void Settings_RemindersRoundTrip()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var settings = vm.Settings!;
+
+        Assert.True(settings.DailyReviewEnabled);
+        Assert.Equal("09:00", settings.DailyReviewTime);
+        Assert.True(settings.CloseToTray);
+
+        settings.DailyReviewEnabled = false;
+        settings.DailyReviewTime = "10:30";
+        settings.CloseToTray = false;
+
+        var saved = _service.DailyReviewGet().Data!;
+        Assert.False(saved.Enabled);
+        Assert.Equal("10:30", saved.Time);
+        Assert.False(_service.CloseToTrayGet().Data);
+
+        // 重新进入设置页：值从库里读回来
+        settings.Reload();
+        Assert.False(settings.DailyReviewEnabled);
+        Assert.Equal("10:30", settings.DailyReviewTime);
+        Assert.False(settings.CloseToTray);
+    }
+
+    private sealed class RecordingSink : INotificationSink
+    {
+        public List<(string Title, string Message, Action Click)> Shown { get; } = [];
+
+        public void Show(string title, string message, Action onClick) =>
+            Shown.Add((title, message, onClick));
     }
 }

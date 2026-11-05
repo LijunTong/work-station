@@ -267,8 +267,18 @@
 
                     <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
                       <StackPanel Spacing="0">
-                        <TextBlock Text="提前提醒（分钟）" Classes="label" />
-                        <TextBox Text="{Binding RemindBefore, Mode=TwoWay}" PlaceholderText="0" />
+                        <TextBlock Text="提前提醒" Classes="label" />
+                        <ComboBox ItemsSource="{Binding LeadOptions}"
+                                  SelectedItem="{Binding SelectedLead, Mode=TwoWay}"
+                                  IsEnabled="{Binding HasDueDate}"
+                                  ToolTip.Tip="先设截止时间，才能提前提醒"
+                                  HorizontalAlignment="Stretch">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ReminderLeadOption">
+                              <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
                       </StackPanel>
                       <StackPanel Grid.Column="1" Spacing="0">
                         <TextBlock Text="预估工时（小时）" Classes="label" />

@@ -26,7 +26,17 @@
 - **全局快速添加**：顶部常驻输入框，`n` 聚焦，任意页面回车即记一条
 - **侧边栏徽标**：全局逾期数，「看板」项常驻提示
 
-M3（提醒与托盘）、M4（周报月报与统计）尚未开始；标签管理界面与提醒页是 M2/M3 之间的已知缺口，见 `docs/M2-手测清单.md` 末尾。
+**M3 提醒与托盘常驻** —— 功能完成
+
+- **三类提醒**：任务截止前（由任务表单的「提前提醒」自动排期）、每日站会（固定时间，一天一条）、手动新建
+- **提醒页**：待处理 / 待触发 / 已处理 三组，行内「标记已处理 / 10 分钟后再提醒 / 忽略 / 删除」；已处理只留最近 20 条
+- **调度器**：20 秒一拍，**先把状态写进库再弹通知**；重复规则（每天 / 每周）弹完自动排下一次；任务完成或取消时对应提醒自动作废
+- **通知**：窗口右下角应用内通知，点提醒通知直接打开对应任务抽屉，点站会通知切到今日看板
+- **托盘常驻**：关窗口不退出，菜单「打开工作台 / 今日看板（逾期 N）/ 未处理提醒（N）/ 退出」；托盘建不出来的环境自动降级为关窗口即退出
+- **单实例**：重复启动不再开第二个进程，只把已有窗口抬到前台
+- **设置**：「提醒」分组 —— 每日站会开关与时间、关闭窗口时驻留托盘
+
+M4（周报月报与统计）尚未开始；标签管理界面仍是 M2 遗留的已知缺口，见 `docs/M2-手测清单.md` 末尾。
 
 ## 快捷键
 
@@ -35,7 +45,7 @@ M3（提醒与托盘）、M4（周报月报与统计）尚未开始；标签管�
 | `n` | 聚焦顶部快速添加框 |
 | `/` | 聚焦当前页搜索框（项目页/设置页会先跳到任务页） |
 | `Ctrl+K` | 命令面板 |
-| `1` – `4` | 切到 看板 / 任务 / 项目 / 设置 |
+| `1` – `5` | 切到 看板 / 任务 / 项目 / 提醒 / 设置 |
 | `Ctrl+Enter` | 保存抽屉 |
 | `Esc` | 关闭抽屉 / 浮层 |
 | `?` | 显示或隐藏快捷键说明 |
@@ -61,15 +71,16 @@ dotnet run --project src/WorkStation.App
 dotnet test
 ```
 
-当前 **223 个用例**，覆盖：
+当前 **309 个用例**，覆盖：
 
 | 层 | 内容 |
 | --- | --- |
-| Core 单元 | 时间三类格式、进度计算、任务分组（含周日边界）、格式化、看板口径（列顺序 / 已完成窗口 / 概览计数） |
-| 数据层 | 迁移、完整性检查、损坏恢复、备份轮转、四个仓储的 CRUD 与聚合 |
-| 服务层 | Result 契约（不抛异常）、错误码映射、中文化错误文案 |
-| ViewModel | 快速添加、分组顺序、折叠保持、筛选与搜索、表单校验、归档与删除确认、看板拖拽改状态、命令面板检索 |
-| UI 冒烟 | 真实 XAML 加载（Headless）、主窗口导航、键盘快捷键、看板双击开抽屉、命令面板键盘滚动跟随、主题切换落盘 |
+| Core 单元 | 时间三类格式、进度计算、任务分组（含周日边界）、格式化、看板口径（列顺序 / 已完成窗口 / 概览计数）、提醒排期（提前量 / 重复下一次 / 到点判定 / 站会去重） |
+| 数据层 | 迁移、完整性检查、损坏恢复、备份轮转、五个仓储的 CRUD 与聚合、任务截止时间与提醒的同步（幂等） |
+| 服务层 | Result 契约（不抛异常）、错误码映射、中文化错误文案、提醒三条写入口自动排期、站会时间校验 |
+| ViewModel | 快速添加、分组顺序、折叠保持、筛选与搜索、表单校验、归档与删除确认、看板拖拽改状态、命令面板检索、提醒页三组与行内动作、通知点击跳转 |
+| 调度器 | 单次节拍（先落状态后发通知）、重复规则顺延、任务已完结转忽略、通知失败落 `Failed`、站会一天只发一次 |
+| UI 冒烟 | 真实 XAML 加载（Headless）、主窗口导航（含提醒页）、键盘快捷键、看板双击开抽屉、命令面板键盘滚动跟随、主题切换落盘 |
 
 UI 层用 `Avalonia.Headless` 承载，XAML 解析失败或编译绑定路径写错会直接让测试变红。
 
@@ -102,16 +113,20 @@ src/
 ├─ WorkStation.Core/           纯逻辑层，零 UI 依赖
 │  ├─ Models/                  实体、更新入参（Optional<T> 三态）、过滤条件
 │  ├─ Data/                    连接、迁移、完整性检查、备份、路径解析
-│  ├─ Data/Repositories/       projects / tasks / tags / settings
+│  ├─ Data/Repositories/       projects / tasks / tags / settings / reminders
 │  ├─ Services/                WorkStationService（UI 唯一入口，Result 契约）
 │  ├─ Board/                   看板列顺序、已完成窗口、概览计数
 │  ├─ Projects/                项目统计与进度口径（列表卡与看板卡共用）
+│  ├─ Reminders/               提醒排期（提前量 / 重复下一次）与站会判定
 │  └─ Time/ Formatting/        日期格式、进度计算、任务分组
 └─ WorkStation.App/            Avalonia 界面层
    ├─ AppServices.cs           启动装配：恢复 → 迁移 → 备份 → 服务
-   ├─ ViewModels/              主窗口、看板、项目页、任务页、设置页、命令面板
-   ├─ Views/                   MainWindow / BoardView / ProjectsView / TasksView / SettingsView / CommandPaletteView
-   ├─ Controls/ProgressRing.cs 进度环自绘控件
+   ├─ ViewModels/              主窗口、看板、项目页、任务页、提醒页、设置页、命令面板
+   ├─ Views/                   MainWindow / BoardView / ProjectsView / TasksView / RemindersView / SettingsView / CommandPaletteView
+   ├─ Services/                提醒调度器（ReminderPump）与通知出口（INotificationSink）
+   ├─ Platform/                托盘常驻（TrayHost）、单实例（SingleInstance）
+   ├─ Controls/                ProgressRing 进度环、Icon 线性图标、DueDateField 日期字段
+   ├─ Assets/                  应用图标（app.png / app.ico）
    └─ Styles/                  设计令牌（浅/深两套）与控件样式
 tests/WorkStation.Tests/       xUnit v3 + Avalonia.Headless
 tools/publish.ps1              多平台发布
@@ -119,5 +134,5 @@ docs/                          设计文档、实施计划、手测清单
 ```
 
 详细设计见 `docs/superpowers/specs/2026-11-05-work-station-design.md`，
-人工验收项见 `docs/M1-手测清单.md`、`docs/M2-手测清单.md`，
+人工验收项见 `docs/M1-手测清单.md`、`docs/M2-手测清单.md`、`docs/M3-手测清单.md`，
 界面的色彩/字号/间距/组件规则见 `docs/设计系统.md`（改界面前先读它）。

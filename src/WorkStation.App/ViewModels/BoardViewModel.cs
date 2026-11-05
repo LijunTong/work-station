@@ -53,7 +53,9 @@ public partial class BoardViewModel : ObservableObject
             new BoardChip("today", "今日", SelectOverview, showCount: true),
             new BoardChip("overdue", "逾期", SelectOverview, showCount: true),
             new BoardChip("blocked", "已阻塞", SelectOverview, showCount: true),
-            new BoardChip("week", "本周", SelectOverview, showCount: true)
+            new BoardChip("week", "本周", SelectOverview, showCount: true),
+            // 提醒不是看板上的筛选：点它是离开看板去提醒页，所以单独放在最后
+            new BoardChip("reminders", "提醒", SelectOverview, showCount: true)
         ];
 
         PriorityChips =
@@ -84,6 +86,9 @@ public partial class BoardViewModel : ObservableObject
 
     /// <summary>项目卡片上的「进入任务看板」：带项目筛选跳到任务页。</summary>
     public Action<string>? OpenProjectTasksRequested { get; set; }
+
+    /// <summary>概览条的「提醒」不是筛选，而是跳到提醒页。</summary>
+    public Action? OpenRemindersRequested { get; set; }
 
     [ObservableProperty]
     private bool _isTaskBoard = true;
@@ -210,6 +215,9 @@ public partial class BoardViewModel : ObservableObject
             OverviewChips[1].Count = overview.Overdue;
             OverviewChips[2].Count = overview.Blocked;
             OverviewChips[3].Count = overview.Week;
+
+            var reminderCounts = _service.RemindersCounts();
+            OverviewChips[4].Count = reminderCounts is { Ok: true, Data: { } counts } ? counts.Unhandled : 0;
 
             RebuildProjectOptions(projects);
 
@@ -349,6 +357,12 @@ public partial class BoardViewModel : ObservableObject
 
     private void SelectOverview(BoardChip chip)
     {
+        if (chip.Key == "reminders")
+        {
+            OpenRemindersRequested?.Invoke();
+            return;
+        }
+
         switch (chip.Key)
         {
             case "blocked":
@@ -381,6 +395,14 @@ public partial class BoardViewModel : ObservableObject
     private void SwitchBoard(string mode)
     {
         IsTaskBoard = !string.Equals(mode, nameof(BoardMode.Projects), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>外部入口（站会通知）：切到「今日」口径。已经在今日时就只刷新。</summary>
+    public void ShowToday()
+    {
+        TimeScope = BoardTimeScope.Today;
+        SyncOverviewChips();
+        Reload();
     }
 
     [RelayCommand]
@@ -529,6 +551,7 @@ public sealed partial class BoardChip : ObservableObject
     {
         ("overdue", true) => ThemeBrushes.Get("DangerBrush", "#C0392F"),
         ("blocked", true) => ThemeBrushes.Get("WarningBrush", "#9A5B06"),
+        ("reminders", true) => ThemeBrushes.Get("AccentBrush", "#2F62E8"),
         _ => ThemeBrushes.Get("TextBrush", "#12161D")
     };
 

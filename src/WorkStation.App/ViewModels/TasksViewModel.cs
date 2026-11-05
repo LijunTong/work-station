@@ -618,8 +618,21 @@ public partial class TaskFormViewModel : ObservableObject
 
     public bool HasDueDate => DueDate is not null;
 
+    /// <summary>提前提醒的预设项。0 表示不提醒（与库里 remind_before = 0 语义一致）。</summary>
+    public static IReadOnlyList<ReminderLeadOption> LeadPresets { get; } =
+    [
+        new(0, "不提醒"),
+        new(15, "提前 15 分钟"),
+        new(60, "提前 1 小时"),
+        new(180, "提前 3 小时"),
+        new(1440, "提前 1 天")
+    ];
+
+    /// <summary>下拉项。库里存的历史值不在预设里时，会补一条「提前 N 分钟」。</summary>
+    public ObservableCollection<ReminderLeadOption> LeadOptions { get; } = [];
+
     [ObservableProperty]
-    private string _remindBefore = "0";
+    private ReminderLeadOption? _selectedLead;
 
     [ObservableProperty]
     private string _estimate = string.Empty;
@@ -670,6 +683,9 @@ public partial class TaskFormViewModel : ObservableObject
     {
         _save = save;
         _cancel = cancel;
+
+        foreach (var preset in LeadPresets) LeadOptions.Add(preset);
+        _selectedLead = LeadOptions[0];
     }
 
     [RelayCommand]
@@ -705,7 +721,7 @@ public partial class TaskFormViewModel : ObservableObject
 
         var hasDue = TryParseStoredDueAt(task.DueAt, out var due);
 
-        return new TaskFormViewModel(save, cancel)
+        var form = new TaskFormViewModel(save, cancel)
         {
             TaskId = task.Id,
             Title = task.Title,
@@ -729,11 +745,14 @@ public partial class TaskFormViewModel : ObservableObject
             },
             DueDate = hasDue ? due.Date : null,
             DueTime = hasDue ? due.TimeOfDay : null,
-            RemindBefore = task.RemindBefore.ToString(CultureInfo.InvariantCulture),
             Estimate = task.Estimate?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty,
             Spent = task.Spent?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty,
             BlockedReason = task.BlockedReason ?? string.Empty
         };
+
+        // 下拉项依赖实例上的集合，只能在对象建好之后再认领（历史值不在预设里会补一条）
+        form.SelectedLead = form.FindLeadOption(task.RemindBefore);
+        return form;
     }
 
     public bool Validate()
@@ -747,12 +766,6 @@ public partial class TaskFormViewModel : ObservableObject
         if (DueDate is null && DueTime is not null)
         {
             Error = "选了时刻还要选日期，或者用「清除」去掉截止时间";
-            return false;
-        }
-
-        if (!IsOptionalNonNegativeInt(RemindBefore))
-        {
-            Error = "提前提醒应为非负整数（分钟）";
             return false;
         }
 
@@ -776,7 +789,7 @@ public partial class TaskFormViewModel : ObservableObject
             Status = ToStatus(StatusIndex),
             Priority = ToPriority(PriorityIndex),
             DueAt = BuildDueAt(),
-            RemindBefore = ParseNullableInt(RemindBefore) ?? 0,
+            RemindBefore = SelectedLead?.Minutes ?? 0,
             Estimate = ParseNullableDouble(Estimate),
             Spent = ParseNullableDouble(Spent),
             BlockedReason = StatusIndex == 2 ? NullIfEmpty(BlockedReason) : null
@@ -793,7 +806,7 @@ public partial class TaskFormViewModel : ObservableObject
             Status = Optional<TaskStatus>.Some(ToStatus(StatusIndex)),
             Priority = Optional<Priority>.Some(ToPriority(PriorityIndex)),
             DueAt = Optional<string?>.Some(BuildDueAt()),
-            RemindBefore = Optional<int?>.Some(ParseNullableInt(RemindBefore) ?? 0),
+            RemindBefore = Optional<int?>.Some(SelectedLead?.Minutes ?? 0),
             Estimate = Optional<double?>.Some(ParseNullableDouble(Estimate)),
             Spent = Optional<double?>.Some(ParseNullableDouble(Spent)),
             BlockedReason = Optional<string?>.Some(StatusIndex == 2 ? NullIfEmpty(BlockedReason) : null)
@@ -839,10 +852,6 @@ public partial class TaskFormViewModel : ObservableObject
         return LocalTime.ToLocalDateTime(date.Date.Add(time));
     }
 
-    private static bool IsOptionalNonNegativeInt(string value) =>
-        string.IsNullOrWhiteSpace(value)
-        || int.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed >= 0;
-
     private static bool IsOptionalHours(string value) =>
         string.IsNullOrWhiteSpace(value)
         || double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && parsed >= 0;
@@ -852,6 +861,17 @@ public partial class TaskFormViewModel : ObservableObject
 
     private static double? ParseNullableDouble(string value) =>
         double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+
+    /// <summary>按分钟数找回下拉项；库里存的值不在预设里就补一条，避免折叠框空白。</summary>
+    private ReminderLeadOption FindLeadOption(int minutes)
+    {
+        var found = LeadOptions.FirstOrDefault(o => o.Minutes == minutes);
+        if (found is not null) return found;
+
+        var custom = new ReminderLeadOption(minutes, ReminderLeadOption.Describe(minutes));
+        LeadOptions.Add(custom);
+        return custom;
+    }
 
     private static string? NullIfEmpty(string value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -871,5 +891,18 @@ public partial class TaskFormViewModel : ObservableObject
         2 => Priority.Medium,
         3 => Priority.High,
         _ => Priority.None
+    };
+}
+
+/// <summary>提前提醒的一个选项。文案自己算，XAML 里只绑定 Label。</summary>
+public sealed record ReminderLeadOption(int Minutes, string Label)
+{
+    public static string Describe(int minutes) => minutes switch
+    {
+        <= 0 => "不提醒",
+        < 60 => $"提前 {minutes} 分钟",
+        _ when minutes % 1440 == 0 => $"提前 {minutes / 1440} 天",
+        _ when minutes % 60 == 0 => $"提前 {minutes / 60} 小时",
+        _ => $"提前 {minutes} 分钟"
     };
 }

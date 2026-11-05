@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using WorkStation.Core.Data;
 using WorkStation.Core.Data.Repositories;
 using WorkStation.Core.Models;
+using WorkStation.Core.Reminders;
 
 namespace WorkStation.Core.Services;
 
@@ -24,6 +25,7 @@ public sealed class WorkStationService
     private readonly TasksRepository _tasks;
     private readonly TagsRepository _tags;
     private readonly SettingsRepository _settings;
+    private readonly RemindersRepository _reminders;
     private readonly string _databasePath;
     private readonly string _userDataPath;
     private readonly string _version;
@@ -34,6 +36,7 @@ public sealed class WorkStationService
         _tasks = new TasksRepository(connection);
         _tags = new TagsRepository(connection);
         _settings = new SettingsRepository(connection);
+        _reminders = new RemindersRepository(connection);
         _databasePath = databasePath;
         _userDataPath = Path.GetDirectoryName(databasePath) ?? databasePath;
         _version = version;
@@ -92,7 +95,10 @@ public sealed class WorkStationService
                 throw new ArgumentException("任务标题不能为空");
             }
 
-            return _tasks.Create(input);
+            var task = _tasks.Create(input);
+            // 截止时间与提前量一起落库后，立刻把提醒排上 —— 提醒的排期只由这一个入口产生
+            _reminders.SyncTaskDue(task);
+            return task;
         });
 
     public Result<TaskItem?> TasksUpdate(string id, UpdateTaskInput patch) =>
@@ -103,11 +109,19 @@ public sealed class WorkStationService
                 throw new ArgumentException("任务标题不能为空");
             }
 
-            return _tasks.Update(id, patch);
+            var task = _tasks.Update(id, patch);
+            if (task is not null) _reminders.SyncTaskDue(task);
+            return task;
         });
 
     public Result<TaskItem?> TasksSetStatus(string id, TaskStatus status) =>
-        Guard("更新任务状态", () => _tasks.SetStatus(id, status));
+        Guard("更新任务状态", () =>
+        {
+            var task = _tasks.SetStatus(id, status);
+            // 标记完成/取消后不该再提醒：这条路径不经过 TasksUpdate，必须单独同步
+            if (task is not null) _reminders.SyncTaskDue(task);
+            return task;
+        });
 
     public Result<bool> TasksRemove(string id) => Guard("删除任务", () => _tasks.Remove(id));
 
@@ -156,6 +170,87 @@ public sealed class WorkStationService
 
     public Result<IReadOnlyList<Tag>> TagsListTaskTags(string taskId) =>
         Guard("读取任务标签", () => _tags.ListTaskTags(taskId));
+
+    // ---------- 提醒 ----------
+
+    public Result<IReadOnlyList<ReminderItem>> RemindersList(ReminderScope scope = ReminderScope.Upcoming) =>
+        Guard("读取提醒列表", () => _reminders.List(scope));
+
+    public Result<ReminderItem?> RemindersGet(string id) => Guard("读取提醒", () => _reminders.Get(id));
+
+    public Result<ReminderItem> RemindersCreate(CreateReminderInput input) =>
+        Guard("创建提醒", () => _reminders.Create(input));
+
+    public Result<bool> RemindersSetStatus(string id, ReminderStatus status) =>
+        Guard("更新提醒状态", () => _reminders.SetStatus(id, status));
+
+    public Result<bool> RemindersReschedule(string id, string remindAt) =>
+        Guard("重排提醒", () => _reminders.Reschedule(id, remindAt));
+
+    public Result<bool> RemindersRemove(string id) => Guard("删除提醒", () => _reminders.Remove(id));
+
+    public Result<ReminderCounts> RemindersCounts() => Guard("统计提醒", () => _reminders.Counts());
+
+    public Result<IReadOnlyList<ReminderItem>> RemindersDue(string nowLocalDateTime) =>
+        Guard("扫描到点提醒", () => _reminders.ListDue(nowLocalDateTime));
+
+    /// <summary>启动时对全部任务跑一遍同步，修掉「应用没开时改了截止时间」这类漂移。</summary>
+    public Result<int> RemindersSync() =>
+        Guard("同步任务提醒", () =>
+        {
+            var tasks = _tasks.List();
+            var changed = 0;
+            foreach (var task in tasks)
+            {
+                if (_reminders.SyncTaskDue(task)) changed++;
+            }
+
+            return changed;
+        });
+
+    public Result<DailyReviewSettings> DailyReviewGet() =>
+        Guard("读取站会提醒设置", () => _settings.Get("daily_review")?.Deserialize<DailyReviewSettings>() ?? new DailyReviewSettings());
+
+    public Result<bool> DailyReviewSet(DailyReviewSettings settings) =>
+        Guard("保存站会提醒设置", () =>
+        {
+            if (!DailyReviewPlanner.IsValidTime(settings.Time))
+            {
+                throw new ArgumentException("站会提醒时间应形如 09:00");
+            }
+
+            _settings.Set("daily_review", settings);
+            return true;
+        });
+
+    public Result<string?> DailyReviewLastFired() =>
+        Guard("读取站会提醒记录", () =>
+        {
+            var raw = _settings.GetString("daily_review_last", string.Empty);
+            return string.IsNullOrEmpty(raw) ? null : raw;
+        });
+
+    public Result<bool> DailyReviewMarkFired(string date) =>
+        Guard("记录站会提醒", () =>
+        {
+            _settings.Set("daily_review_last", date);
+            return true;
+        });
+
+    /// <summary>站会提醒的三个数字，按调度时刻实时算。</summary>
+    public Result<DailyReviewCounts> DailyReviewCounts(string nowLocalDateTime) =>
+        Guard("统计站会提醒数据", () =>
+            DailyReviewPlanner.ComputeCounts(_tasks.List(), nowLocalDateTime));
+
+    public Result<bool> CloseToTrayGet() =>
+        Guard("读取窗口关闭行为", () => _settings.GetBoolean("close_to_tray", true));
+
+    public Result<bool> CloseToTraySet(bool value) =>
+        Guard("保存窗口关闭行为", () =>
+        {
+            _settings.Set("close_to_tray", value);
+            return true;
+        });
 
     // ---------- 设置 ----------
 

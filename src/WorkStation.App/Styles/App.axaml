@@ -501,6 +501,15 @@
     <Setter Property="Opacity" Value="1" />
   </Style>
 
+  <!-- 提醒页的「待处理」行：暖底 + 琥珀竖条，扫一眼就知道哪几条还压着 -->
+  <Style Selector="Border.task-row.alert">
+    <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+  </Style>
+
+  <Style Selector="Border.task-row.alert:pointerover">
+    <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+  </Style>
+
   <!-- 已完成/已取消：灰显、不再提供操作入口 -->
   <Style Selector="Border.task-row.done">
     <Setter Property="Opacity" Value="0.6" />

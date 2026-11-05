@@ -2,6 +2,7 @@ using System.Reflection;
 using Avalonia;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using WorkStation.App.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WorkStation.Core.Models;
@@ -15,6 +16,7 @@ public enum AppPage
     Board,
     Tasks,
     Projects,
+    Reminders,
     Settings
 }
 
@@ -29,11 +31,17 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly WorkStationService? _service;
     private readonly DispatcherTimer? _toastTimer;
 
+    private ReminderPump? _reminderPump;
+    private DispatcherTimer? _pumpTimer;
+    private INotificationSink? _notificationSink;
+
     public BoardViewModel? Board { get; }
 
     public ProjectsViewModel? Projects { get; }
 
     public TasksViewModel? Tasks { get; }
+
+    public RemindersViewModel? Reminders { get; }
 
     public SettingsViewModel? Settings { get; }
 
@@ -65,6 +73,10 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private int _overdueCount;
 
+    /// <summary>已弹出、还没处理的提醒数。驱动侧边栏「提醒」徽标与概览条。</summary>
+    [ObservableProperty]
+    private int _reminderCount;
+
     [ObservableProperty]
     private bool _isToastVisible;
 
@@ -87,11 +99,17 @@ public partial class MainWindowViewModel : ObservableObject
 
     public bool IsProjectsActive => Page == AppPage.Projects;
 
+    public bool IsRemindersActive => Page == AppPage.Reminders;
+
     public bool IsSettingsActive => Page == AppPage.Settings;
 
     public bool HasOverdueBadge => OverdueCount > 0;
 
     public string OverdueBadgeText => OverdueCount > 99 ? "99+" : OverdueCount.ToString();
+
+    public bool HasReminderBadge => ReminderCount > 0;
+
+    public string ReminderBadgeText => ReminderCount > 99 ? "99+" : ReminderCount.ToString();
 
     /// <summary>
     /// 左下角显示的版本号（形如 <c>V 1.0.1</c>）。取程序集版本，
@@ -99,10 +117,23 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public string VersionText { get; } = FormatVersion();
 
+    /// <summary>
+    /// 关闭窗口时是否驻留托盘。窗口的 Closing 里读取：
+    /// 设成 false 或托盘不可用，关闭就是退出。
+    /// </summary>
+    public bool CloseToTray =>
+        _service?.CloseToTrayGet() is { Ok: true, Data: var value } ? value : true;
+
     partial void OnOverdueCountChanged(int value)
     {
         OnPropertyChanged(nameof(HasOverdueBadge));
         OnPropertyChanged(nameof(OverdueBadgeText));
+    }
+
+    partial void OnReminderCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasReminderBadge));
+        OnPropertyChanged(nameof(ReminderBadgeText));
     }
 
     /// <summary>设计器与 XAML 预览用。</summary>
@@ -126,10 +157,12 @@ public partial class MainWindowViewModel : ObservableObject
         Board = new BoardViewModel(service, ShowToast, null, RefreshBadge);
         Tasks = new TasksViewModel(service, ShowToast);
         Projects = new ProjectsViewModel(service, ShowToast);
+        Reminders = new RemindersViewModel(service, ShowToast, null, RefreshBadge);
         Settings = new SettingsViewModel(service, ApplyThemeVariant, ShowToast);
 
         Board.EditTaskRequested = OpenTaskEditor;
         Board.OpenProjectTasksRequested = ShowTasksForProject;
+        Board.OpenRemindersRequested = ShowReminders;
         Projects.NavigateToTasks = () => ShowTasksForProject(null);
 
         Palette = new CommandPaletteViewModel(service, BuildPaletteActions())
@@ -192,9 +225,11 @@ public partial class MainWindowViewModel : ObservableObject
         }),
         new("全部任务", "跳转", "任", ["tasks", "list", "清单"], () => Navigate(AppPage.Tasks)),
         new("全部项目", "跳转", "项", ["projects", "list"], () => Navigate(AppPage.Projects)),
+        new("提醒", "跳转", "铃", ["reminder", "提醒", "alarm"], () => Navigate(AppPage.Reminders)),
         new("设置", "跳转", "设", ["settings", "主题", "theme"], () => Navigate(AppPage.Settings)),
         new("新建任务", "动作", "＋", ["add", "new", "task", "记录"], NewTask),
         new("新建项目", "动作", "＋", ["add", "new", "project"], NewProject),
+        new("新建提醒", "动作", "＋", ["add", "reminder", "提醒"], NewReminder),
         new("显示快捷键", "帮助", "？", ["help", "keyboard", "快捷键"], () => IsShortcutHelpOpen = true)
     ];
 
@@ -213,6 +248,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBoardActive));
         OnPropertyChanged(nameof(IsTasksActive));
         OnPropertyChanged(nameof(IsProjectsActive));
+        OnPropertyChanged(nameof(IsRemindersActive));
         OnPropertyChanged(nameof(IsSettingsActive));
 
         switch (target)
@@ -235,6 +271,12 @@ public partial class MainWindowViewModel : ObservableObject
                 CurrentPage = Projects;
                 Projects?.Reload();
                 break;
+            case AppPage.Reminders:
+                PageTitle = "提醒";
+                PageSubtitle = "到点会弹出来的事，和已经弹过的";
+                CurrentPage = Reminders;
+                Reminders?.Reload();
+                break;
             case AppPage.Settings:
                 PageTitle = "设置";
                 PageSubtitle = "外观偏好与本地数据位置";
@@ -254,6 +296,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     [RelayCommand]
     private void ShowTasks() => Navigate(AppPage.Tasks);
+
+    [RelayCommand]
+    private void ShowReminders() => Navigate(AppPage.Reminders);
 
     [RelayCommand]
     private void ShowSettings() => Navigate(AppPage.Settings);
@@ -289,6 +334,13 @@ public partial class MainWindowViewModel : ObservableObject
     {
         Navigate(AppPage.Projects);
         Projects?.NewProjectCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void NewReminder()
+    {
+        Navigate(AppPage.Reminders);
+        Reminders?.NewReminderCommand.Execute(null);
     }
 
     [RelayCommand]
@@ -332,6 +384,9 @@ public partial class MainWindowViewModel : ObservableObject
             case AppPage.Projects:
                 Projects?.Reload();
                 break;
+            case AppPage.Reminders:
+                Reminders?.Reload();
+                break;
         }
 
         RefreshBadge();
@@ -341,11 +396,101 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (_service is null) return;
 
-        var result = _service.TasksOverdueCount(LocalTime.ToLocalDateTime(DateTime.Now));
+        var now = LocalTime.ToLocalDateTime(DateTime.Now);
+
+        var result = _service.TasksOverdueCount(now);
         if (result.Ok)
         {
             OverdueCount = result.Data;
         }
+
+        var reminders = _service.RemindersCounts();
+        if (reminders.Ok && reminders.Data is { } counts)
+        {
+            ReminderCount = counts.Unhandled;
+        }
+    }
+
+    // ---------- 提醒调度 ----------
+
+    /// <summary>窗口就绪后把「通知怎么弹」注入进来。无头测试换成记录器即可。</summary>
+    public void AttachNotifications(INotificationSink sink)
+    {
+        _notificationSink = sink;
+        if (_reminderPump is not null) _reminderPump.Sink = sink;
+    }
+
+    /// <param name="startTimer">
+    /// 测试传 false：只装配调度器与通知出口，不启动真实定时器。
+    /// </param>
+    public void StartReminderPump(bool startTimer = true)
+    {
+        if (_service is null || _reminderPump is not null) return;
+
+        _reminderPump = new ReminderPump(_service) { Sink = _notificationSink };
+        _reminderPump.OpenReminder = OpenReminderFromNotification;
+        _reminderPump.OpenDailyReview = OpenTodayBoard;
+
+        // 启动先修一次漂移：应用没开的时候改过的截止时间，在这里补上或清掉
+        _service.RemindersSync();
+
+        if (startTimer)
+        {
+            // 20 秒：分钟级的提醒不需要更密，也不至于晚一分钟才弹
+            _pumpTimer = new DispatcherTimer(TimeSpan.FromSeconds(20), DispatcherPriority.Background,
+                (_, _) => PumpOnce());
+            _pumpTimer.Start();
+        }
+
+        // 立刻跑一次：关机期间到点的那些，开机后马上补出来
+        PumpOnce();
+    }
+
+    public void StopReminderPump()
+    {
+        _pumpTimer?.Stop();
+        _pumpTimer = null;
+    }
+
+    /// <summary>跑一次调度节拍。测试直接调用，不必等定时器。</summary>
+    public ReminderPumpResult PumpReminders() =>
+        _reminderPump?.Tick() ?? new ReminderPumpResult([], false);
+
+    private void PumpOnce()
+    {
+        var result = PumpReminders();
+        if (!result.Any) return;
+
+        RefreshBadge();
+        if (Page == AppPage.Reminders) Reminders?.Reload();
+    }
+
+    private void OpenReminderFromNotification(ReminderItem item)
+    {
+        if (item.Kind == ReminderKind.TaskDue && item.TaskId is { } taskId && OpenTaskById(taskId)) return;
+        ShowRemindersCommand.Execute(null);
+    }
+
+    private void OpenTodayBoard()
+    {
+        Navigate(AppPage.Board);
+        Board?.ShowToday();
+    }
+
+    /// <summary>按 Id 打开任务编辑抽屉。通知点击时只知道 task_id。</summary>
+    public bool OpenTaskById(string taskId)
+    {
+        if (_service is null) return false;
+
+        var result = _service.TasksGet(taskId);
+        if (!result.Ok || result.Data is not { } task)
+        {
+            ShowToast(result.Error?.Message ?? "任务已不存在", true);
+            return false;
+        }
+
+        OpenTaskEditor(task);
+        return true;
     }
 
     private void OpenTaskEditor(TaskItem task)

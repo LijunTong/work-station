@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using WorkStation.App.ViewModels;
+using WorkStation.Core.Board;
 using WorkStation.Core.Models;
 using WorkStation.Core.Services;
 
@@ -253,5 +254,52 @@ public class BoardViewModelTests : IDisposable
         vm.MoveTask(task.Id, TaskStatus.Done);
 
         Assert.Equal(1, changes);
+    }
+
+    [Fact]
+    public void ShowToday_AppliesTodayScope()
+    {
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "今天到期",
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(Now.Date.AddHours(18))
+        });
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "下周到期",
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(Now.Date.AddDays(5).AddHours(18))
+        });
+
+        var vm = CreateVm();
+        vm.ShowToday();
+
+        Assert.Equal(BoardTimeScope.Today, vm.TimeScope);
+        Assert.True(vm.OverviewChips[0].IsSelected);
+        Assert.Contains(vm.Columns.SelectMany(c => c.Cards), c => c.Title == "今天到期");
+        Assert.DoesNotContain(vm.Columns.SelectMany(c => c.Cards), c => c.Title == "下周到期");
+    }
+
+    [Fact]
+    public void ReminderChip_ShowsUnhandledCountAndRaisesNavigation()
+    {
+        var reminder = _service.RemindersCreate(new CreateReminderInput
+        {
+            Title = "提醒我",
+            RemindAt = Core.Time.LocalTime.ToLocalDateTime(Now.AddHours(-1))
+        }).Data!;
+        _service.RemindersSetStatus(reminder.Id, ReminderStatus.Fired);
+
+        var opened = false;
+        var vm = CreateVm();
+        vm.OpenRemindersRequested = () => opened = true;
+
+        var chip = vm.OverviewChips.Single(c => c.Key == "reminders");
+        Assert.Equal(1, chip.Count);
+
+        chip.SelectCommand.Execute(null);
+
+        Assert.True(opened);
+        // 「提醒」不是筛选：点它不能改变看板的时间口径
+        Assert.Equal(BoardTimeScope.All, vm.TimeScope);
     }
 }
