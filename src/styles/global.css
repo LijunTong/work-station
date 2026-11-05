@@ -1,0 +1,150 @@
+:root {
+  --bg: #f6f7f9;
+  --bg-panel: #ffffff;
+  --bg-hover: #eef0f4;
+  --border: #e2e5ea;
+  --text: #1c1f24;
+  --text-dim: #6b7280;
+  --accent: #3b6ef5;
+  --accent-text: #ffffff;
+  --danger: #d94b4b;
+  --warning: #d98a1f;
+  --success: #2f9e6e;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #14161a;
+  --bg-panel: #1c1f25;
+  --bg-hover: #262a31;
+  --border: #2e333b;
+  --text: #e6e8eb;
+  --text-dim: #9aa3af;
+  --accent: #5b86ff;
+  --accent-text: #0d1014;
+  --danger: #ef6b6b;
+  --warning: #e0a04a;
+  --success: #48bb87;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Microsoft YaHei UI', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  height: 100%;
+}
+
+.app-nav {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  padding: 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-brand {
+  font-weight: 600;
+  font-size: 15px;
+  padding: 4px 10px 14px;
+}
+
+.nav-item {
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.nav-item-active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.app-main {
+  overflow: auto;
+  padding: 24px 28px;
+}
+
+.placeholder {
+  color: var(--text-dim);
+}
+
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 14px;
+}
+
+.toast-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
