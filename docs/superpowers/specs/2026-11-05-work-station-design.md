@@ -43,53 +43,54 @@
 
 | 事实 | 值 | 验证方式 |
 | --- | --- | --- |
-| Electron 版本 | 44.9.0 | 复用 `Todo\desktop\node_modules` 中的 electron |
-| Electron 内置 Node | **24.22.0** | `ELECTRON_RUN_AS_NODE=1 electron -p "process.versions.node"` |
-| `node:sqlite` 可用性 | **可用，无需 flag** | 同上环境 `require('node:sqlite')` 返回 `DatabaseSync, StatementSync, Session, constants, backup` |
-| 本机 Node | 22.22.2（`node:sqlite` 亦可用） | `node -v` |
-| 打包工具 | electron-builder 26.15.3（已装） | 复用 `Todo\desktop` 配置模式 |
+| .NET SDK | **10.0.401** | `dotnet --info` |
+| .NET 运行时 | **10.0.12** | `dotnet --list-runtimes` |
+| Avalonia 版本 | **12.1.5** | NuGet 版本清单；nuspec 含 **net10.0** 目标框架组 |
+| Avalonia 跨平台覆盖 | Windows / macOS / 桌面 Linux(X11+Wayland)，iOS/Android/WASM 为实验性 | 官方文档 |
+| SQLite 驱动 | **Microsoft.Data.Sqlite 10.0.11** + SQLitePCLRaw 2.1.12 | NuGet nuspec 依赖组 |
+| 测试框架 | xUnit 2.9.3 + Avalonia.Headless.XUnit 12.1.5 | NuGet 版本清单 |
+| 打包工具 | `dotnet publish`（多 RID，单文件） | — |
 
-**关键结论**：Electron 44 内置的 Node 24 自带 `node:sqlite`，因此**不需要 better-sqlite3，不需要 electron-rebuild，不需要任何原生编译**。数据库层零原生依赖，构建链保持干净。
+**关键结论**：Avalonia 是普通 NuGet 包，**不依赖 WindowsDesktop 运行时**，目标机只需 .NET 10 运行时；数据库驱动 `Microsoft.Data.Sqlite` 随包分发原生库，**不需要任何原生编译工具链**。三平台共用同一份代码，无平台专属 API。
 
 ### 3.2 选型清单
 
 | 层 | 选型 | 理由 |
 | --- | --- | --- |
-| 构建 | `electron-vite` + Vite 5 + TypeScript 5 | 一份配置同时产出 main / preload / renderer 三份构建 |
-| 打包 | `electron-builder` → Windows portable exe | 与 `Todo` 项目一致 |
-| 数据库 | `node:sqlite`（Node 内置） | 零原生依赖、零编译，同步 API 便于事务 |
-| UI | React 19 + Zustand | 组件化承接看板/抽屉/报表；不引入 react-query（本地库直读，缓存失效模型是负担） |
-| 拖拽 | `@dnd-kit/core` | React 生态标准，自身实现 HTML5 拖拽易碎 |
-| 测试 | Vitest | 与 Vite 同源，配置成本最低 |
+| 运行时 | .NET 10 | 当前 LTS（至 2028-11），与 `Mes` 项目一致 |
+| UI | **Avalonia 12.1.5** | 唯一同时满足「XAML 生态」「跨平台三桌面端」「MIT 免费」的方案；内置 `ThemeVariant` 主题与 `TrayIcon`（M3 用） |
+| MVVM | CommunityToolkit.Mvvm 8.2.2 | 源生成器免样板；Avalonia 不强制 ReactiveUI |
+| 数据库 | Microsoft.Data.Sqlite 10.0.11 | 官方驱动，WAL 可用，零原生编译 |
+| 构建/打包 | `dotnet build` / `dotnet publish -r <rid>` | 一个 RID 一个单文件产物 |
+| 测试 | xUnit + Avalonia.Headless.XUnit | UI 层可无头自动化，根治「页面零测试」缺口 |
 | 日期 | 自写工具函数 | 只需周一为周首的周/月边界，无需引入 date-fns |
 
 ### 3.3 依赖清单
 
-运行时依赖（4 个）：
+运行时依赖：
 
 ```
-react
-react-dom
-zustand
-@dnd-kit/core
+Avalonia
+Avalonia.Desktop
+Avalonia.Themes.Fluent
+CommunityToolkit.Mvvm
+Microsoft.Data.Sqlite
+SQLitePCLRaw.bundle_e_sqlite3
 ```
 
 开发依赖：
 
 ```
-electron
-electron-vite
-vite
-@vitejs/plugin-react
-typescript
-electron-builder
-vitest
-@types/react
-@types/react-dom
-@types/node
+Avalonia.Diagnostics          （仅 Debug）
+Avalonia.Headless
+Avalonia.Headless.XUnit
+xunit
+xunit.runner.visualstudio
+Microsoft.NET.Test.Sdk
+coverlet.collector
 ```
 
-**刻意不引入**：zod（IPC 入参只做基础校验，渲染层自研，schema 库属过度设计）、react-query、date-fns、UI 组件库（自写轻量组件，样式统一由浅/深双主题控制）。
+**刻意不引入**：ReactiveUI（Avalonia 非必需，INPC + RelayCommand 足够）、zod（入参只做基础校验，自研）、date-fns、第三方 UI 组件库（自写轻量控件，样式统一由浅/深双主题控制）。
 
 ---
 
@@ -97,80 +98,73 @@ vitest
 
 ### 4.1 进程职责
 
+单进程应用（不再有主进程 / 渲染进程分离）：
+
 ```
-Electron 主进程（唯一持有数据库与文件系统）
-├─ 窗口管理、托盘常驻、单实例锁、应用菜单
-├─ SQLite 连接与迁移（node:sqlite，主进程独占）
-├─ 提醒调度器：每 30s 扫描 pending 提醒 → Windows 原生通知
-├─ 报告引擎：SQL 聚合 → Markdown 文本
-└─ 备份导出、完整性检查
-        ↕ IPC（contextBridge，类型安全）
-React 渲染进程（无任何文件系统权限）
-├─ 看板 / 任务 / 项目 / 提醒 / 统计 / 周报月报 / 设置
-└─ Zustand 全局状态 + 自写 useAsync
+WorkStation.App（Avalonia UI，net10.0）
+├─ Program.cs / App.axaml        入口、窗口、托盘、单实例、生命周期
+├─ Views/                        看板 / 任务 / 项目 / 提醒 / 统计 / 周报月报 / 设置
+├─ ViewModels/                   MVVM 状态管理（CommunityToolkit.Mvvm）
+├─ Controls/                     通用 UI（卡片、抽屉、模态、徽标、进度环）
+└─ Services/WorkStationService   UI 唯一入口，聚合全部仓储
+        ↕ 直接方法调用（同进程，无 IPC）
+WorkStation.Core（net10.0，零 UI 依赖）
+├─ Data/                         SQLite 连接、迁移、完整性检查、备份
+├─ Data/Repositories/            projects / tasks / tags / settings
+├─ Time/Ids/Formatting/ProgressCalculator/TaskGrouping
+└─ 未来的 scheduler / reports 也落在这一层
 ```
 
-**约束**：渲染进程不得直接访问数据库或文件系统。所有数据访问经 `preload.ts` 暴露的 `window.api` 走 IPC。
+**约束**：`WorkStation.Core` 不引用任何 UI 包，保持框架无关；所有平台差异收敛到 `App/Platform/` 下的少量适配类。代码层禁止 `System.Windows.*`、`Microsoft.Win32.Registry`、`Microsoft.WindowsDesktop.App`。
 
 ### 4.2 目录结构
 
 ```
 work-station/
-├─ electron/                    主进程
-│  ├─ main.ts                   窗口、托盘、单实例、菜单、生命周期
-│  ├─ preload.ts                contextBridge API 定义
-│  ├─ ipc.ts                    IPC 路由集中注册
-│  ├─ db.ts                     连接、PRAGMA、迁移、完整性检查
-│  ├─ scheduler.ts              提醒扫描与触发
-│  ├─ reports.ts                周报月报聚合与 Markdown 渲染
-│  ├─ backup.ts                 备份、导出、每日快照
-│  └─ repositories/
-│     ├─ projects.ts
-│     ├─ tasks.ts
-│     ├─ tags.ts
-│     ├─ reminders.ts
-│     ├─ reports.ts
-│     └─ settings.ts
-├─ src/                         渲染进程
-│  ├─ main.tsx
-│  ├─ app/                      路由、布局、主题、快捷键
-│  ├─ features/
-│  │  ├─ board/                 任务看板 + 项目看板
-│  │  ├─ tasks/                 任务列表
-│  │  ├─ projects/              项目卡片列表
-│  │  ├─ reminders/             提醒列表与新建
-│  │  ├─ stats/                 趋势与项目健康
-│  │  ├─ reports/               报告生成与历史
-│  │  └─ settings/              主题、提醒、模板、备份
-│  ├─ components/               通用 UI（卡片、抽屉、模态、徽标、进度环）
-│  ├─ lib/                      ipc 客户端、日期、格式化、快捷键映射
-│  └─ types/                    共享类型（entities.ts、api.ts）
-├─ tests/                       Vitest 用例
+├─ src/
+│  ├─ WorkStation.Core/           纯逻辑层（net10.0）
+│  │  ├─ Models/                  实体与输入类型
+│  │  ├─ Data/                    连接、迁移、完整性检查
+│  │  ├─ Data/Repositories/       projects / tasks / tags / settings
+│  │  ├─ Services/                WorkStationService
+│  │  ├─ Time/Ids.cs/Formatting.cs/ProgressCalculator.cs/TaskGrouping.cs
+│  │  └─ 未来的 scheduler / reports 也落在这一层
+│  └─ WorkStation.App/            Avalonia UI 层（net10.0）
+│     ├─ Program.cs               AppBuilder 入口
+│     ├─ App.axaml                Application 子类 + 主题资源
+│     ├─ Views/                   看板 / 任务 / 项目 / 提醒 / 统计 / 周报月报 / 设置
+│     ├─ ViewModels/              MVVM
+│     ├─ Controls/                通用 UI
+│     ├─ Styles/                  设计令牌与控件样式
+│     └─ Platform/                平台差异适配（路径、通知、托盘）
+├─ tests/
+│  └─ WorkStation.Tests/          xUnit + Avalonia Headless
+├─ tools/
+│  └─ publish.ps1                 三平台发布脚本
+├─ assets/fonts/                  中文字体（Linux 必需）
 ├─ docs/
 │  ├─ superpowers/specs/
 │  └─ superpowers/plans/
-├─ electron-builder.yml
-├─ package.json
-├─ tsconfig.json
+├─ work-station.sln
 └─ README.md
 ```
 
-### 4.3 IPC 约定
+### 4.3 服务层约定
 
-```ts
+```csharp
 type Result<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
 ```
 
-- 主进程 IPC 处理器**永远不向外 throw**，统一 catch 后转成 `{ ok:false, error }`
+- 服务层方法**永远不向外 throw**，统一 catch 后转成 `{ ok:false, error }`
 - `error.code` 为机器可读常量（如 `DB_WRITE_FAILED`、`NOT_FOUND`、`VALIDATION_FAILED`）
 - `error.message` 为可直接展示给用户的中文文案
-- 渲染进程侧封装 `call<T>(channel, payload): Promise<T>`，自动解包 `Result`，失败时抛 `ApiError` 并由页面统一 toast 展示
+- ViewModel 侧解包 `Result`，失败时统一 toast 展示
 
 ---
 
 ## 5. 数据模型
 
-数据库文件：`%APPDATA%\work-station\data.db`（开发期 `.data/work-station.db`）。
+数据库文件：应用数据目录下的 `work-station/data.db`（开发期 `.data/data.db`）。
 迁移版本号存于 `PRAGMA user_version`，每次结构变更递增并在事务中执行。
 
 ### 5.1 表结构
@@ -512,12 +506,13 @@ CREATE INDEX idx_reports_period   ON reports(kind, period_start);
 
 | 层级 | 范围 | 工具 |
 | --- | --- | --- |
-| 单元测试 | 进度计算、报告聚合与模板渲染、日期边界（跨周/跨月/跨年、周一为周首）、提醒是否该触发的判定 | Vitest |
-| 集成测试 | repositories 在 SQLite 内存库 `:memory:` 上的 CRUD 与聚合查询 | Vitest + node:sqlite |
+| 单元测试 | 进度计算、报告聚合与模板渲染、日期边界（跨周/跨月/跨年、周一为周首）、提醒是否该触发的判定 | xUnit |
+| 集成测试 | repositories 在 SQLite 内存库 `:memory:` 上的 CRUD 与聚合查询 | xUnit + Microsoft.Data.Sqlite |
+| UI 层测试 | ViewModel 状态流转、分组与折叠、筛选空态、抽屉提交去重 | xUnit + Avalonia.Headless.XUnit |
 | 手测清单 | 每阶段一份，覆盖关键路径 | 文档 |
-| 打包真机验证 | 单实例、托盘常驻、Windows 通知实际弹出 | 手工 |
+| 打包真机验证 | 单实例、托盘常驻、系统通知实际弹出 | 手工 |
 
-**不做 E2E**：个人工具，自动化端到端收益低，维护成本高。
+**不做 E2E**：个人工具，自动化端到端收益低，维护成本高。UI 层用 Headless 模式覆盖到「逻辑正确」为止，不追像素级还原。
 
 ---
 
@@ -525,7 +520,7 @@ CREATE INDEX idx_reports_period   ON reports(kind, period_start);
 
 | 阶段 | 内容 | 验收标准 |
 | --- | --- | --- |
-| **M1 骨架 + 数据层** | electron-vite/React/TS 工程骨架、浅深主题、SQLite 建表与迁移、项目/任务/标签 CRUD 列表、打通 portable exe | 能建项目、建物项；重启后数据仍在；exe 能启动并显示列表 |
+| **M1 骨架 + 数据层** | Avalonia/.NET 10 工程骨架、浅深主题、SQLite 建表与迁移、项目/任务/标签 CRUD 列表、打通 portable exe | 能建项目、建物项；重启后数据仍在；exe 能启动并显示列表 |
 | **M2 看板 + 进度** | 任务看板与项目看板拖拽、概览条、筛选、进度自动算与手动覆盖、侧边栏徽标、命令面板、快捷键 | 拖拽改状态即时落库；徽标计数准确；进度计算与口径一致 |
 | **M3 提醒** | 托盘常驻、单实例、Windows 原生通知、调度器（截止/站会/自定义）、通知点击跳转、提醒页 | 设定时提醒能弹出；点击通知跳到对应任务；关窗口不退出 |
 | **M4 报表 + 统计** | 报告引擎、报告编辑器（自动段 + 手填段）、一键复制 Markdown、历史存档、模板设置、统计页趋势图 | 复制出的 Markdown 包含 6 个自动段与 3 个手填段且数据正确 |
@@ -534,7 +529,7 @@ CREATE INDEX idx_reports_period   ON reports(kind, period_start);
 
 ## 11. 数据安全
 
-- 数据库位置：`%APPDATA%\work-station\data.db`
+- 数据库位置：随平台而定，均为「应用数据目录 / work-station / data.db」——Windows `%APPDATA%\work-station\data.db`、macOS `~/Library/Application Support/work-station/data.db`、Linux `~/.config/work-station/data.db`（开发期统一用项目内 `.data/data.db`）
 - 备份：每天首次启动时把当前库复制到 `backups/data-<日期>.db`，保留最近 7 份
 - 导出：设置页可导出 db 副本与可读 JSON 快照
 - 迁移与结构变更前自动备份
@@ -554,7 +549,7 @@ CREATE INDEX idx_reports_period   ON reports(kind, period_start);
 
 | # | 决策 | 选择 | 备选与否决理由 |
 | --- | --- | --- | --- |
-| 1 | 运行形态 | Electron 桌面应用 | 纯网页版无法后台提醒；本地服务形态过重 |
+| 1 | 运行形态 | 桌面应用（框架已被 #14 取代） | 纯网页版无法后台提醒；本地服务形态过重 |
 | 2 | 存储 | SQLite 单文件 | JSON 文件在聚合统计上性能与表达力都不够 |
 | 3 | 提醒通道 | 应用内 + Windows 系统通知 | 飞书机器人需额外授权与网络；先不上 |
 | 4 | 报告产出 | 一键复制 Markdown | 导出 PDF 需额外渲染链路 |
@@ -562,8 +557,9 @@ CREATE INDEX idx_reports_period   ON reports(kind, period_start);
 | 6 | 进度算法 | 任务完成度自动算 + 手动覆盖 | 里程碑加权过重；纯手动不可维护 |
 | 7 | 提醒范围 | 三类全要 | 统一成一张表，调度逻辑单一 |
 | 8 | 报告内容 | 自动 + 手填混合 | 纯自动写不出思考；纯手填失去工具意义 |
-| 9 | 前端栈 | React + TS + Vite | 原生多视图后状态易失控 |
+| 9 | 前端栈 | XAML + MVVM（具体框架已被 #14 取代） | 原生多视图后状态易失控 |
 | 10 | 项目结构 | 单层任务 + 标签 | 里程碑与多级子任务本期不做 |
 | 11 | 看板范围 | 任务看板 + 项目看板 | 两张看板共用拖拽基础设施，成本可控 |
 | 12 | 阻塞列 | 增加「已阻塞」列 | 卡住的事必须显形，且能自动喂给周报风险段 |
 | 13 | 首页 | 看板 | 概览条承载今日/逾期/提醒的快速访问 |
+| 14 | 技术栈 | **Avalonia 12.1.5 + .NET 10**（原 Electron + React + TypeScript） | 用户要求跨平台：WPF 架构上只能跑 Windows，而 Avalonia 覆盖 Windows/macOS/Linux 且 MIT 免费。代价是渲染层整体重写；收益是 IPC 层整层消失、exe 体积从 104.7MB 降到 1–5MB、且 UI 层首次可用 Headless 自动化测试 |
