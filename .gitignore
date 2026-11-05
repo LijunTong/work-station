@@ -1,0 +1,8 @@
+node_modules/
+out/
+dist/
+.data/
+.superpowers/
+*.log
+build/icon.ico
+build/icon.png

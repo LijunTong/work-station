@@ -1,0 +1,15 @@
+appId: com.joont.workstation
+productName: WorkStation
+asar: true
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-portable.${ext}
