@@ -324,23 +324,27 @@ public partial class BoardViewModel : ObservableObject
     {
         var previous = SelectedProject?.Id;
 
-        // Clear() 会让绑定中的 ComboBox 把 SelectedItem 回写成 null；重建期间吞掉由此触发的 Reload
+        var desired = new List<ProjectOption> { ProjectOption.All };
+        foreach (var project in projects.Where(p => p.ArchivedAt is null).DistinctBy(p => p.Id))
+        {
+            desired.Add(new ProjectOption(project.Id, project.Name));
+        }
+
+        // 原地同步而不是 Clear()+重建：清空会让 ComboBox 把 SelectedItem 先置空，
+        // 之后补回的实例它不再认，折叠框就一直是空白（「选了项目却看不到」）。
         _isRebuildingOptions = true;
         try
         {
-            ProjectOptions.Clear();
-            ProjectOptions.Add(ProjectOption.All);
-            foreach (var project in projects.Where(p => p.ArchivedAt is null).DistinctBy(p => p.Id))
-            {
-                ProjectOptions.Add(new ProjectOption(project.Id, project.Name));
-            }
-
-            SelectedProject = ProjectOptions.FirstOrDefault(o => o.Id == previous) ?? ProjectOptions[0];
+            ProjectOptionList.Sync(ProjectOptions, desired);
         }
         finally
         {
             _isRebuildingOptions = false;
         }
+
+        // 选中项还在就保持同一个实例，不触发绑定回写
+        var next = ProjectOptions.FirstOrDefault(o => o.Id == previous) ?? ProjectOptions[0];
+        if (!ReferenceEquals(SelectedProject, next)) SelectedProject = next;
     }
 
     private void SelectOverview(BoardChip chip)

@@ -63,7 +63,7 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
     <Setter Property="Padding" Value="11,6" />
     <Setter Property="FontSize" Value="{DynamicResource FontSm}" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -162,19 +162,34 @@
 
   <!-- ========== 输入控件 ========== -->
 
-  <!-- Avalonia 没有独立的 TextArea 类型：多行文本框同样是 TextBox（AcceptsReturn + TextWrapping） -->
+  <!--
+    输入框规范（改这里即全站生效）：
+      · 值文字 FontInput（14）+ TextBrush，比正文大半档 —— 用户自己敲进去的内容是这一屏的重点
+      · 占位文字 TextDimBrush（4.9:1）：比正文弱一档但读得清。早先沿用 Fluent 默认的
+        浅灰只有 2.2:1，整行看着像「说明看不清、字段是空的」
+      · 描边用 InputLineBrush，比常规分隔线重；悬停再深一档，聚焦换强调色
+      · 光标与选区都用强调色系，定位点要一眼能找到
+  -->
   <Style Selector="TextBox">
     <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
-    <Setter Property="Padding" Value="9,6" />
-    <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
-    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineBrush}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="MinHeight" Value="34" />
+    <Setter Property="FontSize" Value="{DynamicResource FontInput}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource TextDimBrush}" />
+    <Setter Property="CaretBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource TextSelectionBrush}" />
+    <Setter Property="SelectionForegroundBrush" Value="{DynamicResource TextBrush}" />
+  </Style>
+
+  <Style Selector="TextBox:pointerover:not(.bare)">
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineHoverBrush}" />
   </Style>
 
   <Style Selector="TextBox:pointerover:not(.bare) /template/ Border#PART_BorderElement">
-    <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineHoverBrush}" />
   </Style>
 
   <!-- 聚焦描边只给「自带底色的常规输入框」。
@@ -196,7 +211,7 @@
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="0" />
     <Setter Property="MinHeight" Value="24" />
-    <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontInput}" />
     <!-- 必须显式居中：默认按顶部排列时，文字行会被 MinHeight 撑出 24px 高，
          行框内文字贴在顶部绘制，占位文字比同一行的按钮文字高 2.5px -->
     <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -205,50 +220,16 @@
   <Style Selector="ComboBox">
     <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
-    <Setter Property="Padding" Value="9,5" />
-    <Setter Property="MinHeight" Value="32" />
-    <Setter Property="FontSize" Value="{DynamicResource FontSm}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineBrush}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="MinHeight" Value="34" />
+    <Setter Property="FontSize" Value="{DynamicResource FontInput}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource TextDimBrush}" />
   </Style>
 
   <Style Selector="ComboBox:pointerover">
-    <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
-  </Style>
-
-  <!-- 日期/时间选择器：外形与 ComboBox 对齐，免得表单里一眼看出是两套控件 -->
-  <Style Selector="CalendarDatePicker">
-    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
-    <Setter Property="MinHeight" Value="32" />
-    <Setter Property="FontSize" Value="{DynamicResource FontSm}" />
-  </Style>
-
-  <Style Selector="TimePicker">
-    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
-    <Setter Property="MinHeight" Value="32" />
-    <Setter Property="FontSize" Value="{DynamicResource FontSm}" />
-  </Style>
-
-  <!-- 全局 Button 的 11,6 内边距会把选择器里的日历按钮撑宽，但它同时也是图标的容器：
-       只收窄内边距、保留最小可点面积，否则日历图标会被裁掉。 -->
-  <Style Selector="CalendarDatePicker /template/ Button">
-    <Setter Property="Padding" Value="4,2" />
-    <Setter Property="MinWidth" Value="28" />
-    <Setter Property="Background" Value="Transparent" />
-    <Setter Property="BorderThickness" Value="0" />
-  </Style>
-
-  <!-- 模板给这层 Button 塞了 242px 的 MinWidth，24 小时制下会让控件比列还宽、压到日期框上 -->
-  <Style Selector="TimePicker /template/ Button">
-    <Setter Property="MinWidth" Value="0" />
-    <Setter Property="Padding" Value="0" />
-    <Setter Property="Background" Value="Transparent" />
-    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineHoverBrush}" />
   </Style>
 
   <Style Selector="CheckBox">
@@ -270,7 +251,7 @@
     <!-- Stretch 而不是 Left：徽标要靠右对齐，文字仍在第一列靠左 -->
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     <Setter Property="Padding" Value="11,8" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
     <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
     <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
   </Style>
@@ -333,7 +314,7 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
     <Setter Property="Padding" Value="11,4" />
     <Setter Property="FontSize" Value="{DynamicResource FontXs}" />
   </Style>
@@ -354,6 +335,88 @@
   <Style Selector="Button.filter.active:pointerover">
     <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <!-- ========== 日期字段 ========== -->
+
+  <!--
+    日期/时间不再是「原生日历选择器 + 原生时间选择器」两颗控件叠在一起：
+    那套模板自带一整个带边框的日历图标按钮，撑在字段右侧像贴了块膏药，
+    两颗控件还各自带一套圆角和内边距。现在统一成一个字段：
+    左侧日历图标 + 值文字 + 右侧清除按钮，点开是「日历 + 时间」同一个浮层。
+  -->
+  <Style Selector="Button.field">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="MinHeight" Value="34" />
+    <Setter Property="FontSize" Value="{DynamicResource FontInput}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Button.field:pointerover">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineHoverBrush}" />
+  </Style>
+
+  <!-- Fluent 的 Button 模板在 pointerover 时改的是模板里那层 ContentPresenter 的底色，
+       控件级 Background 压不住它 —— 表现就是深色下鼠标扫过日期字段，底色突然比输入框亮一档 -->
+  <Style Selector="Button.field /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineBrush}" />
+  </Style>
+
+  <Style Selector="Button.field:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource InputLineHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button.field:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BgSunkenBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="Button.field:pressed">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+  </Style>
+
+  <Style Selector="Button.field:focus-visible">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <!-- 字段里的「未设置」占位与输入框同一条规范 -->
+  <Style Selector="Button.field TextBlock.placeholder">
+    <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
+  </Style>
+
+  <!-- 浮层里的便捷项：今天 / 明天 -->
+  <Style Selector="Button.quick">
+    <Setter Property="Background" Value="{DynamicResource BgSunkenBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+    <Setter Property="Padding" Value="10,5" />
+    <Setter Property="FontSize" Value="{DynamicResource FontXs}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+
+  <Style Selector="Button.quick:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <!-- 浮层容器：与卡片同一层级，但没有卡片那么重的阴影 -->
+  <Style Selector="Border.popover">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
+    <Setter Property="Padding" Value="12" />
+    <Setter Property="BoxShadow" Value="0 10 30 0 #26000000" />
   </Style>
 
   <!-- ========== 容器 ========== -->
@@ -490,7 +553,7 @@
   <!-- 小胶囊 -->
   <Style Selector="Border.chip">
     <Setter Property="Background" Value="{DynamicResource BgSunkenBrush}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
     <Setter Property="Padding" Value="7,2" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>

@@ -15,7 +15,9 @@ public enum IconKind
     ArrowRight,
     Clock,
     Close,
-    Plus
+    Plus,
+    Calendar,
+    Settings
 }
 
 /// <summary>
@@ -33,17 +35,30 @@ public sealed class Icon : Control
     public static readonly StyledProperty<double> SizeProperty =
         AvaloniaProperty.Register<Icon, double>(nameof(Size), 14d);
 
+    /// <summary>
+    /// 单独摆放时显式指定颜色。放在按钮里不用设 —— 那时走的是
+    /// <see cref="TextElement.ForegroundProperty"/> 的继承，按钮换色图标跟着换。
+    /// </summary>
+    public static readonly StyledProperty<IBrush?> ForegroundProperty =
+        AvaloniaProperty.Register<Icon, IBrush?>(nameof(Foreground));
+
     private const double Grid = 16d;
 
     static Icon()
     {
-        AffectsRender<Icon>(KindProperty, SizeProperty);
+        AffectsRender<Icon>(KindProperty, SizeProperty, ForegroundProperty);
     }
 
     public IconKind Kind
     {
         get => GetValue(KindProperty);
         set => SetValue(KindProperty, value);
+    }
+
+    public IBrush? Foreground
+    {
+        get => GetValue(ForegroundProperty);
+        set => SetValue(ForegroundProperty, value);
     }
 
     /// <summary>正方形边长，默认 14；行内小按钮用 13。</summary>
@@ -58,7 +73,7 @@ public sealed class Icon : Control
 
     public override void Render(DrawingContext context)
     {
-        var brush = TextElement.GetForeground(this) ?? Brushes.Black;
+        var brush = Foreground ?? TextElement.GetForeground(this) ?? Brushes.Black;
         var pen = new Pen(brush, 1.5, null, PenLineCap.Round, PenLineJoin.Round);
 
         using var _ = context.PushTransform(Matrix.CreateScale(Size / Grid, Size / Grid));
@@ -105,6 +120,25 @@ public sealed class Icon : Control
             case IconKind.Plus:
                 Line(context, pen, 8, 3.6, 8, 12.4);
                 Line(context, pen, 3.6, 8, 12.4, 8);
+                break;
+
+            // 日历：外框 + 顶栏 + 两个挂环。顶栏画在外框内侧，
+            // 保持 1.5 的线宽下也不会和外框糊成实心块
+            case IconKind.Calendar:
+                Stroke(context, pen, "M3.2 4.4 L12.8 4.4 Q13.6 4.4 13.6 5.2 L13.6 12.4 Q13.6 13.2 12.8 13.2 L3.2 13.2 Q2.4 13.2 2.4 12.4 L2.4 5.2 Q2.4 4.4 3.2 4.4 Z");
+                Line(context, pen, 2.6, 7.2, 13.4, 7.2);
+                Line(context, pen, 5.6, 2.6, 5.6, 4.6);
+                Line(context, pen, 10.4, 2.6, 10.4, 4.6);
+                break;
+
+            // 设置：三条滑轨 + 三个把手，和侧边栏原来手绘的那组图形同一套画法
+            case IconKind.Settings:
+                Line(context, pen, 2.6, 4, 13.4, 4);
+                Line(context, pen, 2.6, 8, 13.4, 8);
+                Line(context, pen, 2.6, 12, 13.4, 12);
+                Line(context, pen, 9.8, 2.2, 9.8, 5.8);
+                Line(context, pen, 6.2, 6.2, 6.2, 9.8);
+                Line(context, pen, 10.8, 10.2, 10.8, 13.8);
                 break;
         }
     }

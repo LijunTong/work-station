@@ -240,15 +240,15 @@
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                       <StackPanel Spacing="0">
                         <TextBlock Text="开始日期" Classes="label" />
-                        <CalendarDatePicker SelectedDate="{Binding StartDate, Mode=TwoWay}"
-                                            PlaceholderText="不设置"
-                                            HorizontalAlignment="Stretch" />
+                        <controls:DueDateField SelectedDate="{Binding StartDate, Mode=TwoWay}"
+                                               ShowTime="False"
+                                               Watermark="不设置" />
                       </StackPanel>
                       <StackPanel Grid.Column="1" Spacing="0">
                         <TextBlock Text="目标日期" Classes="label" />
-                        <CalendarDatePicker SelectedDate="{Binding DueDate, Mode=TwoWay}"
-                                            PlaceholderText="不设置"
-                                            HorizontalAlignment="Stretch" />
+                        <controls:DueDateField SelectedDate="{Binding DueDate, Mode=TwoWay}"
+                                               ShowTime="False"
+                                               Watermark="不设置" />
                       </StackPanel>
                     </Grid>
 

@@ -165,8 +165,8 @@ public class UiSmokeTests : IDisposable
         vm.ShowTasksCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
-        // 切换筛选会重建选项列表：Clear() 时 ComboBox 会把 SelectedItem 写回 null，
-        // 若没做重入保护就会多跑一遍重建，下拉里每个项目出现两次。
+        // 切换筛选会原地同步选项列表；早先的 Clear() + 重建会让每个项目出现两次，
+        // 所以这里继续守着「选项既不重复、顺序也稳定」。
         vm.Tasks!.SelectedProject = vm.Tasks.ProjectOptions.First(o => o.Id == first.Id);
         Dispatcher.UIThread.RunJobs();
         vm.Tasks.SelectedProject = vm.Tasks.ProjectOptions[0];
@@ -184,6 +184,105 @@ public class UiSmokeTests : IDisposable
             vm.Tasks.Form!.ProjectChoices.Select(o => o.Name).ToArray());
 
         window.Close();
+    }
+
+    /// <summary>
+    /// 设置从导航里挪到了侧边栏底部：一粒图标按钮 + 版本号。
+    /// 守三件事：导航里不再有「设置」、页脚那颗按钮点得进设置页、版本号真的渲染出来了。
+    /// </summary>
+    [AvaloniaFact]
+    public void Settings_SitsInSidebarFooter_WithVersionText()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Matches(@"^V \d+\.\d+\.\d+$", vm.VersionText);
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == vm.VersionText);
+
+        var navLabels = window.GetVisualDescendants()
+            .OfType<Button>()
+            .Where(b => b.Classes.Contains("nav"))
+            .SelectMany(b => b.GetVisualDescendants().OfType<TextBlock>())
+            .Select(t => t.Text)
+            .ToList();
+
+        Assert.DoesNotContain("设置", navLabels);
+
+        var settingsButton = window.GetVisualDescendants()
+            .OfType<Button>()
+            .First(b => b.Classes.Contains("icon") && (ToolTip.GetTip(b) as string) == "设置");
+
+        settingsButton.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(AppPage.Settings, vm.Page);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 在下拉里选过项目之后，折叠框里必须仍然显示这个项目。
+    ///
+    /// 症状：选中项目后框里空白。成因是刷新时把选项集合 Clear() 再逐项 Add()：
+    /// ComboBox 会先把 SelectedItem 置空，而补回来的又是「值相等的新实例」，
+    /// 属性变更被相等判断吃掉，SelectionBoxItem 就再也没有被重新赋值。
+    /// 现在选项原地同步、实例不变，这里守住三件事：选中项实例仍在列表里、
+    /// SelectionBoxItem 非空、折叠框真的画出了项目名。
+    /// </summary>
+    [AvaloniaFact]
+    public void ProjectDropdown_KeepsSelectedText_AfterUserPicks()
+    {
+        _service.ProjectsCreate(new CreateProjectInput { Name = "P1" });
+        _service.ProjectsCreate(new CreateProjectInput { Name = "P2" });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        // 看板：全部项目 / P1 / P2 → 第 2 项是 P2
+        AssertDropdownShows(window, vm.Board!.ProjectOptions, () => vm.Board.SelectedProject, 2, "P2");
+
+        vm.ShowTasksCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        // 任务页：同样是全部项目 / P1 / P2，换一项验证
+        AssertDropdownShows(window, vm.Tasks!.ProjectOptions, () => vm.Tasks.SelectedProject, 1, "P1");
+
+        window.Close();
+    }
+
+    private static void AssertDropdownShows(
+        Window window,
+        IReadOnlyList<ProjectOption> options,
+        Func<ProjectOption?> selected,
+        int index,
+        string expectedName)
+    {
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var combo = window.GetVisualDescendants()
+            .OfType<ComboBox>()
+            .First(c => ReferenceEquals(c.ItemsSource, options));
+
+        // 等价于用户展开下拉、点中第 index 项
+        combo.IsDropDownOpen = true;
+        Dispatcher.UIThread.RunJobs();
+        combo.SelectedIndex = index;
+        Dispatcher.UIThread.RunJobs();
+        combo.IsDropDownOpen = false;
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Same(combo.SelectedItem, selected());
+        Assert.NotNull(combo.SelectionBoxItem);
+        Assert.Contains(expectedName, combo.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text));
     }
 
     /// <summary>无头宿主下发一次按键。PhysicalKey 只用于输入法映射，这里传 None。</summary>

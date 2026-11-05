@@ -37,7 +37,7 @@
         <StackPanel Margin="18,20,18,22" Spacing="10" Orientation="Horizontal">
           <Border Width="28"
                   Height="28"
-                  CornerRadius="8"
+                  CornerRadius="{DynamicResource RadiusMd}"
                   Background="{DynamicResource AccentBrush}"
                   VerticalAlignment="Center">
             <TextBlock Text="工"
@@ -106,31 +106,33 @@
             </Grid>
           </Button>
 
-          <Button Classes="nav"
-                  Classes.active="{Binding IsSettingsActive}"
-                  Command="{Binding ShowSettingsCommand}">
-            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
-              <!-- 滑块图标 -->
-              <Canvas Width="16" Height="16" VerticalAlignment="Center">
-                <Rectangle Canvas.Left="0" Canvas.Top="3" Width="16" Height="1.5" RadiusX="0.75" RadiusY="0.75" />
-                <Rectangle Canvas.Left="0" Canvas.Top="7.5" Width="16" Height="1.5" RadiusX="0.75" RadiusY="0.75" />
-                <Rectangle Canvas.Left="0" Canvas.Top="12" Width="16" Height="1.5" RadiusX="0.75" RadiusY="0.75" />
-                <Rectangle Canvas.Left="10" Canvas.Top="1.2" Width="3" Height="5.2" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="4" Canvas.Top="5.7" Width="3" Height="5.2" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="9" Canvas.Top="10.2" Width="3" Height="5.2" RadiusX="1.5" RadiusY="1.5" />
-              </Canvas>
-              <TextBlock Grid.Column="1" Text="设置" VerticalAlignment="Center" />
-            </Grid>
-          </Button>
         </StackPanel>
 
-        <StackPanel Grid.Row="2" Margin="18,0,18,16" Spacing="5">
-          <TextBlock Text="Ctrl + K 命令面板"
-                     FontSize="10.5"
-                     Foreground="{DynamicResource TextFaintBrush}" />
-          <TextBlock Text="本地数据 · 不联网"
-                     FontSize="10.5"
-                     Foreground="{DynamicResource TextFaintBrush}" />
+        <!-- 底部：设置从导航里拿掉，收进这里。版本号跟着一起放，
+             让「这是哪个版本」不用翻设置页；值来自程序集，不在 XAML 里写死 -->
+        <StackPanel Grid.Row="2" Margin="18,0,18,14" Spacing="9">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Ctrl + K 命令面板"
+                       FontSize="{DynamicResource FontMicro}"
+                       Foreground="{DynamicResource TextDimBrush}" />
+            <TextBlock Text="本地数据 · 不联网"
+                       FontSize="{DynamicResource FontMicro}"
+                       Foreground="{DynamicResource TextDimBrush}" />
+          </StackPanel>
+
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
+            <Button Classes="icon"
+                    Classes.tinted="{Binding IsSettingsActive}"
+                    Command="{Binding ShowSettingsCommand}"
+                    ToolTip.Tip="设置">
+              <controls:Icon Kind="Settings" Size="15" />
+            </Button>
+            <TextBlock Grid.Column="1"
+                       Text="{Binding VersionText}"
+                       FontSize="{DynamicResource FontMicro}"
+                       Foreground="{DynamicResource TextDimBrush}"
+                       VerticalAlignment="Center" />
+          </Grid>
         </StackPanel>
       </Grid>
     </Border>

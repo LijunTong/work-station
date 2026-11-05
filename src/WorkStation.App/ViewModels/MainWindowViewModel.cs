@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -91,6 +92,12 @@ public partial class MainWindowViewModel : ObservableObject
     public bool HasOverdueBadge => OverdueCount > 0;
 
     public string OverdueBadgeText => OverdueCount > 99 ? "99+" : OverdueCount.ToString();
+
+    /// <summary>
+    /// 左下角显示的版本号（形如 <c>V 1.0.1</c>）。取程序集版本，
+    /// 不在 XAML 里写死 —— 发版只改 csproj 的 &lt;Version&gt; 一处。
+    /// </summary>
+    public string VersionText { get; } = FormatVersion();
 
     partial void OnOverdueCountChanged(int value)
     {
@@ -378,5 +385,24 @@ public partial class MainWindowViewModel : ObservableObject
             "dark" => ThemeVariant.Dark,
             _ => ThemeVariant.Default
         };
+    }
+
+    /// <summary>「V 主.次.修订」，去掉 SourceLink 加的 +commit 后缀。</summary>
+    private static string FormatVersion()
+    {
+        var assembly = typeof(MainWindowViewModel).Assembly;
+
+        var informational = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            var plus = informational.IndexOf('+', StringComparison.Ordinal);
+            return $"V {(plus > 0 ? informational[..plus] : informational)}";
+        }
+
+        var version = assembly.GetName().Version;
+        return version is null ? "V 1.0.0" : $"V {version.Major}.{version.Minor}.{version.Build}";
     }
 }

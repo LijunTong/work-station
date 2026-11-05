@@ -192,30 +192,33 @@ public partial class TasksViewModel : ObservableObject
     {
         var previous = SelectedProject?.Id;
 
-        // Clear() 会让绑定中的 ComboBox 清空选中项并回写 SelectedProject = null，
-        // 这一步如果照常触发 Reload，就是在外层循环里再跑一遍完整的重建，
-        // 结果是每个项目被加两遍。重建期间直接吞掉这些选中变化。
+        var desired = new List<ProjectOption> { ProjectOption.All };
+        foreach (var project in projects.DistinctBy(p => p.Id))
+        {
+            var archived = project.ArchivedAt is not null;
+            desired.Add(new ProjectOption(
+                project.Id,
+                archived ? $"{project.Name}（已归档）" : project.Name,
+                archived));
+        }
+
+        // 原地同步而不是 Clear()+重建：清空会让 ComboBox 把 SelectedItem 先置空，
+        // 之后补回的任何实例它都不再认，折叠框就一直是空白。
+        // 重建期间仍要吞掉「选中项被删掉」引发的回写，否则会多跑一轮完整的 Reload。
         _isRebuildingOptions = true;
         try
         {
-            ProjectOptions.Clear();
-            ProjectOptions.Add(ProjectOption.All);
-            foreach (var project in projects.DistinctBy(p => p.Id))
-            {
-                var archived = project.ArchivedAt is not null;
-                ProjectOptions.Add(new ProjectOption(
-                    project.Id,
-                    archived ? $"{project.Name}（已归档）" : project.Name,
-                    archived));
-            }
-
-            // 重建选项后恢复原选中项；找不到就回落到「全部项目」
-            SelectedProject = ProjectOptions.FirstOrDefault(o => o.Id == previous) ?? ProjectOptions[0];
+            ProjectOptionList.Sync(ProjectOptions, desired);
         }
         finally
         {
             _isRebuildingOptions = false;
         }
+
+        // 选中项还在就保持同一个实例（引用相同直接跳过），不触发任何绑定回写；
+        // 找不到（项目被归档/删除）才回落到「全部项目」。
+        var next = ProjectOptions.FirstOrDefault(o => o.Id == previous) ?? ProjectOptions[0];
+        if (!ReferenceEquals(SelectedProject, next)) SelectedProject = next;
     }
 
     private void BuildGroups(IReadOnlyList<TaskItem> tasks, IReadOnlyDictionary<string, string> projectNames)
@@ -410,13 +413,6 @@ public sealed partial class StatusFilter : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
-}
-
-public sealed record ProjectOption(string? Id, string Name, bool IsArchived = false)
-{
-    public static ProjectOption All { get; } = new(null, "全部项目");
-
-    public static ProjectOption Standalone { get; } = new(null, "独立任务");
 }
 
 public partial class TaskGroupViewModel : ObservableObject
