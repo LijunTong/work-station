@@ -148,3 +148,135 @@ select:focus {
   gap: 12px;
   margin-bottom: 16px;
 }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.badge-accent { border-color: var(--accent); color: var(--accent); }
+.badge-danger { border-color: var(--danger); color: var(--danger); }
+.badge-warning { border-color: var(--warning); color: var(--warning); }
+.badge-success { border-color: var(--success); color: var(--success); }
+
+.progress-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-ring-track { stroke: var(--border); }
+
+.progress-ring-value {
+  stroke: var(--accent);
+  transition: stroke-dashoffset 0.25s ease;
+}
+
+.progress-ring-text {
+  position: absolute;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.empty-state {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.empty-state-title { margin: 0 0 6px; color: var(--text); }
+
+.empty-state-hint { margin: 0 0 12px; font-size: 13px; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.field-label { font-size: 12px; color: var(--text-dim); }
+
+.field-hint { font-size: 12px; color: var(--text-dim); }
+
+.drawer-overlay,
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 14, 18, 0.42);
+  z-index: 20;
+}
+
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 92vw;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer-header,
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-header h3,
+.modal-header h3 { margin: 0; font-size: 15px; }
+
+.drawer-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+.drawer-body,
+.modal-body {
+  flex: 1;
+  overflow: auto;
+  padding: 18px;
+}
+
+.drawer-footer,
+.modal-footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-panel {
+  width: 460px;
+  max-width: 92vw;
+  max-height: 84vh;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
