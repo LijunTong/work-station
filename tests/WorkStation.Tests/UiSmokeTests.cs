@@ -75,7 +75,7 @@ public class UiSmokeTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void RemindersView_LoadsXaml_WithAllThreeGroups()
+    public void RemindersView_LoadsXaml_WithTwoGroups()
     {
         var fired = _service.RemindersCreate(new CreateReminderInput
         {
@@ -99,8 +99,11 @@ public class UiSmokeTests : IDisposable
 
         Assert.NotNull(view.Content);
         Assert.True(view.Bounds.Width > 0);
-        Assert.Single(vm.Triggered);
-        Assert.Single(vm.Upcoming);
+
+        // 已到点的和未到点的合并成「待办」一组，没有第三条分组
+        Assert.Equal(2, vm.Active.Count);
+        Assert.Empty(vm.Handled);
+        Assert.Equal("该处理了", vm.Active[0].Title);
     }
 
     [AvaloniaFact]

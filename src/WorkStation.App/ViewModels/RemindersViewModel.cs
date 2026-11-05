@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
-using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WorkStation.Core;
@@ -12,10 +11,11 @@ using WorkStation.Core.Time;
 namespace WorkStation.App.ViewModels;
 
 /// <summary>
-/// 提醒页：待处理 / 待触发 / 已处理三组。
+/// 提醒页：只有「待办」和「已完成」两组。
 ///
-/// 提醒的价值在于「到点弹出」，页面只是它的存档与手动入口：
-/// 所以待处理的排在最上面，已处理只留最近 20 条。
+/// 早先按 pending / fired / handled 分三组，用户得先分清「待触发」和「待处理」才算看得懂；
+/// 对提醒这件事，真正有意义的只有「还欠着」和「已经过去」两种。已到点的那几条仍然排在最前面、
+/// 带暖底，但不再占一个独立分组。已完成的默认收起 —— 它是存档，不是待办。
 /// </summary>
 public partial class RemindersViewModel : ObservableObject
 {
@@ -39,9 +39,8 @@ public partial class RemindersViewModel : ObservableObject
         _dataChanged = dataChanged;
     }
 
-    public ObservableCollection<ReminderRowViewModel> Triggered { get; } = [];
-
-    public ObservableCollection<ReminderRowViewModel> Upcoming { get; } = [];
+    /// <summary>还没处理的：已到点的排在最前，其余按时间先后。</summary>
+    public ObservableCollection<ReminderRowViewModel> Active { get; } = [];
 
     public ObservableCollection<ReminderRowViewModel> Handled { get; } = [];
 
@@ -60,22 +59,25 @@ public partial class RemindersViewModel : ObservableObject
     [ObservableProperty]
     private ReminderRowViewModel? _pendingDelete;
 
+    /// <summary>「已完成」默认收起：它是存档，一进页面就该看到还欠着什么。</summary>
+    [ObservableProperty]
+    private bool _isHandledExpanded;
+
     public bool IsDeleteConfirmOpen => PendingDelete is not null;
 
     public bool HasError => Error is not null;
 
-    public bool HasTriggered => Triggered.Count > 0;
-
-    public bool HasUpcoming => Upcoming.Count > 0;
+    public bool HasActive => Active.Count > 0;
 
     public bool HasHandled => Handled.Count > 0;
 
-    public bool ShowEmpty => !IsLoading && Error is null
-                             && Triggered.Count == 0 && Upcoming.Count == 0 && Handled.Count == 0;
+    public bool ShowEmpty => !IsLoading && Error is null && Active.Count == 0 && Handled.Count == 0;
 
-    public string TriggeredCountText => Triggered.Count.ToString(CultureInfo.InvariantCulture);
+    public string ActiveCountText => Active.Count.ToString(CultureInfo.InvariantCulture);
 
-    public string UpcomingCountText => Upcoming.Count.ToString(CultureInfo.InvariantCulture);
+    public string HandledCountText => Handled.Count.ToString(CultureInfo.InvariantCulture);
+
+    public string HandledToggleText => IsHandledExpanded ? "收起" : "展开";
 
     partial void OnErrorChanged(string? value) => OnPropertyChanged(nameof(HasError));
 
@@ -83,6 +85,9 @@ public partial class RemindersViewModel : ObservableObject
 
     partial void OnPendingDeleteChanged(ReminderRowViewModel? value) =>
         OnPropertyChanged(nameof(IsDeleteConfirmOpen));
+
+    partial void OnIsHandledExpandedChanged(bool value) =>
+        OnPropertyChanged(nameof(HandledToggleText));
 
     public void Reload()
     {
@@ -126,8 +131,8 @@ public partial class RemindersViewModel : ObservableObject
             }
 
             Error = null;
-            Fill(Triggered, triggered.Data ?? [], now);
-            Fill(Upcoming, upcoming.Data ?? [], now);
+            // 已到点的排前面：那是「现在就欠着」的事，未到点的只是日程
+            Fill(Active, [.. triggered.Data ?? [], .. upcoming.Data ?? []], now);
             Fill(Handled, handled.Data ?? [], now);
         }
         finally
@@ -142,24 +147,17 @@ public partial class RemindersViewModel : ObservableObject
         target.Clear();
         foreach (var item in items)
         {
-            target.Add(new ReminderRowViewModel(
-                item,
-                now,
-                Complete,
-                Dismiss,
-                Snooze,
-                AskDelete));
+            target.Add(new ReminderRowViewModel(item, now, Complete, Snooze, AskDelete));
         }
     }
 
     private void SyncGroupFlags()
     {
-        OnPropertyChanged(nameof(HasTriggered));
-        OnPropertyChanged(nameof(HasUpcoming));
+        OnPropertyChanged(nameof(HasActive));
         OnPropertyChanged(nameof(HasHandled));
         OnPropertyChanged(nameof(ShowEmpty));
-        OnPropertyChanged(nameof(TriggeredCountText));
-        OnPropertyChanged(nameof(UpcomingCountText));
+        OnPropertyChanged(nameof(ActiveCountText));
+        OnPropertyChanged(nameof(HandledCountText));
     }
 
     [RelayCommand]
@@ -197,13 +195,11 @@ public partial class RemindersViewModel : ObservableObject
 
     private void Complete(ReminderRowViewModel row)
     {
-        SetStatus(row, ReminderStatus.Done, "已标记处理");
+        SetStatus(row, ReminderStatus.Done, "已标记完成");
     }
 
-    private void Dismiss(ReminderRowViewModel row)
-    {
-        SetStatus(row, ReminderStatus.Dismissed, "已忽略这条提醒");
-    }
+    [RelayCommand]
+    private void ToggleHandled() => IsHandledExpanded = !IsHandledExpanded;
 
     /// <summary>稍后提醒：固定推后 10 分钟，回到待触发。比「再想一个时间」快得多。</summary>
     private void Snooze(ReminderRowViewModel row)
@@ -264,7 +260,6 @@ public partial class RemindersViewModel : ObservableObject
 public sealed partial class ReminderRowViewModel : ObservableObject
 {
     private readonly Action<ReminderRowViewModel> _complete;
-    private readonly Action<ReminderRowViewModel> _dismiss;
     private readonly Action<ReminderRowViewModel> _snooze;
     private readonly Action<ReminderRowViewModel> _delete;
 
@@ -272,13 +267,11 @@ public sealed partial class ReminderRowViewModel : ObservableObject
         ReminderItem item,
         DateTime now,
         Action<ReminderRowViewModel> complete,
-        Action<ReminderRowViewModel> dismiss,
         Action<ReminderRowViewModel> snooze,
         Action<ReminderRowViewModel> delete)
     {
         Item = item;
         _complete = complete;
-        _dismiss = dismiss;
         _snooze = snooze;
         _delete = delete;
         TimeText = FormatTime(item.RemindAt, now);
@@ -297,7 +290,7 @@ public sealed partial class ReminderRowViewModel : ObservableObject
 
     public string TimeText { get; }
 
-    /// <summary>待触发但时间已过：调度器还没轮到，或者上次发送失败。</summary>
+    /// <summary>已经过了提醒时间但还没处理：时间文字转琥珀色，行也带暖底。</summary>
     public bool IsOverdue { get; }
 
     public bool IsTaskReminder => Item.Kind == ReminderKind.TaskDue;
@@ -308,21 +301,13 @@ public sealed partial class ReminderRowViewModel : ObservableObject
 
     public bool HasRepeat => Item.RepeatRule != RepeatRule.None;
 
+    /// <summary>已经弹过（到点了）：只有这种才给「10 分钟后再提醒」，没到点的本来就还会响。</summary>
     public bool IsTriggered => Item.Status == ReminderStatus.Fired;
 
     public bool IsHandled => Item.Status is ReminderStatus.Done or ReminderStatus.Dismissed or ReminderStatus.Failed;
 
-    /// <summary>待触发与待处理才能操作；已处理的只留「删除」。</summary>
+    /// <summary>未处理的行才给「完成」；已完成的行只留删除。</summary>
     public bool IsActionable => !IsHandled;
-
-    public string StatusText => Item.Status switch
-    {
-        ReminderStatus.Fired => "待处理",
-        ReminderStatus.Done => "已处理",
-        ReminderStatus.Dismissed => "已忽略",
-        ReminderStatus.Failed => "发送失败",
-        _ => "待触发"
-    };
 
     /// <summary>元信息一行：来源 · 项目 · 重复。用中点拼好，避免 XAML 里堆分隔符。</summary>
     public string MetaText
@@ -336,19 +321,8 @@ public sealed partial class ReminderRowViewModel : ObservableObject
         }
     }
 
-    public IBrush StatusBrush => Item.Status switch
-    {
-        ReminderStatus.Fired => ThemeBrushes.Get("WarningBrush", "#9A5B06"),
-        ReminderStatus.Failed => ThemeBrushes.Get("DangerBrush", "#C0392F"),
-        ReminderStatus.Done => ThemeBrushes.Get("SuccessBrush", "#0F7A57"),
-        _ => ThemeBrushes.Get("TextDimBrush", "#667085")
-    };
-
     [RelayCommand]
     private void Complete() => _complete(this);
-
-    [RelayCommand]
-    private void Dismiss() => _dismiss(this);
 
     [RelayCommand]
     private void Snooze() => _snooze(this);

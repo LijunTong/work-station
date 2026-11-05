@@ -38,11 +38,23 @@ internal sealed class TrayHost : IDisposable
     /// <summary>
     /// 托盘在部分 Linux 桌面环境（无 StatusNotifier 主机）里建不出来。
     /// 那种情况下安静地跳过：应用照常可用，只是关窗口就退出。
+    ///
+    /// <paramref name="error"/> 把失败原因交回去 —— 早先这里 catch 完什么都不说，
+    /// 用户只看到「没有图标」，分不清是系统不支持还是图标没加载出来。
     /// </summary>
-    public static TrayHost? TryCreate(MainWindow window, MainWindowViewModel viewModel)
+    public static TrayHost? TryCreate(MainWindow window, MainWindowViewModel viewModel, out string? error)
     {
         try
         {
+            // 图标读不出来就当作建不出来：Avalonia 允许 TrayIcon.Icon 为 null，
+            // 那样会在通知区域留下一个**看不见的**托盘图标，比没有更糟
+            var icon = LoadIcon();
+            if (icon is null)
+            {
+                error = "托盘图标资源读取失败";
+                return null;
+            }
+
             var todayItem = new NativeMenuItem("今日看板") { Command = new RelayCommand(() => Activate(window, () => viewModel.ShowBoardCommand.Execute(null))) };
             var remindersItem = new NativeMenuItem("未处理提醒") { Command = new RelayCommand(() => Activate(window, () => viewModel.ShowRemindersCommand.Execute(null))) };
 
@@ -53,20 +65,22 @@ internal sealed class TrayHost : IDisposable
             menu.Items.Add(new NativeMenuItemSeparator());
             menu.Items.Add(new NativeMenuItem("退出") { Command = new RelayCommand(Exit) });
 
-            var icon = new TrayIcon
+            var trayIcon = new TrayIcon
             {
-                Icon = LoadIcon(),
+                Icon = icon,
                 ToolTipText = "工作台",
                 Menu = menu,
                 IsVisible = true
             };
 
-            icon.Clicked += (_, _) => Activate(window, null);
+            trayIcon.Clicked += (_, _) => Activate(window, null);
 
-            return new TrayHost(icon, window, viewModel, todayItem, remindersItem);
+            error = null;
+            return new TrayHost(trayIcon, window, viewModel, todayItem, remindersItem);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            error = ex.Message;
             return null;
         }
     }

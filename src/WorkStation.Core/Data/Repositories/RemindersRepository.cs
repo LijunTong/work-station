@@ -65,8 +65,9 @@ public sealed class RemindersRepository
         {
             ReminderScope.Upcoming => ("r.status = 'pending'", "r.remind_at ASC", string.Empty),
             ReminderScope.Triggered => ("r.status = 'fired'", "r.remind_at ASC", string.Empty),
-            // 已处理只留最近 20 条：提醒是「用完就忘」的东西，堆成历史列表反而没人看
-            _ => ("r.status IN ('done','dismissed','failed')", "r.updated_at DESC", "LIMIT 20")
+            // 已处理只留最近 20 条：提醒是「用完就忘」的东西，堆成历史列表反而没人看。
+            // 二级排序用 remind_at：同一秒处理掉的好几条，只按 updated_at 排会每次刷新换个顺序
+            _ => ("r.status IN ('done','dismissed','failed')", "r.updated_at DESC, r.remind_at DESC", "LIMIT 20")
         };
 
         var sql = $"{SelectSql} WHERE {where} ORDER BY {order} {limit}";
@@ -190,6 +191,9 @@ public sealed class RemindersRepository
     /// <summary>
     /// 按任务当前状态同步它的截止提醒。返回是否真的改了库 ——
     /// 启动时会对所有任务跑一遍，值没变就不该产生任何写入。
+    ///
+    /// 「未处理」指 pending / fired / failed 三种：用户还没对它做出决定。
+    /// 只清 pending 是不够的 —— 关掉「提前提醒」后，已经弹过的那条会永远赖在提醒页里。
     /// </summary>
     public bool SyncTaskDue(TaskItem task)
     {
@@ -197,14 +201,15 @@ public sealed class RemindersRepository
             ? null
             : ReminderPlanner.ComputeTaskRemindAt(task.DueAt, task.RemindBefore);
 
-        var existing = ListPendingTaskDue(task.Id);
+        var existing = ListActiveTaskDue(task.Id);
 
         if (desired is null)
         {
-            return DeletePendingTaskDue(task.Id) > 0;
+            return DeleteActiveTaskDue(task.Id) > 0;
         }
 
-        // 已经有一条时间和期望一致的待触发记录：不重写，避免每次启动都把 updated_at 抹一遍
+        // 已经有一条时间一致的未处理记录：不重写，避免每次保存都把 updated_at 抹一遍。
+        // fired 也算「已存在」—— 否则改个任务标题就会删掉旧记录重建，下一拍又弹一遍。
         if (existing.Count == 1 && string.Equals(existing[0].RemindAt, desired, StringComparison.Ordinal))
         {
             return false;
@@ -213,9 +218,11 @@ public sealed class RemindersRepository
         var now = _nowIso();
         using var transaction = _connection.BeginTransaction();
 
-        using (var delete = _connection.Command(
-                   "DELETE FROM reminders WHERE kind = 'task_due' AND task_id = @taskId AND status = 'pending'",
-                   transaction).Bind(("taskId", task.Id)))
+        using (var delete = _connection.Command("""
+                   DELETE FROM reminders
+                   WHERE kind = 'task_due' AND task_id = @taskId
+                     AND status IN ('pending', 'fired', 'failed')
+                   """, transaction).Bind(("taskId", task.Id)))
         {
             delete.ExecuteNonQuery();
         }
@@ -240,24 +247,24 @@ public sealed class RemindersRepository
         return true;
     }
 
-    /// <summary>任务被删掉时清掉它的待触发提醒（fired 的保留，用作历史）。</summary>
-    public int RemovePendingForTask(string taskId) => DeletePendingTaskDue(taskId);
-
-    private IReadOnlyList<(string Id, string RemindAt)> ListPendingTaskDue(string taskId)
+    /// <summary>任务上「用户还没处理」的截止提醒（pending / fired / failed）。</summary>
+    private IReadOnlyList<(string Id, string RemindAt)> ListActiveTaskDue(string taskId)
     {
         using var command = _connection.Command("""
             SELECT id, remind_at FROM reminders
-            WHERE kind = 'task_due' AND task_id = @taskId AND status = 'pending'
+            WHERE kind = 'task_due' AND task_id = @taskId
+              AND status IN ('pending', 'fired', 'failed')
             """).Bind(("taskId", taskId));
 
         return command.ReadAll(reader => (reader.Str("id"), reader.Str("remind_at")));
     }
 
-    private int DeletePendingTaskDue(string taskId)
+    private int DeleteActiveTaskDue(string taskId)
     {
         using var command = _connection.Command("""
             DELETE FROM reminders
-            WHERE kind = 'task_due' AND task_id = @taskId AND status = 'pending'
+            WHERE kind = 'task_due' AND task_id = @taskId
+              AND status IN ('pending', 'fired', 'failed')
             """).Bind(("taskId", taskId));
         return command.ExecuteNonQuery();
     }

@@ -13,12 +13,13 @@
       <Border Classes="task-row" Classes.alert="{Binding IsTriggered}">
         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
 
-          <!-- 待处理用一条琥珀色竖条打头：没有它，这一组和「待触发」长得一模一样 -->
-          <Border Width="3"
-                  CornerRadius="1.5"
-                  Margin="0,2"
-                  Background="{DynamicResource WarningBrush}"
-                  IsVisible="{Binding IsTriggered}" />
+          <!-- 未到点的行没有琥珀竖条，但 3px 的列宽要占住：
+               用 IsVisible 收掉会让标题比暖底行左移 13px，同一组里两种缩进 -->
+          <Border Width="3" Margin="0,2">
+            <Border CornerRadius="1.5"
+                    Background="{DynamicResource WarningBrush}"
+                    IsVisible="{Binding IsTriggered}" />
+          </Border>
 
           <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
             <TextBlock Text="{Binding Title}"
@@ -45,14 +46,10 @@
                       Orientation="Horizontal"
                       Spacing="2"
                       VerticalAlignment="Center">
-            <Border Classes="chip">
-              <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" />
-            </Border>
-
             <Button Classes="icon sm"
                     IsVisible="{Binding IsActionable}"
                     Command="{Binding CompleteCommand}"
-                    ToolTip.Tip="标记已处理">
+                    ToolTip.Tip="标记完成">
               <controls:Icon Kind="Check" Size="13" />
             </Button>
 
@@ -61,13 +58,6 @@
                     Command="{Binding SnoozeCommand}"
                     ToolTip.Tip="10 分钟后再提醒">
               <controls:Icon Kind="Clock" Size="13" />
-            </Button>
-
-            <Button Classes="icon sm"
-                    IsVisible="{Binding IsActionable}"
-                    Command="{Binding DismissCommand}"
-                    ToolTip.Tip="忽略这条提醒">
-              <controls:Icon Kind="Close" Size="12" />
             </Button>
 
             <Button Classes="icon sm dangerish"
@@ -86,7 +76,7 @@
 
     <!-- 顶部：说明 + 新建 -->
     <Grid Grid.Row="0" Margin="28,0,28,14" ColumnDefinitions="*,Auto">
-      <TextBlock Text="任务到点前会自动提醒；下面这些是已经弹过的和手动排的。"
+      <TextBlock Text="任务设了截止时间和「提前提醒」，到点就会弹出来；也可以在这里排一条。"
                  Classes="dim"
                  FontSize="{DynamicResource FontXs}"
                  VerticalAlignment="Center"
@@ -109,35 +99,32 @@
           <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
         </Border>
 
-        <!-- 待处理 -->
-        <StackPanel Spacing="4" IsVisible="{Binding HasTriggered}">
-          <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,2">
-            <TextBlock Text="待处理" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <!-- 待办：已到点的排在最前 -->
+        <StackPanel Spacing="4" IsVisible="{Binding HasActive}">
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="21,0,0,2">
+            <TextBlock Text="待办" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
             <Border Classes="chip">
-              <TextBlock Text="{Binding TriggeredCountText}" />
+              <TextBlock Text="{Binding ActiveCountText}" />
             </Border>
           </StackPanel>
-          <ItemsControl ItemsSource="{Binding Triggered}"
+          <ItemsControl ItemsSource="{Binding Active}"
                         ItemTemplate="{StaticResource ReminderRow}" />
         </StackPanel>
 
-        <!-- 待触发 -->
-        <StackPanel Spacing="4" IsVisible="{Binding HasUpcoming}">
-          <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,2">
-            <TextBlock Text="待触发" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <Border Classes="chip">
-              <TextBlock Text="{Binding UpcomingCountText}" />
-            </Border>
-          </StackPanel>
-          <ItemsControl ItemsSource="{Binding Upcoming}"
-                        ItemTemplate="{StaticResource ReminderRow}" />
-        </StackPanel>
-
-        <!-- 已处理 -->
+        <!-- 已完成：默认收起。它是存档，不是待办，不该和上面抢注意力 -->
         <StackPanel Spacing="4" IsVisible="{Binding HasHandled}">
-          <TextBlock Text="已处理" FontSize="13" FontWeight="SemiBold" Margin="8,6,0,2" />
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="21,6,0,2">
+            <TextBlock Text="已完成" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <Border Classes="chip">
+              <TextBlock Text="{Binding HandledCountText}" />
+            </Border>
+            <Button Classes="ghost sm"
+                    Command="{Binding ToggleHandledCommand}"
+                    Content="{Binding HandledToggleText}" />
+          </StackPanel>
           <ItemsControl ItemsSource="{Binding Handled}"
-                        ItemTemplate="{StaticResource ReminderRow}" />
+                        ItemTemplate="{StaticResource ReminderRow}"
+                        IsVisible="{Binding IsHandledExpanded}" />
         </StackPanel>
 
         <!-- 空态 -->
@@ -253,7 +240,7 @@
           <TextBlock Text="{Binding PendingDelete.Title}"
                      FontWeight="SemiBold"
                      TextWrapping="Wrap" />
-          <TextBlock Text="删除后不再提醒，也不会留在「已处理」里。"
+          <TextBlock Text="删除后不再提醒，也不会留在「已完成」里。"
                      Classes="dim"
                      FontSize="{DynamicResource FontSm}" />
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

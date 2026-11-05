@@ -6,7 +6,7 @@ using WorkStation.Core.Time;
 
 namespace WorkStation.Tests;
 
-/// <summary>提醒页：三组数据、新建抽屉、完成/忽略/稍后/删除。</summary>
+/// <summary>提醒页：两组数据（待办 / 已完成）、新建抽屉、完成 / 稍后 / 删除。</summary>
 public class RemindersViewModelTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -35,22 +35,43 @@ public class RemindersViewModelTests : IDisposable
         }).Data!;
 
     [Fact]
-    public void Reload_SplitsIntoThreeGroups()
+    public void Reload_MergesPaidAndUpcomingIntoOneGroup_WithTriggeredFirst()
     {
-        var a = Create("待处理", _now.AddHours(-1));
+        var a = Create("已到点", _now.AddHours(-1));
         _service.RemindersSetStatus(a.Id, ReminderStatus.Fired);
-        Create("待触发", _now.AddHours(2));
-        var done = Create("已处理", _now.AddHours(-3));
+        Create("还没到", _now.AddHours(2));
+        var done = Create("做完了", _now.AddHours(-3));
         _service.RemindersSetStatus(done.Id, ReminderStatus.Done);
 
         var vm = NewViewModel();
         vm.Reload();
 
-        Assert.Single(vm.Triggered);
-        Assert.Single(vm.Upcoming);
+        // 待办里两条：已到点的排最前，未到点的跟在后面
+        Assert.Equal(2, vm.Active.Count);
+        Assert.Equal("已到点", vm.Active[0].Title);
+        Assert.Equal("还没到", vm.Active[1].Title);
         Assert.Single(vm.Handled);
         Assert.False(vm.ShowEmpty);
-        Assert.True(vm.HasTriggered);
+        Assert.True(vm.HasActive);
+        Assert.Equal("2", vm.ActiveCountText);
+    }
+
+    [Fact]
+    public void HandledGroup_IsCollapsedUntilToggled()
+    {
+        var done = Create("做完了", _now.AddHours(-3));
+        _service.RemindersSetStatus(done.Id, ReminderStatus.Done);
+
+        var vm = NewViewModel();
+        vm.Reload();
+
+        Assert.False(vm.IsHandledExpanded);
+        Assert.Equal("展开", vm.HandledToggleText);
+
+        vm.ToggleHandledCommand.Execute(null);
+
+        Assert.True(vm.IsHandledExpanded);
+        Assert.Equal("收起", vm.HandledToggleText);
     }
 
     [Fact]
@@ -60,7 +81,7 @@ public class RemindersViewModelTests : IDisposable
         vm.Reload();
 
         Assert.True(vm.ShowEmpty);
-        Assert.False(vm.HasTriggered);
+        Assert.False(vm.HasActive);
     }
 
     [Fact]
@@ -75,7 +96,7 @@ public class RemindersViewModelTests : IDisposable
     }
 
     [Fact]
-    public void NewReminder_SavesAndAppearsInUpcoming()
+    public void NewReminder_SavesAndAppearsInActive()
     {
         var vm = NewViewModel();
         vm.NewReminderCommand.Execute(null);
@@ -86,7 +107,7 @@ public class RemindersViewModelTests : IDisposable
         vm.Form.SaveCommand.Execute(null);
 
         Assert.False(vm.IsFormOpen);
-        var row = Assert.Single(vm.Upcoming);
+        var row = Assert.Single(vm.Active);
         Assert.Equal("交电费", row.Title);
         Assert.Equal("每天", row.RepeatText);
         Assert.Equal("明天 09:00", row.TimeText);
@@ -101,36 +122,37 @@ public class RemindersViewModelTests : IDisposable
 
         Assert.True(vm.IsFormOpen);
         Assert.Contains("不能为空", vm.Form.Error);
-        Assert.Empty(vm.Upcoming);
+        Assert.Empty(vm.Active);
     }
 
     [Fact]
-    public void Complete_MovesTriggeredToHandled()
+    public void Complete_MovesRowToHandled()
     {
         var item = Create("该处理了", _now.AddHours(-1));
         _service.RemindersSetStatus(item.Id, ReminderStatus.Fired);
 
         var vm = NewViewModel();
         vm.Reload();
-        vm.Triggered[0].CompleteCommand.Execute(null);
+        vm.Active[0].CompleteCommand.Execute(null);
 
-        Assert.Empty(vm.Triggered);
+        Assert.Empty(vm.Active);
         Assert.Single(vm.Handled);
-        Assert.Equal("已处理", vm.Handled[0].StatusText);
+        Assert.Equal("该处理了", vm.Handled[0].Title);
     }
 
     [Fact]
-    public void Dismiss_AlsoClearsTriggered()
+    public void HandledRows_OfferNoActionsExceptDelete()
     {
-        var item = Create("忽略它", _now.AddHours(-1));
-        _service.RemindersSetStatus(item.Id, ReminderStatus.Fired);
+        var item = Create("做完了", _now.AddHours(-3));
+        _service.RemindersSetStatus(item.Id, ReminderStatus.Done);
 
         var vm = NewViewModel();
         vm.Reload();
-        vm.Triggered[0].DismissCommand.Execute(null);
 
-        Assert.Empty(vm.Triggered);
-        Assert.Equal("已忽略", vm.Handled[0].StatusText);
+        var row = Assert.Single(vm.Handled);
+        Assert.True(row.IsHandled);
+        Assert.False(row.IsActionable);
+        Assert.False(row.IsTriggered);
     }
 
     [Fact]
@@ -141,12 +163,13 @@ public class RemindersViewModelTests : IDisposable
 
         var vm = NewViewModel();
         vm.Reload();
-        vm.Triggered[0].SnoozeCommand.Execute(null);
+        vm.Active[0].SnoozeCommand.Execute(null);
 
-        Assert.Empty(vm.Triggered);
-        var row = Assert.Single(vm.Upcoming);
+        // 推后 10 分钟回到「待办」，只是不再算作已到点
+        var row = Assert.Single(vm.Active);
         Assert.Equal(Local(_now.AddMinutes(10)), _service.RemindersGet(item.Id).Data!.RemindAt);
         Assert.Equal("今天 12:10", row.TimeText);
+        Assert.False(row.IsTriggered);
     }
 
     [Fact]
@@ -156,15 +179,15 @@ public class RemindersViewModelTests : IDisposable
 
         var vm = NewViewModel();
         vm.Reload();
-        vm.Upcoming[0].DeleteCommand.Execute(null);
+        vm.Active[0].DeleteCommand.Execute(null);
 
         Assert.True(vm.IsDeleteConfirmOpen);
-        Assert.Single(vm.Upcoming);
+        Assert.Single(vm.Active);
 
         vm.ConfirmDeleteCommand.Execute(null);
 
         Assert.False(vm.IsDeleteConfirmOpen);
-        Assert.Empty(vm.Upcoming);
+        Assert.Empty(vm.Active);
     }
 
     [Fact]
@@ -182,7 +205,7 @@ public class RemindersViewModelTests : IDisposable
         var vm = NewViewModel();
         vm.Reload();
 
-        var row = Assert.Single(vm.Upcoming);
+        var row = Assert.Single(vm.Active);
         Assert.Equal("写总结", row.Title);
         Assert.Equal("任务截止 · 年度总结", row.MetaText);
         Assert.False(row.IsTriggered);

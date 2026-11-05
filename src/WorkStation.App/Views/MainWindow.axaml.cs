@@ -41,6 +41,9 @@ public partial class MainWindow : Window
     /// </summary>
     public bool TrayAvailable { get; set; }
 
+    /// <summary>托盘没建起来的原因，启动后提示一次，不让它静默失败。</summary>
+    public string? TrayUnavailableReason { get; set; }
+
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
 
     /// <summary>托盘菜单「退出」走这里：绕过驻留逻辑，真正关掉窗口。</summary>
@@ -76,6 +79,12 @@ public partial class MainWindow : Window
         }
 
         viewModel.StartReminderPump();
+
+        // 托盘没建成时，用户看不到任何图标；不说一声就变成「关窗口直接退出」太难解释
+        if (TrayUnavailableReason is { } reason)
+        {
+            viewModel.ShowToast($"托盘没建起来（{reason}）：关闭窗口会直接退出", true);
+        }
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)

@@ -29,9 +29,11 @@ public partial class App : Application
                 var window = new MainWindow(_viewModel);
                 desktop.MainWindow = window;
 
-                // 托盘建不出来（少数 Linux 桌面）不影响应用可用，只是关窗口就直接退出
-                _tray = TrayHost.TryCreate(window, _viewModel);
+                // 托盘建不出来（少数 Linux 桌面、或图标资源读不到）不影响应用可用，
+                // 只是关窗口就直接退出；原因交给窗口，首次打开时提示一次
+                _tray = TrayHost.TryCreate(window, _viewModel, out var trayError);
                 window.TrayAvailable = _tray is not null;
+                window.TrayUnavailableReason = trayError;
 
                 SingleInstance.ActivationRequested += () =>
                     Dispatcher.UIThread.Post(() => ActivateWindow(window, desktop));

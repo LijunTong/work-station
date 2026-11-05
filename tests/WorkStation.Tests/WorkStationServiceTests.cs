@@ -156,6 +156,67 @@ public class WorkStationServiceTests : IDisposable
     }
 
     [Fact]
+    public void UpdateTask_TurningReminderOff_RemovesPendingReminder()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "不提醒了我",
+            DueAt = Local(DateTime.Today.AddDays(1).AddHours(18)),
+            RemindBefore = 60
+        }).Data!;
+        Assert.Single(_service.RemindersList(ReminderScope.Upcoming).Data!);
+
+        _service.TasksUpdate(task.Id, new UpdateTaskInput { RemindBefore = Optional<int?>.Some(0) });
+
+        Assert.Empty(_service.RemindersList(ReminderScope.Upcoming).Data!);
+    }
+
+    /// <summary>
+    /// 用户报过的问题：把任务的「提前提醒」改成不提醒，提醒页里那条还在。
+    /// 原因是同步时只删 pending；已经弹过（fired）的那条没人管，会一直赖在待办里。
+    /// </summary>
+    [Fact]
+    public void UpdateTask_TurningReminderOff_AlsoClearsAlreadyFiredOne()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "已经弹过了",
+            DueAt = Local(DateTime.Today.AddDays(1).AddHours(18)),
+            RemindBefore = 60
+        }).Data!;
+
+        var fired = Assert.Single(_service.RemindersList(ReminderScope.Upcoming).Data!);
+        _service.RemindersSetStatus(fired.Id, ReminderStatus.Fired);
+        Assert.Single(_service.RemindersList(ReminderScope.Triggered).Data!);
+
+        _service.TasksUpdate(task.Id, new UpdateTaskInput { RemindBefore = Optional<int?>.Some(0) });
+
+        Assert.Empty(_service.RemindersList(ReminderScope.Triggered).Data!);
+        Assert.Empty(_service.RemindersList(ReminderScope.Upcoming).Data!);
+    }
+
+    [Fact]
+    public void UpdateTask_DoesNotRearmAlreadyFiredReminder()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "改个标题而已",
+            DueAt = Local(DateTime.Today.AddDays(1).AddHours(18)),
+            RemindBefore = 60
+        }).Data!;
+
+        var fired = Assert.Single(_service.RemindersList(ReminderScope.Upcoming).Data!);
+        _service.RemindersSetStatus(fired.Id, ReminderStatus.Fired);
+
+        // 只改标题、提醒时间没变：不能把已触发的那条删掉重建，否则下一拍又弹一遍
+        _service.TasksUpdate(task.Id, new UpdateTaskInput { Title = Optional<string>.Some("改过的标题") });
+
+        Assert.Single(_service.RemindersList(ReminderScope.Triggered).Data!);
+        Assert.Empty(_service.RemindersList(ReminderScope.Upcoming).Data!);
+    }
+
+
+    [Fact]
     public void TasksSetStatus_Done_RemovesPendingReminder()
     {
         var task = _service.TasksCreate(new CreateTaskInput

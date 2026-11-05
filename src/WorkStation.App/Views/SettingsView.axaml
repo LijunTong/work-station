@@ -92,6 +92,13 @@
                       IsChecked="{Binding CloseToTray, Mode=TwoWay}"
                       VerticalAlignment="Center" />
           </Grid>
+
+          <!-- 找不到托盘图标的用户，第一步都是「它是不是没生效」。Windows 11 默认把新图标塞进
+               ^ 折叠区，不给这句话就只能靠猜 -->
+          <TextBlock Text="图标在任务栏右下角。Windows 11 会把它收进 ^ 折叠区，拖出来就能常驻；退出请用托盘菜单里的「退出」。"
+                     Classes="dim"
+                     FontSize="{DynamicResource FontXs}"
+                     TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
