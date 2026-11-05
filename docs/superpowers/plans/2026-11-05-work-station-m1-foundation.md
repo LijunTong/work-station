@@ -12,6 +12,131 @@
 
 ---
 
+## 实施进度
+
+> **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
+>
+> **最近更新：** 2026-11-05 · Task 5 修复轮 1
+
+**当前状态：M1 骨架与数据层进行中。13 个任务已完成 5 个；Task 5 评审提出的 4 个 Important 已修复并落到工作区，待复审与提交。Task 6–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+
+### 里程碑总览
+
+| 里程碑 | 范围 | 状态 |
+| --- | --- | --- |
+| M1 | 骨架与数据层（13 任务） | 进行中 · 5/13 |
+| M2 | 看板与拖拽 | 未拆解 |
+| M3 | 提醒与报告 | 未拆解 |
+| M4 | 打磨与发布 | 未拆解 |
+
+### 任务进度
+
+| # | 任务 | 状态 | 提交 | 评审 | 用例 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 工程骨架与构建打包链路 | ✅ 完成 | `0081ce7` | 通过 | — |
+| 2 | 共享类型与工具函数 | ✅ 完成 | `9fe2c69` | 通过 | 7 |
+| 3 | 数据库连接、迁移与完整性检查 | ✅ 完成 | `2aac476` `0412c8a` `f830e26` | 通过（2 轮修复） | 17 |
+| 4 | 项目仓储与进度计算 | ✅ 完成 | `1660c77` `4b6d88c` | 通过（1 轮修复） | 18 + 6 |
+| 5 | 任务仓储 | 🔄 修复轮 1 已落地，待复审提交 | `8ab6a27`（+ 工作区未提交改动） | 结论通过，提出 4 个 Important，现已全部修复 | 19 |
+| 6 | 标签仓储 | ⬜ 未开始 | — | — | — |
+| 7 | 设置仓储 | ⬜ 未开始 | — | — | — |
+| 8 | IPC 路由与 preload 桥接 | ⬜ 未开始 | — | — | — |
+| 9 | 渲染进程基础（API 客户端 / 主题 / 布局） | ⬜ 未开始 | — | — | — |
+| 10 | 通用 UI 组件集 | ⬜ 未开始 | — | — | — |
+| 11 | 项目管理页 | ⬜ 未开始 | — | — | — |
+| 12 | 任务列表页与快速添加 | ⬜ 未开始 | — | — | — |
+| 13 | 打包配置、README、M1 手测清单 | ⬜ 未开始 | — | — | — |
+| — | M1 收尾：全分支最终评审 + 修复波 | ⬜ 未开始 | — | — | — |
+
+合计 **67** 条用例全绿（5 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
+
+### 已交付代码（Task 1–5）
+
+```
+electron/
+├─ db.ts                     连接、迁移、完整性检查、事务
+├─ migrations.ts             MIGRATIONS v1（7 表 + 6 索引 + CHECK 约束）
+├─ lib/result.ts             ok / fail / toBool / nullable
+├─ util/time.ts              nowIso / toLocalDate / toLocalDateTime / isLocalDateTime
+├─ util/id.ts                newId
+├─ repositories/projects.ts  项目仓储
+├─ repositories/tasks.ts     任务仓储
+├─ main.ts                   窗口生命周期 + 损坏恢复 + 每日备份
+└─ preload.ts                脚手架（Task 8 重写）
+src/
+├─ types/entities.ts         12 个导出类型
+├─ lib/progress.ts           computeProgress（全项目唯一实现）
+└─ App.tsx / main.tsx / index.html   渲染端脚手架
+tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19
+```
+
+### 实施中发现并修掉的真实缺陷
+
+这些不是风格建议，是会让程序跑不对的问题，均已带测试固化：
+
+1. **Windows 上损坏恢复句柄泄漏** → `renameSync` 抛 EBUSY → 启动时未处理的 rejection → **窗口根本不弹**。
+2. **`db.location()` 在 `@types/node` 里是 `string | null`**，照抄过不了 typecheck。
+3. **dev 模式数据库落到 `out/.data/`**（构建产物目录）而不是项目根。
+4. **`runMigrations` 按数组序执行** → 乱序追加迁移会让 `user_version` 回退 → **第二次启动建库失败**。
+5. **`withTransaction` / `runMigrations` 的 ROLLBACK 自身抛错会掩盖原始异常** → 磁盘满时用户看到 "cannot rollback" 而不是真实原因。
+6. **`openDatabase` 在 PRAGMA 失败时泄漏文件句柄**，连 unlink 都是 EBUSY。
+7. **`app.whenReady().then()` 没有 `.catch()`** → DB 失败则进程活着、无窗口、零提示。
+8. **`src/lib/progress.ts` 用了 `@/types/entities` 别名**，主进程 program 无 `@` 别名 → TS2307。
+9. **`due_at` 无格式校验** → 误传 ISO UTC 串会让当天 18:00 到期的任务被判逾期（评审用 node:sqlite 实证了边界翻转）→ 现已在写入前 `isLocalDateTime` 校验并抛错。
+
+### 关键决策
+
+产品层面的 13 条决策见设计文档；以下是实施阶段新增的 5 条：
+
+| # | 决策 | 理由 |
+| --- | --- | --- |
+| 12 | 逾期判定全项目统一为墙钟口径 `due_at < toLocalDateTime(now)` | 原三处算法互相打架：同一任务会在列表标红却不计入项目徽标 |
+| 13 | `TaskFilter` 增加 `tagIds?: string[]`（EXISTS 子查询） | M2 看板「按标签筛选」需要；标签仓储只有 task→tags 方向，替代不了 |
+| 14 | 进度计算只保留一份于 `src/lib/progress.ts` | 主进程与渲染进程共用；逐字重复会被评审判为缺陷 |
+| 15 | `dueAt` 写入前必须格式校验 | 静默错判比显式失败危险得多 |
+| 16 | 不提前写 M2/M3/M4 计划 | 任务拆分依赖前一里程碑的真实代码结构 |
+
+### 跨任务事实（已实测，勿重新踩）
+
+- `node:sqlite` **默认开启外键约束**（Node 22.22.2 与 Electron 内置 Node 24.22.2 一致）→ 显式 `PRAGMA foreign_keys = ON` 冗余但无害。
+- `node:sqlite` 的 `SUM(CASE...)` 在无匹配行时返回 `null` → 聚合查询里的 `?? 0` 是**承重分支**，不是防御性冗余。
+- `node:sqlite` 的文本字典序在两种时间格式混用时**边界方向会翻转** → 所有时间比较必须两侧同格式。
+- `isLocalDateTime` 只校验格式不校验日历有效性（`2026-99-99T99:99` 会通过）—— Task 2 冻结的契约，不改。
+- 迁移版本号有「空洞」语义：先发 v3 再补 v2，`filter(version > current)` 会**静默丢弃 v2 且不报错**。补版本号不会补跑缺失的迁移。
+- Electron 二进制直连 GitHub 仅 45–105 KB/s，需 `ELECTRON_MIRROR` 指向 npmmirror（已用 `checksums.json` 校验 sha256 与官方 Release 一致，未改仓库文件）。
+- 本机 npm 10.9.7 有已知 arborist 崩溃 bug（npm/cli#9787），**仅在无锁文件时触发**；锁文件已生成，后续任务不再受影响。
+
+### 验证方式
+
+```powershell
+cd "E:\Joont\AI Agent Workspace\work-station"
+npm test                            # 67 用例全绿
+npm run typecheck                   # tsc 双 program 无错
+npm run build                       # electron-vite 三端构建
+npm run build:win                   # electron-builder portable exe（Task 1 实测 104.7MB 可启动）
+npx vitest run tests/tasks.test.ts  # 单文件聚焦
+```
+
+### 当前待办
+
+1. **Task 5 修复轮 1**：4 个 Important 的代码与测试已落到工作区（`dueAt` 格式校验 / 状态迁移保留原值 / `dueBefore`+`dueAfter` / `tagIds` 筛选），待复审 + 提交。
+2. **Task 6 标签仓储、Task 7 设置仓储** —— 照抄 Task 4/5 的定稿仓储模板。
+3. **Task 8 IPC 与 preload** —— 收尾必须重跑 `npm run typecheck`：`src/lib/progress.ts` 会在这一步首次进入主进程 program，此前 `@` 别名问题不会触发。
+4. **Task 9–13** 渲染端与打包。
+5. **M1 收尾**：全分支最终评审 + 修复波。
+
+### 延后 Minor 清单
+
+记账于 SDD 账本，暂不处理，留到 M1 收尾统一评估：
+
+- **Task 1**：electron-builder 把 react/react-dom/zustand/@dnd-kit 打进 asar（exe 104.7MB）→ 可移入 devDependencies 瘦身；`electron/main.ts` 有模块作用域副作用 → Task 8 顺手收进 `main()`。
+- **Task 2**：`isLocalDateTime` 不校验日历有效性（冻结契约）；`toLocalDate` 年份不补零到 4 位；`entities.ts` 的 channel 是内联字面量、缺 `ReminderChannel` 命名类型；`newId` / `nowIso` 无直接断言。
+- **Task 3**：损坏快照 stamp 只到天、同日二次损坏会覆盖上次快照；`copyFileSync` 备份非原子；`reminders.kind='task_due'` 但 `task_id` 可空、缺跨列约束；`db.close()` 自身抛错被吞；回滚失败原因完全不可观测；`runMigrations`（包装+cause）与 `withTransaction`（原样重抛）错误契约不一致；`main.ts` 用 `String(error)` 丢弃堆栈；测试里 PRAGMA foreign_keys 断言恒真、给虚假安全感；测试的 `rmSync` 在 Windows 遇未关闭句柄会把单条失败升级为套件级失败。
+- **Task 4**：`countTasks` 的类型断言漏 `| undefined`；`create` 硬编码 `sort_order=0` → 「把项目置顶」目前无法表达（留给 M2）；`projects:remove` 是级联硬删且无二次确认（Task 8 的 UI 需要知道这是破坏性操作）。
+- **Task 5**：`includeDone:false` 只排除 done 不排除 canceled，与本仓储对 canceled 的处理不一致；`status` 与 `includeDone` 不可组合，后者被 `else if` 静默吞掉；`countOverdue` 入参无格式护栏（误传日期串会少算）；`row.c ?? 0` 是无效防御；`ALL_STATUSES.filter(...)` 计算两次；`countByStatus` 对未知 status 直接写键；测试里有恒真断言；`create` 不能指定 `sortOrder`，排序要两次写入。
+
+---
+
 ## Global Constraints
 
 这些约束适用于本计划的每一个任务，任务描述里不再重复。
@@ -70,6 +195,8 @@
 3. **逾期判定统一墙钟口径**（见上）。
 4. **测试断言与当前时间相关的场景时，冻结时钟**：`vi.mock('../electron/util/time')` 冻结 `toLocalDate` / `toLocalDateTime`，避免午夜边界 flake。冻结值要与真实实现自洽（`toLocalDateTime(d)` = `toLocalDate(d)` + `T` + 时分）。
 5. **可空字段的 update 语义**：区分「没传」与「传了 null」用 `patch.x === undefined ? existing.x : patch.x`；非空字段用 `??`。合并后的记录类型用 `Required<UpdateInput>`，否则 `merged.x` 带 `undefined`，`node:sqlite` 的绑定参数不接受。
+6. **`dueAt` 写入前必须校验格式**：用 `electron/util/time.ts` 的 `isLocalDateTime(value)` 检查。全项目的「到期/截止」判定都建立在「`YYYY-MM-DDTHH:mm` 定长且有序」的字符串契约上 —— 若有人误传 ISO UTC 串（`2026-11-05T06:30:00.000Z`），字典序比较会把当天 18:00 到期的任务判成逾期。**静默错判必须变成显式失败**。
+7. **`TaskFilter` 必须能按标签筛选**：`tagIds?: string[]`，SQL 用 `EXISTS (SELECT 1 FROM task_tags tt WHERE tt.task_id = tasks.id AND tt.tag_id IN (...))` 实现。M2 看板的「按标签筛选」依赖它；标签仓储只有 task→tags 方向，不能替代。
 
 ### 命名约定
 
@@ -178,7 +305,7 @@ work-station/
   - `electron/preload.ts` 向 `window` 暴露 `window.api`（M1 先放占位对象，Task 8 补齐）
   - 构建产物路径：`out/main/index.js`、`out/preload/index.js`、`out/renderer/index.html`
 
-- [ ] **Step 1: 初始化 git 仓库**
+- [x] **Step 1: 初始化 git 仓库**
 
 ```bash
 cd "E:\Joont\AI Agent Workspace\work-station"
@@ -186,7 +313,7 @@ git init
 git symbolic-ref HEAD refs/heads/main
 ```
 
-- [ ] **Step 2: 写 `package.json`**
+- [x] **Step 2: 写 `package.json`**
 
 ```json
 {
@@ -226,7 +353,7 @@ git symbolic-ref HEAD refs/heads/main
 }
 ```
 
-- [ ] **Step 3: 写 TS 配置**
+- [x] **Step 3: 写 TS 配置**
 
 `tsconfig.json`（渲染进程 + 共享代码）：
 
@@ -276,7 +403,7 @@ git symbolic-ref HEAD refs/heads/main
 }
 ```
 
-- [ ] **Step 4: 写构建配置**
+- [x] **Step 4: 写构建配置**
 
 `electron.vite.config.ts`：
 
@@ -367,7 +494,7 @@ build/icon.ico
 build/icon.png
 ```
 
-- [ ] **Step 5: 写最小主进程与渲染进程**
+- [x] **Step 5: 写最小主进程与渲染进程**
 
 `electron/main.ts`：
 
@@ -490,7 +617,7 @@ declare global {
 export {};
 ```
 
-- [ ] **Step 6: 安装依赖**
+- [x] **Step 6: 安装依赖**
 
 ```bash
 cd "E:\Joont\AI Agent Workspace\work-station"
@@ -499,7 +626,7 @@ npm install
 
 Expected: 安装成功，无 peer dependency 警告；若出现 peer 冲突说明版本被改过，回查 Global Constraints。
 
-- [ ] **Step 7: 类型检查与构建验证**
+- [x] **Step 7: 类型检查与构建验证**
 
 ```bash
 npm run typecheck && npm run build
@@ -507,7 +634,7 @@ npm run typecheck && npm run build
 
 Expected: 两条命令都退出码 0；`out/main/index.js`、`out/preload/index.js`、`out/renderer/index.html` 三个产物存在。
 
-- [ ] **Step 8: 开发模式冒烟验证**
+- [x] **Step 8: 开发模式冒烟验证**
 
 ```bash
 npm run dev
@@ -515,7 +642,7 @@ npm run dev
 
 Expected: 弹出窗口显示「工作台 Work Station」和「M1 骨架已就绪。」，无控制台报错。手动关闭窗口结束该进程。
 
-- [ ] **Step 9: 打包验证**
+- [x] **Step 9: 打包验证**
 
 ```bash
 npm run build:win
@@ -523,7 +650,7 @@ npm run build:win
 
 Expected: `dist/WorkStation-0.1.0-portable.exe` 生成。双击 exe 应能启动并显示同一页面（此时数据库尚未接入，页面内容不变）。
 
-- [ ] **Step 10: 提交**
+- [x] **Step 10: 提交**
 
 ```bash
 git add -A
@@ -545,7 +672,7 @@ git commit -m "feat: 初始化 Electron + React + TypeScript 工程骨架与打�
   - `electron/util/id.ts` 导出 `newId(): string`
   - `electron/util/time.ts` 导出 `nowIso(): string`、`toLocalDate(d: Date): string`、`toLocalDateTime(d: Date): string`、`isLocalDateTime(value: string): boolean`
 
-- [ ] **Step 1: 写实体类型**
+- [x] **Step 1: 写实体类型**
 
 `src/types/entities.ts`：
 
@@ -628,7 +755,7 @@ export interface Report {
 }
 ```
 
-- [ ] **Step 2: 写 ID 与时间工具**
+- [x] **Step 2: 写 ID 与时间工具**
 
 `electron/util/id.ts`：
 
@@ -662,7 +789,7 @@ export function isLocalDateTime(value: string): boolean {
 }
 ```
 
-- [ ] **Step 3: 写时间工具的失败测试**
+- [x] **Step 3: 写时间工具的失败测试**
 
 `tests/time.test.ts`：
 
@@ -701,7 +828,7 @@ describe('time 工具', () => {
 });
 ```
 
-- [ ] **Step 4: 运行测试确认失败**
+- [x] **Step 4: 运行测试确认失败**
 
 ```bash
 npx vitest run tests/time.test.ts
@@ -709,7 +836,7 @@ npx vitest run tests/time.test.ts
 
 Expected: FAIL —— 报 `Failed to resolve import "../electron/util/time"`。
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 ```bash
 npx vitest run tests/time.test.ts
@@ -717,7 +844,7 @@ npx vitest run tests/time.test.ts
 
 Expected: PASS，7 个用例全绿。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add -A
@@ -749,7 +876,7 @@ git commit -m "feat: 添加领域实体类型与 ID/时间工具"
     - `toBool(value: boolean): number`（boolean → 0/1，给 node:sqlite 绑定用）
     - `nullable<T>(value: T | null | undefined): T | null`（undefined → null）
 
-- [ ] **Step 1: 写迁移定义**
+- [x] **Step 1: 写迁移定义**
 
 `electron/migrations.ts`：
 
@@ -863,7 +990,7 @@ CREATE INDEX idx_reports_period ON reports(kind, period_start);
 ];
 ```
 
-- [ ] **Step 2: 写 Result 工具**
+- [x] **Step 2: 写 Result 工具**
 
 `electron/lib/result.ts`：
 
@@ -889,7 +1016,7 @@ export function nullable<T>(value: T | null | undefined): T | null {
 }
 ```
 
-- [ ] **Step 3: 写数据库模块**
+- [x] **Step 3: 写数据库模块**
 
 `electron/db.ts`：
 
@@ -959,7 +1086,7 @@ export function backupDatabase(db: DatabaseSync, targetPath: string): void {
 
 **注意**：`db.location()` 返回当前数据库文件路径（已实测）。若 `openDatabase` 传入的是 `:memory:`，`db.location()` 返回 **`null`**（不是空字符串），此时 `backupDatabase` 会因 `copyFileSync(null, ...)` 抛错 —— **测试中不要调用它**，生产路径永远传真实文件路径。
 
-- [ ] **Step 4: 写数据库的失败测试**
+- [x] **Step 4: 写数据库的失败测试**
 
 `tests/db.test.ts`：
 
@@ -1055,7 +1182,7 @@ describe('openDatabase', () => {
 });
 ```
 
-- [ ] **Step 5: 运行测试确认失败**
+- [x] **Step 5: 运行测试确认失败**
 
 ```bash
 npx vitest run tests/db.test.ts
@@ -1063,7 +1190,7 @@ npx vitest run tests/db.test.ts
 
 Expected: FAIL —— 报 `Failed to resolve import "../electron/db"`。
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 6: 运行测试确认通过**
 
 ```bash
 npx vitest run tests/db.test.ts
@@ -1071,7 +1198,7 @@ npx vitest run tests/db.test.ts
 
 Expected: PASS，8 个用例全绿。
 
-- [ ] **Step 7: 主进程接入数据库，并实现损坏恢复与每日备份**
+- [x] **Step 7: 主进程接入数据库，并实现损坏恢复与每日备份**
 
 改 `electron/main.ts`：在 `app.whenReady()` 里打开数据库、执行迁移、检查完整性、做每日备份。
 
@@ -1156,7 +1283,7 @@ app.whenReady().then(() => {
 
 **注意**：Task 8 会在这段里追加 `registerIpc(db, dbPath)` 一行，位于 `runDailyBackup` 之后、`createMainWindow()` 之前。
 
-- [ ] **Step 8: 验证开发模式能建库**
+- [x] **Step 8: 验证开发模式能建库**
 
 ```bash
 npm run dev
@@ -1164,7 +1291,7 @@ npm run dev
 
 Expected: 窗口正常弹出；`.data/data.db`、`.data/data.db-wal`、`.data/data.db-shm` 三个文件出现；`.data/backups/data-<今天日期>.db` 备份文件也生成。关闭进程。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add -A
@@ -1205,11 +1332,13 @@ git commit -m "feat: 添加 SQLite 连接、版本化迁移与完整性检查"
 }
 ```
 
-- [ ] **Step 1: 写进度计算纯函数**
+- [x] **Step 1: 写进度计算纯函数**
 
 `src/lib/progress.ts`：
 
 ```ts
+// 用相对路径而不是 @ 别名：tsconfig.node.json（主进程程序）没有 paths 配置，
+// 该文件一旦被 electron/** 引入，别名就会报 TS2307
 import type { TaskStatus } from '../types/entities';
 
 export function computeProgress(tasks: Array<{ status: TaskStatus }>): number {
@@ -1222,7 +1351,7 @@ export function computeProgress(tasks: Array<{ status: TaskStatus }>): number {
 
 **注意**：这个函数放在 `src/lib/` 而不是 `electron/lib/`，因为主进程与渲染进程都要用它。主进程从 `../../src/lib/progress` 引入，与主进程从 `../../src/types/entities` 取类型的做法一致。**全项目只此一份，不要在任何其他位置复制它。**
 
-- [ ] **Step 2: 写进度的失败测试**
+- [x] **Step 2: 写进度的失败测试**
 
 `tests/progress.test.ts`：
 
@@ -1257,7 +1386,7 @@ describe('进度计算', () => {
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 ```bash
 npx vitest run tests/progress.test.ts
@@ -1265,7 +1394,7 @@ npx vitest run tests/progress.test.ts
 
 Expected: FAIL —— `Failed to resolve import "../electron/lib/progress"`。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 ```bash
 npx vitest run tests/progress.test.ts
@@ -1273,7 +1402,7 @@ npx vitest run tests/progress.test.ts
 
 Expected: PASS，6 个用例全绿。
 
-- [ ] **Step 5: 写项目仓储**
+- [x] **Step 5: 写项目仓储**
 
 `electron/repositories/projects.ts`：
 
@@ -1286,9 +1415,11 @@ import type {
   ProjectStatus
 } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso } from '../util/time';
+import { nowIso, toLocalDateTime } from '../util/time';
 import { nullable } from '../lib/result';
 
+// 用 type 而非 interface：node:sqlite 的 all() 返回 Record<string, SQLOutputValue>[]，
+// 类型别名（对象类型字面量）才有隐式索引签名，interface 没有，直接断言会报 TS2352
 type ProjectRow = {
   id: string;
   name: string;
@@ -1358,10 +1489,13 @@ export function createProjectsRepo(db: DatabaseSync) {
   );
   const selectById = db.prepare('SELECT * FROM projects WHERE id = ?');
   const selectByName = db.prepare('SELECT * FROM projects WHERE name = ?');
-  const getById = (id: string): Project | null => {
+
+  // 局部查询函数：内部调用不依赖返回对象的 this 绑定，
+  // 解构（const { create } = repo）或把方法当回调传（list().map(repo.get)）都不会炸
+  function getById(id: string): Project | null {
     const row = selectById.get(id) as ProjectRow | undefined;
     return row ? mapRow(row) : null;
-  };
+  }
 
   return {
     list(options?: { includeArchived?: boolean }): Project[] {
@@ -1411,7 +1545,9 @@ export function createProjectsRepo(db: DatabaseSync) {
       const existing = getById(id);
       if (!existing) return null;
 
-      const merged: UpdateProjectInput = {
+      // 合并后的记录每个字段都已确定，用 Required 去掉可选性：
+      // 否则字段类型会带上 undefined，node:sqlite 不接受 undefined 作为绑定参数
+      const merged: Required<UpdateProjectInput> = {
         name: patch.name ?? existing.name,
         description: patch.description ?? existing.description,
         status: patch.status ?? existing.status,
@@ -1452,9 +1588,11 @@ export function createProjectsRepo(db: DatabaseSync) {
     },
 
     archive(id: string): boolean {
+      // archived_at 与 updated_at 语义相同，取一次时间戳复用，避免两次调用差 1ms
+      const now = nowIso();
       const result = db
         .prepare('UPDATE projects SET archived_at = ?, updated_at = ? WHERE id = ?')
-        .run(nowIso(), nowIso(), id);
+        .run(now, now, id);
       return Number(result.changes) > 0;
     },
 
@@ -1471,6 +1609,8 @@ export function createProjectsRepo(db: DatabaseSync) {
     },
 
     countTasks(projectId: string): { total: number; done: number; overdue: number; doing: number } {
+      // 本地墙钟当前时刻（YYYY-MM-DDTHH:mm），与 due_at 同格式，字典序即时间序。
+      // 全项目统一墙钟口径：与 Task 10 的 isOverdue(dueAt, nowLocalDateTime)、Task 11 徽标一致
       const now = toLocalDateTime(new Date());
       const row = db
         .prepare(
@@ -1503,7 +1643,7 @@ export type ProjectsRepo = ReturnType<typeof createProjectsRepo>;
 
 **注意**：`countTasks` 的逾期判定用 `due_at < ?` 配合 `toLocalDateTime(new Date())`（**本地墙钟当前时刻**）。`due_at` 与之同为 `YYYY-MM-DDTHH:mm` 定长格式，字典序即时间序。**不要用 `nowIso().slice(0, 10)`**（UTC 日期，会与本地墙钟差最多一天）。**也不要退回 `toLocalDate(new Date())`（只到天）** —— 那会让「今天 09:00 到期、现在 10:00」的任务不算逾期，与 Task 10 的 `isOverdue(dueAt, nowLocalDateTime)`（墙钟口径）及 Task 11 项目卡片不一致，同一个任务会在任务列表标红、在项目卡片却不计入逾期徽标。全项目统一用墙钟口径。
 
-- [ ] **Step 6: 写项目仓储的失败测试**
+- [x] **Step 6: 写项目仓储的失败测试**
 
 `tests/projects.test.ts`：
 
@@ -1609,7 +1749,7 @@ describe('项目仓储', () => {
 });
 ```
 
-- [ ] **Step 7: 运行测试确认失败**
+- [x] **Step 7: 运行测试确认失败**
 
 ```bash
 npx vitest run tests/projects.test.ts
@@ -1617,7 +1757,7 @@ npx vitest run tests/projects.test.ts
 
 Expected: FAIL —— `Failed to resolve import "../electron/repositories/projects"`。
 
-- [ ] **Step 8: 运行测试确认通过**
+- [x] **Step 8: 运行测试确认通过**
 
 ```bash
 npx vitest run tests/projects.test.ts
@@ -1625,7 +1765,7 @@ npx vitest run tests/projects.test.ts
 
 Expected: PASS，11 个用例全绿。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add -A
@@ -1646,7 +1786,7 @@ git commit -m "feat: 添加项目仓储与进度计算"
   - `electron/repositories/tasks.ts` 导出：
     - `interface CreateTaskInput { title: string; projectId?: string | null; notes?: string; status?: TaskStatus; priority?: Priority; dueAt?: string | null; remindBefore?: number; estimate?: number | null; spent?: number | null; blockedReason?: string | null; }`
     - `interface UpdateTaskInput { title?: string; projectId?: string | null; notes?: string; status?: TaskStatus; priority?: Priority; dueAt?: string | null; remindBefore?: number; estimate?: number | null; spent?: number | null; blockedReason?: string | null; sortOrder?: number; }`
-    - `interface TaskFilter { projectId?: string | null; status?: TaskStatus[]; priority?: Priority[]; dueBefore?: string; dueAfter?: string; includeDone?: boolean; search?: string; }`
+    - `interface TaskFilter { projectId?: string | null; status?: TaskStatus[]; priority?: Priority[]; tagIds?: string[]; dueBefore?: string; dueAfter?: string; includeDone?: boolean; search?: string; }`
     - `function createTasksRepo(db: DatabaseSync): TasksRepo`
 
 `TasksRepo` 方法签名（后续任务依赖，勿改）：
@@ -1665,7 +1805,7 @@ git commit -m "feat: 添加项目仓储与进度计算"
 }
 ```
 
-- [ ] **Step 1: 写任务仓储**
+- [x] **Step 1: 写任务仓储**
 
 `electron/repositories/tasks.ts`：
 
@@ -1676,6 +1816,8 @@ import { newId } from '../util/id';
 import { nowIso } from '../util/time';
 import { nullable } from '../lib/result';
 
+// 用 type 而非 interface：node:sqlite 的 all() 返回 Record<string, SQLOutputValue>[]，
+// 类型别名（对象类型字面量）才有隐式索引签名，interface 没有，直接断言会报 TS2352
 type TaskRow = {
   id: string;
   project_id: string | null;
@@ -1747,6 +1889,7 @@ export interface TaskFilter {
   projectId?: string | null;
   status?: TaskStatus[];
   priority?: Priority[];
+  tagIds?: string[];
   dueBefore?: string;
   dueAfter?: string;
   includeDone?: boolean;
@@ -1757,59 +1900,107 @@ const ALL_STATUSES: TaskStatus[] = ['todo', 'doing', 'blocked', 'done', 'cancele
 
 export function createTasksRepo(db: DatabaseSync) {
   const selectById = db.prepare('SELECT * FROM tasks WHERE id = ?');
+
+  // 局部查询函数：内部调用不依赖返回对象的 this 绑定，
+  // 解构（const { create } = repo）或把方法当回调传（list().map(repo.get)）都不会炸
   const getById = (id: string): Task | null => {
     const row = selectById.get(id) as TaskRow | undefined;
     return row ? mapRow(row) : null;
   };
 
+  // 局部查询函数：同理不依赖 this，list / listByProject 都委托给它
+  const listTasks = (filter?: TaskFilter): Task[] => {
+    const where: string[] = [];
+    const params: Array<string | number> = [];
+
+    if (filter?.projectId !== undefined) {
+      if (filter.projectId === null) {
+        where.push('project_id IS NULL');
+      } else {
+        where.push('project_id = ?');
+        params.push(filter.projectId);
+      }
+    }
+
+    if (filter?.status && filter.status.length > 0) {
+      where.push(`status IN (${filter.status.map(() => '?').join(', ')})`);
+      params.push(...filter.status);
+    } else if (filter?.includeDone === false) {
+      where.push(`status IN (${ALL_STATUSES.filter((s) => s !== 'done').map(() => '?').join(', ')})`);
+      params.push(...ALL_STATUSES.filter((s) => s !== 'done'));
+    }
+
+    if (filter?.priority && filter.priority.length > 0) {
+      where.push(`priority IN (${filter.priority.map(() => '?').join(', ')})`);
+      params.push(...filter.priority);
+    }
+
+    if (filter?.dueBefore) {
+      where.push('due_at IS NOT NULL AND due_at < ?');
+      params.push(filter.dueBefore);
+    }
+
+    if (filter?.dueAfter) {
+      where.push('due_at IS NOT NULL AND due_at >= ?');
+      params.push(filter.dueAfter);
+    }
+
+    if (filter?.search) {
+      where.push('(title LIKE ? OR notes LIKE ?)');
+      const like = `%${filter.search}%`;
+      params.push(like, like);
+    }
+
+    const sql = `SELECT * FROM tasks ${
+      where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''
+    } ORDER BY sort_order ASC, created_at ASC`;
+
+    return (db.prepare(sql).all(...params) as TaskRow[]).map(mapRow);
+  };
+
+  // 局部更新函数：setStatus 与 update 共享同一套状态迁移与时间戳语义，
+  // 且都不依赖 this 绑定
+  const updateTask = (id: string, patch: UpdateTaskInput): Task | null => {
+    const existing = getById(id);
+    if (!existing) return null;
+
+    const nextStatus = patch.status ?? existing.status;
+    const now = nowIso();
+    // 首次进入 doing 时写 started_at，已有则保留原值
+    const startedAt = nextStatus === 'doing' ? (existing.startedAt ?? now) : existing.startedAt;
+    // 进入 done 时写 completed_at；从 done 退回其他状态时清空
+    const completedAt = nextStatus === 'done' ? (existing.completedAt ?? now) : null;
+
+    db.prepare(
+      `UPDATE tasks SET
+         title = ?, project_id = ?, notes = ?, status = ?, priority = ?, due_at = ?,
+         remind_before = ?, estimate = ?, spent = ?, blocked_reason = ?, sort_order = ?,
+         updated_at = ?, started_at = ?, completed_at = ?
+       WHERE id = ?`
+    ).run(
+      patch.title ?? existing.title,
+      patch.projectId === undefined ? existing.projectId : patch.projectId,
+      patch.notes ?? existing.notes,
+      nextStatus,
+      patch.priority ?? existing.priority,
+      patch.dueAt === undefined ? existing.dueAt : patch.dueAt,
+      patch.remindBefore ?? existing.remindBefore,
+      patch.estimate === undefined ? existing.estimate : patch.estimate,
+      patch.spent === undefined ? existing.spent : patch.spent,
+      patch.blockedReason === undefined ? existing.blockedReason : patch.blockedReason,
+      patch.sortOrder ?? existing.sortOrder,
+      now,
+      startedAt,
+      completedAt,
+      id
+    );
+
+    return getById(id);
+  };
+
   return {
     list(filter?: TaskFilter): Task[] {
-      const where: string[] = [];
-      const params: Array<string | number> = [];
-
-      if (filter?.projectId !== undefined) {
-        if (filter.projectId === null) {
-          where.push('project_id IS NULL');
-        } else {
-          where.push('project_id = ?');
-          params.push(filter.projectId);
-        }
-      }
-
-      if (filter?.status && filter.status.length > 0) {
-        where.push(`status IN (${filter.status.map(() => '?').join(', ')})`);
-        params.push(...filter.status);
-      } else if (filter?.includeDone === false) {
-        where.push(`status IN (${ALL_STATUSES.filter((s) => s !== 'done').map(() => '?').join(', ')})`);
-        params.push(...ALL_STATUSES.filter((s) => s !== 'done'));
-      }
-
-      if (filter?.priority && filter.priority.length > 0) {
-        where.push(`priority IN (${filter.priority.map(() => '?').join(', ')})`);
-        params.push(...filter.priority);
-      }
-
-      if (filter?.dueBefore) {
-        where.push('due_at IS NOT NULL AND due_at < ?');
-        params.push(filter.dueBefore);
-      }
-
-      if (filter?.dueAfter) {
-        where.push('due_at IS NOT NULL AND due_at >= ?');
-        params.push(filter.dueAfter);
-      }
-
-      if (filter?.search) {
-        where.push('(title LIKE ? OR notes LIKE ?)');
-        const like = `%${filter.search}%`;
-        params.push(like, like);
-      }
-
-      const sql = `SELECT * FROM tasks ${
-        where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''
-      } ORDER BY sort_order ASC, created_at ASC`;
-
-      return (db.prepare(sql).all(...params) as TaskRow[]).map(mapRow);
+      return listTasks(filter);
     },
 
     get(id: string): Task | null {
@@ -1849,44 +2040,11 @@ export function createTasksRepo(db: DatabaseSync) {
     },
 
     update(id: string, patch: UpdateTaskInput): Task | null {
-      const existing = getById(id);
-      if (!existing) return null;
-
-      const nextStatus = patch.status ?? existing.status;
-      const now = nowIso();
-      const startedAt =
-        nextStatus === 'doing' ? (existing.startedAt ?? now) : existing.startedAt;
-      const completedAt = nextStatus === 'done' ? (existing.completedAt ?? now) : null;
-
-      db.prepare(
-        `UPDATE tasks SET
-           title = ?, project_id = ?, notes = ?, status = ?, priority = ?, due_at = ?,
-           remind_before = ?, estimate = ?, spent = ?, blocked_reason = ?, sort_order = ?,
-           updated_at = ?, started_at = ?, completed_at = ?
-         WHERE id = ?`
-      ).run(
-        patch.title ?? existing.title,
-        patch.projectId === undefined ? existing.projectId : patch.projectId,
-        patch.notes ?? existing.notes,
-        nextStatus,
-        patch.priority ?? existing.priority,
-        patch.dueAt === undefined ? existing.dueAt : patch.dueAt,
-        patch.remindBefore ?? existing.remindBefore,
-        patch.estimate === undefined ? existing.estimate : patch.estimate,
-        patch.spent === undefined ? existing.spent : patch.spent,
-        patch.blockedReason === undefined ? existing.blockedReason : patch.blockedReason,
-        patch.sortOrder ?? existing.sortOrder,
-        now,
-        startedAt,
-        completedAt,
-        id
-      );
-
-      return getById(id);
+      return updateTask(id, patch);
     },
 
     setStatus(id: string, status: TaskStatus): Task | null {
-      return this.update(id, { status });
+      return updateTask(id, { status });
     },
 
     remove(id: string): boolean {
@@ -1907,6 +2065,8 @@ export function createTasksRepo(db: DatabaseSync) {
     },
 
     countOverdue(nowLocalDateTime: string): number {
+      // 本地墙钟口径：due_at 与入参同为 YYYY-MM-DDTHH:mm 本地墙钟字符串，
+      // 字典序即时间序；已完成/已取消不计入逾期
       const row = db
         .prepare(
           `SELECT COUNT(*) AS c FROM tasks
@@ -1918,7 +2078,7 @@ export function createTasksRepo(db: DatabaseSync) {
     },
 
     listByProject(projectId: string): Task[] {
-      return this.list({ projectId });
+      return listTasks({ projectId });
     }
   };
 }
@@ -1928,7 +2088,7 @@ export type TasksRepo = ReturnType<typeof createTasksRepo>;
 
 **注意**：本仓储**不提供**「按时间区间查已完成任务」的方法。因为 `completed_at` 存的是 ISO UTC 时间戳，而用户看到的周/月周期是本地日历日，两者不可直接比较，写一个参数含义含糊的方法只会埋坑。M1 没有任何调用方需要这个查询；M4 报告引擎会按 ISO UTC 边界单独实现一个语义明确的查询。
 
-- [ ] **Step 2: 写任务仓储的失败测试**
+- [x] **Step 2: 写任务仓储的失败测试**
 
 `tests/tasks.test.ts`：
 
@@ -2056,7 +2216,7 @@ describe('任务仓储', () => {
 });
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 ```bash
 npx vitest run tests/tasks.test.ts
@@ -2064,7 +2224,7 @@ npx vitest run tests/tasks.test.ts
 
 Expected: FAIL —— `Failed to resolve import "../electron/repositories/tasks"`。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 ```bash
 npx vitest run tests/tasks.test.ts
@@ -2072,7 +2232,7 @@ npx vitest run tests/tasks.test.ts
 
 Expected: PASS，15 个用例全绿。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add -A
@@ -2647,6 +2807,7 @@ export interface TaskFilter {
   projectId?: string | null;
   status?: TaskStatus[];
   priority?: Priority[];
+  tagIds?: string[];
   dueBefore?: string;
   dueAfter?: string;
   includeDone?: boolean;
