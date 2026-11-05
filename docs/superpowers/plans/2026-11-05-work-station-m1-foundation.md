@@ -16,15 +16,15 @@
 
 > **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
 >
-> **最近更新：** 2026-11-05 · Task 12 完成（12/13）
+> **最近更新：** 2026-11-05 · Task 13 完成（13/13），M1 待最终评审
 
-**当前状态：M1 骨架与数据层进行中。13 个任务已完成 12 个，Task 12 任务页复审判定「需要修复」：1 个 Important（周日「本周」边界算错，brief 公式缺陷）已随 `dbcefdd` 修掉，同时补上设计文档 6.2 要求但简报遗漏的日期分组折叠、改正分组顺序；9 个 Minor 延后。Task 13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+**当前状态：M1 骨架与数据层功能完成。13 个任务全部交付，Task 13 复审判定「需要修复」：2 个 Important（Node 下限 22.5 不准确、WAL 下「复制 data.db 即备份」不完整）与 4 个 Minor（M1 状态表述、标签能力夸大、打包网络前提、软删除措辞）已全部随 `d51ab49` 修掉。待 M1 收尾：全分支最终评审 + 修复波。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
 
 ### 里程碑总览
 
 | 里程碑 | 范围 | 状态 |
 | --- | --- | --- |
-| M1 | 骨架与数据层（13 任务） | 进行中 · 12/13 |
+| M1 | 骨架与数据层（13 任务） | 功能完成 · 13/13 · 待最终评审 |
 | M2 | 看板与拖拽 | 未拆解 |
 | M3 | 提醒与报告 | 未拆解 |
 | M4 | 打磨与发布 | 未拆解 |
@@ -45,7 +45,7 @@
 | 10 | 通用 UI 组件集 | ✅ 完成 | `3d9122f` | 通过（0 Important，8 Minor 延后） | 6 |
 | 11 | 项目管理页 | ✅ 完成 | `043555d` | 通过（0 Important，7 Minor 延后） | — |
 | 12 | 任务列表页与快速添加 | ✅ 完成（1 轮修复） | `8bb30c9` `dbcefdd` | 通过（1 个 Important + 设计缺口已修，9 Minor 延后） | — |
-| 13 | 打包配置、README、M1 手测清单 | ⬜ 未开始 | — | — | — |
+| 13 | 打包配置、README、M1 手测清单 | ✅ 完成（1 轮修复） | `4465c1e` `d51ab49` | 通过（2 个 Important + 4 Minor 全部修复） | — |
 | — | M1 收尾：全分支最终评审 + 修复波 | ⬜ 未开始 | — | — | — |
 
 合计 **128** 条用例全绿（12 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
@@ -142,7 +142,7 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 ### 当前待办
 
 1. ~~**Task 12 任务列表页与快速添加**~~ ✅ 已完成（`8bb30c9` + `dbcefdd`）。
-2. **Task 13 打包配置、README 与 M1 手测清单** —— `engines.node >= 22.13.0`、README、`docs/M1-手测清单.md`、`npm run build:win` 产出 portable exe，并按可脚本化配方逐项验证。
+2. ~~**Task 13 打包配置、README 与 M1 手测清单**~~ ✅ 已完成（`4465c1e` + `d51ab49`）。
 3. **M1 收尾**：全分支最终评审 + 修复波（含延后 Minor 的统一评估）。
 
 ### 延后 Minor 清单
@@ -161,6 +161,8 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 - **Task 10**：Drawer/Modal 缺 `role="dialog"`/`aria-modal`/`aria-labelledby`、无焦点管理与 body 滚动锁、关闭按钮可访问名只有 `×`；ProgressRing 对 `NaN` 无守卫；Badge 默认生成 `.badge-default` 但 CSS 无该规则；`global.css` 丢末尾换行；`formatHours` 负数 ties 朝 +∞、`NaN→"NaNh"`（`tasks.estimate/spent` 为 REAL 且无 CHECK ≥0）；`isOverdue` 相等边界无用例（`<`→`<=` 变异存活），parity 用例依赖非 UTC 时区；组件用全局 `React.ReactElement`；Field 隐式 label 只关联第一个控件。
 - **Task 11**：删除确认无 in-flight 保护（双击重复 IPC + 重复成功 toast，无数据损坏）；`tasksAsync.error` 从未渲染，tasks 故障时卡片静默按 0 任务/0% 渲染；错误态与「还没有项目」空状态同屏；`ProjectForm` 内联复制了 `CreateProjectInput` 的 9 字段结构；归档无二次确认、应用内无「取消归档」入口（repo 有 `unarchive` 未接入）；进度改 auto 保存会清掉原 `progressManual`；设计 6.1 的「进行中任务数」「颜色标签」未在卡片展示（颜色仅存 DB）；`reloadAll` 的 `useCallback` 依赖每次渲染都变（无效记忆化，无行为影响）。
 - **Task 12**：`canceled` 无筛选 chip 且与 `done` 同用绿色实心圈（视觉不可区分）；`TaskForm` 无 submitting 同步锁，同 tick 连发 Ctrl+Enter 会重复建任务（实测 3 次 → 3 条）；归档项目的任务显示「未知项目」、抽屉 select 回退「独立任务」（关联仍在）；`projectsAsync.error` 从未渲染；`estimate`/`spent` 输入 0 被写成 null；删除无 in-flight 保护；页面与 `groupOf` 零测试（本次周日边界缺陷即因无测试漏过）；QuickAdd 失败路径仅静态核对。
+- **Task 13**：无延后项（2 个 Important + 4 个 Minor 全部修复）。仅一条外观观察未改：Windows `showErrorBox` 的外框标题是英文 `Error`，正文首行才是「数据库已损坏」（`electron/main.ts:72-75`，属主进程展示方式，不影响功能）。
+
 ---
 
 ## Global Constraints
