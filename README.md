@@ -92,4 +92,5 @@ tools/publish.ps1              多平台发布
 docs/                          设计文档、实施计划、手测清单
 ```
 
-详细设计见 `docs/superpowers/specs/2026-11-05-work-station-design.md`，人工验收项见 `docs/M1-手测清单.md`。
+详细设计见 `docs/superpowers/specs/2026-11-05-work-station-design.md`，人工验收项见 `docs/M1-手测清单.md`，
+界面的色彩/字号/间距/组件规则见 `docs/设计系统.md`（改界面前先读它）。
