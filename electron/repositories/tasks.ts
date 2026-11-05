@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Priority, Task, TaskStatus } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso } from '../util/time';
+import { isLocalDateTime, nowIso } from '../util/time';
 import { nullable } from '../lib/result';
 
 // 用 type 而非 interface：node:sqlite 的 all() 返回 Record<string, SQLOutputValue>[]，
@@ -77,6 +77,7 @@ export interface TaskFilter {
   projectId?: string | null;
   status?: TaskStatus[];
   priority?: Priority[];
+  tagIds?: string[];
   dueBefore?: string;
   dueAfter?: string;
   includeDone?: boolean;
@@ -84,6 +85,20 @@ export interface TaskFilter {
 }
 
 const ALL_STATUSES: TaskStatus[] = ['todo', 'doing', 'blocked', 'done', 'canceled'];
+
+// due_at 参与的是本地墙钟字符串字典序比较（全项目「到期/截止」判定的共同口径），
+// 只有 YYYY-MM-DDTHH:mm 这种定长且本地有序的格式才能保证「字符串序 = 时间序」。
+// 若混入 ISO UTC 串（如 2026-11-05T06:30:00.000Z），字典序比较会把当天 18:00 到期的任务
+// 判成逾期 —— 静默错判必须变成显式失败，所以这里直接抛错。
+// 注意：isLocalDateTime 只校验格式、不校验日历有效性（2026-99-99T99:99 会通过），
+// 这是 Task 2 冻结的契约，本仓储不改那个函数。
+function assertLocalDateTime(value: string, field: string): void {
+  if (!isLocalDateTime(value)) {
+    throw new Error(
+      `${field} 必须是本地墙钟格式 YYYY-MM-DDTHH:mm，收到：${value}`
+    );
+  }
+}
 
 export function createTasksRepo(db: DatabaseSync) {
   const selectById = db.prepare('SELECT * FROM tasks WHERE id = ?');
@@ -122,6 +137,17 @@ export function createTasksRepo(db: DatabaseSync) {
       params.push(...filter.priority);
     }
 
+    // 按标签筛选：task_tags 只有 task→tags 方向，筛选必须用 EXISTS 反查子查询。
+    // tagIds 为空数组时不过滤（与 status/priority 空数组的既有语义一致）。
+    if (filter?.tagIds && filter.tagIds.length > 0) {
+      where.push(
+        `EXISTS (SELECT 1 FROM task_tags tt WHERE tt.task_id = tasks.id AND tt.tag_id IN (${filter.tagIds
+          .map(() => '?')
+          .join(', ')}))`
+      );
+      params.push(...filter.tagIds);
+    }
+
     if (filter?.dueBefore) {
       where.push('due_at IS NOT NULL AND due_at < ?');
       params.push(filter.dueBefore);
@@ -150,6 +176,11 @@ export function createTasksRepo(db: DatabaseSync) {
   const updateTask = (id: string, patch: UpdateTaskInput): Task | null => {
     const existing = getById(id);
     if (!existing) return null;
+
+    // 只校验本次传入的新值：没传（undefined）保留原值，传 null 是清空截止时间，两者都无需校验
+    if (patch.dueAt !== undefined && patch.dueAt !== null) {
+      assertLocalDateTime(patch.dueAt, 'dueAt');
+    }
 
     const nextStatus = patch.status ?? existing.status;
     const now = nowIso();
@@ -195,6 +226,10 @@ export function createTasksRepo(db: DatabaseSync) {
     },
 
     create(input: CreateTaskInput): Task {
+      // dueAt 为 null（无截止时间）时不校验；给了值就必须是本地墙钟格式
+      if (input.dueAt !== undefined && input.dueAt !== null) {
+        assertLocalDateTime(input.dueAt, 'dueAt');
+      }
       const id = newId();
       const now = nowIso();
       const status = input.status ?? 'todo';

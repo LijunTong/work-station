@@ -1,8 +1,28 @@
 import { DatabaseSync } from 'node:sqlite';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runMigrations } from '../electron/db';
 import { createProjectsRepo } from '../electron/repositories/projects';
 import { createTasksRepo } from '../electron/repositories/tasks';
+
+// 冻结时钟：nowIso 每次调用返回一个递增且互不相同的时刻。
+// 「状态迁移时已有时间戳保留原值」这类语义必须靠这个才能被验证 ——
+// 若实现每次都重写 now，真实时钟在同一次测试里可能落在同一毫秒，
+// 保留与重写会得到同一个字符串，断言就成了恒真。
+// 其余导出（isLocalDateTime 等）保持真实实现。
+const clock = vi.hoisted(() => ({
+  nowIsoCalls: 0
+}));
+
+vi.mock('../electron/util/time', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../electron/util/time')>();
+  return {
+    ...actual,
+    nowIso: () => {
+      clock.nowIsoCalls += 1;
+      return new Date(Date.UTC(2026, 10, 5, 9, 0, 0) + clock.nowIsoCalls).toISOString();
+    }
+  };
+});
 
 let db: DatabaseSync;
 let tasks: ReturnType<typeof createTasksRepo>;
@@ -136,5 +156,102 @@ describe('任务仓储', () => {
 
   it('更新不存在的任务返回 null', () => {
     expect(tasks.update('missing', { title: 'x' })).toBeNull();
+  });
+
+  it('dueAt 不是本地墙钟格式时 create/update 都抛错，不写入脏数据', () => {
+    // ISO UTC 串与墙钟串字典序不可比：'2026-11-05T06:30:00.000Z' < '2026-11-05T14:30'
+    // 会把当天 18:00 到期的任务判成逾期，必须在写入前就失败
+    expect(() => tasks.create({ title: 'UTC 串', dueAt: '2026-11-05T06:30:00.000Z' })).toThrow();
+    expect(tasks.list()).toHaveLength(0);
+
+    // 纯日期同样不是墙钟时刻格式
+    expect(() => tasks.create({ title: '纯日期', dueAt: '2026-11-05' })).toThrow();
+    expect(tasks.list()).toHaveLength(0);
+
+    // 合法墙钟串可以正常写入
+    const ok = tasks.create({ title: '合法', dueAt: '2026-11-05T18:00' });
+    expect(ok.dueAt).toBe('2026-11-05T18:00');
+
+    // update 走同一条校验：抛错时不能把脏数据写进去，也不能动到原有截止时间
+    expect(() => tasks.update(ok.id, { dueAt: '2026-11-05T06:30:00.000Z' })).toThrow();
+    expect(tasks.get(ok.id)?.dueAt).toBe('2026-11-05T18:00');
+
+    // dueAt 为 null 表示无截止时间，不校验
+    expect(tasks.create({ title: '无截止', dueAt: null }).dueAt).toBeNull();
+    expect(tasks.update(ok.id, { dueAt: null })?.dueAt).toBeNull();
+  });
+
+  it('状态迁移「已有则保留原值」：started_at 与 completed_at 都不被重写', () => {
+    const task = tasks.create({ title: '时间戳' });
+
+    // doing→done：started_at 保留首次进入 doing 写入的值，不被重写
+    const doing = tasks.setStatus(task.id, 'doing');
+    const startedAt = doing?.startedAt;
+    expect(startedAt).not.toBeNull();
+    const done = tasks.setStatus(task.id, 'done');
+    expect(done?.startedAt).toBe(startedAt);
+
+    // done→done：completed_at 保留第一次写入的值，不被重写
+    const completedAt = done?.completedAt;
+    expect(completedAt).not.toBeNull();
+    const doneAgain = tasks.setStatus(task.id, 'done');
+    expect(doneAgain?.completedAt).toBe(completedAt);
+
+    // doing→blocked：started_at 同样保留（状态变了，但开始时间不变）
+    const other = tasks.create({ title: '卡住' });
+    const otherDoing = tasks.setStatus(other.id, 'doing');
+    const otherStartedAt = otherDoing?.startedAt;
+    expect(otherStartedAt).not.toBeNull();
+    const blocked = tasks.setStatus(other.id, 'blocked');
+    expect(blocked?.status).toBe('blocked');
+    expect(blocked?.startedAt).toBe(otherStartedAt);
+  });
+
+  it('dueBefore / dueAfter 按墙钟字符串过滤，边界相等归 dueAfter', () => {
+    const yesterday = tasks.create({ title: '昨天', dueAt: '2026-11-04T12:00' });
+    const today = tasks.create({ title: '今天', dueAt: '2026-11-05T12:00' });
+    const tomorrow = tasks.create({ title: '明天', dueAt: '2026-11-06T12:00' });
+
+    // due_at < 边界：只返回昨天那条
+    expect(tasks.list({ dueBefore: '2026-11-05T12:00' }).map((t) => t.id)).toEqual([yesterday.id]);
+
+    // due_at >= 边界：今天与明天都返回（等于边界的归 dueAfter，因为 SQL 是 >=）
+    expect(tasks.list({ dueAfter: '2026-11-05T12:00' }).map((t) => t.id)).toEqual([
+      today.id,
+      tomorrow.id
+    ]);
+
+    // 边界值相等时的归属钉死：同一时刻只出现在 dueAfter 结果里
+    expect(tasks.list({ dueBefore: '2026-11-05T12:00' }).map((t) => t.title)).not.toContain('今天');
+    expect(tasks.list({ dueAfter: '2026-11-05T12:00' }).map((t) => t.title)).toContain('今天');
+  });
+
+  it('按标签筛选：tagIds 命中 task_tags 关联，空数组不过滤', () => {
+    const tagged = tasks.create({ title: '有标签' });
+    const other = tasks.create({ title: '另一个标签' });
+    const untagged = tasks.create({ title: '没标签' });
+
+    // 直接写 task_tags：标签仓储（Task 6）尚未实现，这里只验证筛选 SQL。
+    // task_tags 对 tags(id) 有外键约束（PRAGMA foreign_keys = ON），所以先建标签行
+    db.prepare('INSERT INTO tags (id, name) VALUES (?, ?)').run('tag-a', '标签A');
+    db.prepare('INSERT INTO tags (id, name) VALUES (?, ?)').run('tag-b', '标签B');
+    db.prepare('INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)').run(tagged.id, 'tag-a');
+    db.prepare('INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)').run(other.id, 'tag-b');
+
+    // 单个标签：只返回带该标签的任务，没标签关联的任务自然不入选
+    expect(tasks.list({ tagIds: ['tag-a'] }).map((t) => t.id)).toEqual([tagged.id]);
+
+    // 多个标签：命中任一即可
+    expect(tasks.list({ tagIds: ['tag-a', 'tag-b'] }).map((t) => t.id)).toEqual([
+      tagged.id,
+      other.id
+    ]);
+
+    // 空数组 = 不过滤（与 status/priority 空数组的既有语义一致），返回全部
+    expect(tasks.list({ tagIds: [] }).map((t) => t.id)).toEqual([
+      tagged.id,
+      other.id,
+      untagged.id
+    ]);
   });
 });
