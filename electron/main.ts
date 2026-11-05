@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from 'node
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { backupDatabase, isHealthy, openDatabase, runMigrations } from './db';
+import { registerIpc } from './ipc';
 import { toLocalDate } from './util/time';
 
 export function createMainWindow(): BrowserWindow {
@@ -101,6 +102,8 @@ app
 
     const db = openDatabase(dbPath);
     runMigrations(db);
+    // 必须在迁移之后：仓储工厂内部即时 db.prepare(...)，表未建好会直接抛错
+    registerIpc(db, dbPath);
     runDailyBackup(db, dbPath);
 
     createMainWindow();
