@@ -12,6 +12,7 @@ import type {
   UpdateProjectInput,
   UpdateTaskInput
 } from '../src/types/api';
+import { IPC_CHANNELS } from '../src/types/channels';
 import type { TaskStatus } from '../src/types/entities';
 
 /**
@@ -46,42 +47,52 @@ export function registerIpc(db: DatabaseSync, dbPath: string): void {
   const settings = createSettingsRepo(db);
 
   // 入参必须透传给仓储：写死 { includeArchived: false } 会让渲染端永远取不到归档项目
-  handle('projects:list', (options?: { includeArchived?: boolean }) => projects.list(options));
-  handle('projects:get', (id: string) => projects.get(id));
-  handle('projects:create', (input: CreateProjectInput) => projects.create(input));
-  handle('projects:update', (id: string, patch: UpdateProjectInput) => projects.update(id, patch));
-  handle('projects:archive', (id: string) => projects.archive(id));
-  handle('projects:unarchive', (id: string) => projects.unarchive(id));
-  handle('projects:remove', (id: string) => projects.remove(id));
-  handle('projects:counts', (id: string) => projects.countTasks(id));
+  handle(IPC_CHANNELS.projectsList, (options?: { includeArchived?: boolean }) =>
+    projects.list(options)
+  );
+  handle(IPC_CHANNELS.projectsGet, (id: string) => projects.get(id));
+  handle(IPC_CHANNELS.projectsCreate, (input: CreateProjectInput) => projects.create(input));
+  handle(IPC_CHANNELS.projectsUpdate, (id: string, patch: UpdateProjectInput) =>
+    projects.update(id, patch)
+  );
+  handle(IPC_CHANNELS.projectsArchive, (id: string) => projects.archive(id));
+  handle(IPC_CHANNELS.projectsUnarchive, (id: string) => projects.unarchive(id));
+  handle(IPC_CHANNELS.projectsRemove, (id: string) => projects.remove(id));
+  handle(IPC_CHANNELS.projectsCounts, (id: string) => projects.countTasks(id));
 
-  handle('tasks:list', (filter?: TaskFilter) => tasks.list(filter));
-  handle('tasks:get', (id: string) => tasks.get(id));
-  handle('tasks:create', (input: CreateTaskInput) => tasks.create(input));
-  handle('tasks:update', (id: string, patch: UpdateTaskInput) => tasks.update(id, patch));
-  handle('tasks:setStatus', (id: string, status: TaskStatus) => tasks.setStatus(id, status));
-  handle('tasks:remove', (id: string) => tasks.remove(id));
-  handle('tasks:countsByStatus', () => tasks.countByStatus());
-  handle('tasks:overdueCount', (nowLocalDateTime: string) => tasks.countOverdue(nowLocalDateTime));
+  handle(IPC_CHANNELS.tasksList, (filter?: TaskFilter) => tasks.list(filter));
+  handle(IPC_CHANNELS.tasksGet, (id: string) => tasks.get(id));
+  handle(IPC_CHANNELS.tasksCreate, (input: CreateTaskInput) => tasks.create(input));
+  handle(IPC_CHANNELS.tasksUpdate, (id: string, patch: UpdateTaskInput) =>
+    tasks.update(id, patch)
+  );
+  handle(IPC_CHANNELS.tasksSetStatus, (id: string, status: TaskStatus) => tasks.setStatus(id, status));
+  handle(IPC_CHANNELS.tasksRemove, (id: string) => tasks.remove(id));
+  handle(IPC_CHANNELS.tasksCountsByStatus, () => tasks.countByStatus());
+  handle(IPC_CHANNELS.tasksOverdueCount, (nowLocalDateTime: string) =>
+    tasks.countOverdue(nowLocalDateTime)
+  );
 
-  handle('tags:list', () => tags.list());
-  handle('tags:create', (input: { name: string; color?: string | null }) => tags.create(input));
-  handle('tags:update', (id: string, patch: { name?: string; color?: string | null }) =>
+  handle(IPC_CHANNELS.tagsList, () => tags.list());
+  handle(IPC_CHANNELS.tagsCreate, (input: { name: string; color?: string | null }) =>
+    tags.create(input)
+  );
+  handle(IPC_CHANNELS.tagsUpdate, (id: string, patch: { name?: string; color?: string | null }) =>
     tags.update(id, patch)
   );
-  handle('tags:remove', (id: string) => tags.remove(id));
-  handle('tags:setTaskTags', (taskId: string, tagIds: string[]) => {
+  handle(IPC_CHANNELS.tagsRemove, (id: string) => tags.remove(id));
+  handle(IPC_CHANNELS.tagsSetTaskTags, (taskId: string, tagIds: string[]) => {
     tags.setTaskTags(taskId, tagIds);
   });
-  handle('tags:listTaskTags', (taskId: string) => tags.listTaskTags(taskId));
+  handle(IPC_CHANNELS.tagsListTaskTags, (taskId: string) => tags.listTaskTags(taskId));
 
-  handle('settings:get', (key: string) => settings.get(key));
-  handle('settings:set', (key: string, value: unknown) => {
+  handle(IPC_CHANNELS.settingsGet, (key: string) => settings.get(key));
+  handle(IPC_CHANNELS.settingsSet, (key: string, value: unknown) => {
     settings.set(key, value);
   });
-  handle('settings:getAll', () => settings.getAll());
+  handle(IPC_CHANNELS.settingsGetAll, () => settings.getAll());
 
-  handle('app:info', () => ({
+  handle(IPC_CHANNELS.appInfo, () => ({
     version: app.getVersion(),
     dbPath,
     userDataPath: app.getPath('userData')

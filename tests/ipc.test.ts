@@ -4,6 +4,7 @@ import { runMigrations } from '../electron/db';
 import { registerIpc } from '../electron/ipc';
 import { ApiError, call } from '../src/lib/api';
 import type { Result } from '../src/types/api';
+import { IPC_CHANNELS } from '../src/types/channels';
 import type { Project, Tag, Task } from '../src/types/entities';
 
 type Handler = (event: unknown, ...args: unknown[]) => Promise<unknown>;
@@ -29,8 +30,12 @@ vi.mock('electron', () => ({
 
 const DB_PATH = '/tmp/work-station/data.db';
 
-/** 契约里 window.api 暴露的全部 channel，缺一即契约破裂 */
-const EXPECTED_CHANNELS = [
+/**
+ * 契约里的全部 channel，逐个写死。
+ * 这份清单不从 IPC_CHANNELS 推导：它就是「契约」本身。
+ * 主进程/preload 用的常量若被改名、删项或漏项，下面的齐全性用例会立刻变红。
+ */
+const CONTRACT_CHANNELS = [
   'projects:list',
   'projects:get',
   'projects:create',
@@ -185,8 +190,14 @@ describe('IPC 路由', () => {
     }
   });
 
+  it('channel 齐全性：IPC_CHANNELS 与契约清单逐字一致', () => {
+    expect([...Object.values(IPC_CHANNELS)].sort()).toEqual([...CONTRACT_CHANNELS].sort());
+  });
+
   it('channel 齐全性：契约里的 channel 全部注册且没有多余注册', () => {
-    expect([...mocks.handlers.keys()].sort()).toEqual([...EXPECTED_CHANNELS].sort());
+    // 主进程注册集合必须与运行时常量完全一致，再与契约清单比对
+    expect([...mocks.handlers.keys()].sort()).toEqual([...Object.values(IPC_CHANNELS)].sort());
+    expect([...mocks.handlers.keys()].sort()).toEqual([...CONTRACT_CHANNELS].sort());
   });
 
   it('channel 齐全性：每个 channel 都能被调用并返回 ok', async () => {
