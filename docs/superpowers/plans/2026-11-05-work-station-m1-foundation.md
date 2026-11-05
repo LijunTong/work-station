@@ -63,6 +63,14 @@
 
 **逾期判定全项目统一为墙钟口径**：`due_at < 当前本地墙钟时刻` 即为逾期。当前时刻用 `toLocalDateTime(new Date())` 取。**不要**用 `toLocalDate(new Date())`（只到天 —— 会让「今天 09:00 到期、现在 10:00」的任务漏判），**更不要**用 `nowIso().slice(0, 10)`（UTC 日期，与本地墙钟差最多一天，跨时区会错）。项目卡片徽标、看板概览条、任务列表标红三处口径必须一致，否则同一个任务会在列表标红却不计入项目徽标。
 
+### 仓储模板定稿（Task 4 评审后修正，Task 5/6/7 照此写）
+
+1. **行映射用类型别名 `type XxxRow = { ... }`，不要用 `interface`。** `interface` 声明没有隐式索引签名，`db.prepare(...).all() as XxxRow[]` 会触发 TS2352。`electron/db.ts` 已有同样写法先例。
+2. **仓储方法内部不要依赖 `this` 绑定。** 在工厂闭包里定义局部 `getById(id)`（用闭包里的 `selectById`），公开方法 `get(id)` 委托给它，其余方法一律调 `getById(id)`。这样方法被解构或当回调传也不会炸。**对外方法签名不许变** —— Task 8 的 IPC 层按此冻结。
+3. **逾期判定统一墙钟口径**（见上）。
+4. **测试断言与当前时间相关的场景时，冻结时钟**：`vi.mock('../electron/util/time')` 冻结 `toLocalDate` / `toLocalDateTime`，避免午夜边界 flake。冻结值要与真实实现自洽（`toLocalDateTime(d)` = `toLocalDate(d)` + `T` + 时分）。
+5. **可空字段的 update 语义**：区分「没传」与「传了 null」用 `patch.x === undefined ? existing.x : patch.x`；非空字段用 `??`。合并后的记录类型用 `Required<UpdateInput>`，否则 `merged.x` 带 `undefined`，`node:sqlite` 的绑定参数不接受。
+
 ### 命名约定
 
 - 数据库列：`snake_case`
@@ -1172,7 +1180,7 @@ git commit -m "feat: 添加 SQLite 连接、版本化迁移与完整性检查"
 - Modify: 无
 
 **Interfaces:**
-- Consumes: `src/types/entities.ts` 的 `Project`、`ProjectStatus`、`Priority`、`ProgressMode`；`electron/util/id.ts` 的 `newId()`；`electron/util/time.ts` 的 `nowIso()`、`toLocalDate()`
+- Consumes: `src/types/entities.ts` 的 `Project`、`ProjectStatus`、`Priority`、`ProgressMode`；`electron/util/id.ts` 的 `newId()`；`electron/util/time.ts` 的 `nowIso()`、`toLocalDateTime()`
 - Produces:
   - `src/lib/progress.ts` 导出 `computeProgress(tasks: Array<{ status: TaskStatus }>): number` —— **全项目唯一实现**，主进程与渲染进程共用同一份，不存在副本
   - `electron/repositories/projects.ts` 导出：
@@ -1278,10 +1286,10 @@ import type {
   ProjectStatus
 } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso, toLocalDateTime } from '../util/time';
+import { nowIso } from '../util/time';
 import { nullable } from '../lib/result';
 
-interface ProjectRow {
+type ProjectRow = {
   id: string;
   name: string;
   description: string;
@@ -1296,7 +1304,7 @@ interface ProjectRow {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
-}
+};
 
 function mapRow(row: ProjectRow): Project {
   return {
@@ -1350,6 +1358,10 @@ export function createProjectsRepo(db: DatabaseSync) {
   );
   const selectById = db.prepare('SELECT * FROM projects WHERE id = ?');
   const selectByName = db.prepare('SELECT * FROM projects WHERE name = ?');
+  const getById = (id: string): Project | null => {
+    const row = selectById.get(id) as ProjectRow | undefined;
+    return row ? mapRow(row) : null;
+  };
 
   return {
     list(options?: { includeArchived?: boolean }): Project[] {
@@ -1358,8 +1370,7 @@ export function createProjectsRepo(db: DatabaseSync) {
     },
 
     get(id: string): Project | null {
-      const row = selectById.get(id) as ProjectRow | undefined;
-      return row ? mapRow(row) : null;
+      return getById(id);
     },
 
     getByName(name: string): Project | null {
@@ -1391,13 +1402,13 @@ export function createProjectsRepo(db: DatabaseSync) {
         now,
         now
       );
-      const created = this.get(id);
+      const created = getById(id);
       if (!created) throw new Error('项目创建后读取失败');
       return created;
     },
 
     update(id: string, patch: UpdateProjectInput): Project | null {
-      const existing = this.get(id);
+      const existing = getById(id);
       if (!existing) return null;
 
       const merged: UpdateProjectInput = {
@@ -1437,7 +1448,7 @@ export function createProjectsRepo(db: DatabaseSync) {
         id
       );
 
-      return this.get(id);
+      return getById(id);
     },
 
     archive(id: string): boolean {
@@ -1649,7 +1660,7 @@ git commit -m "feat: 添加项目仓储与进度计算"
   setStatus(id: string, status: TaskStatus): Task | null;
   remove(id: string): boolean;
   countByStatus(): Record<TaskStatus, number>;
-  countOverdue(nowLocalDate: string): number;
+  countOverdue(nowLocalDateTime: string): number;
   listByProject(projectId: string): Task[];
 }
 ```
@@ -1662,10 +1673,10 @@ git commit -m "feat: 添加项目仓储与进度计算"
 import type { DatabaseSync } from 'node:sqlite';
 import type { Priority, Task, TaskStatus } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso, toLocalDateTime } from '../util/time';
+import { nowIso } from '../util/time';
 import { nullable } from '../lib/result';
 
-interface TaskRow {
+type TaskRow = {
   id: string;
   project_id: string | null;
   title: string;
@@ -1682,7 +1693,7 @@ interface TaskRow {
   updated_at: string;
   started_at: string | null;
   completed_at: string | null;
-}
+};
 
 function mapRow(row: TaskRow): Task {
   return {
@@ -1745,6 +1756,12 @@ export interface TaskFilter {
 const ALL_STATUSES: TaskStatus[] = ['todo', 'doing', 'blocked', 'done', 'canceled'];
 
 export function createTasksRepo(db: DatabaseSync) {
+  const selectById = db.prepare('SELECT * FROM tasks WHERE id = ?');
+  const getById = (id: string): Task | null => {
+    const row = selectById.get(id) as TaskRow | undefined;
+    return row ? mapRow(row) : null;
+  };
+
   return {
     list(filter?: TaskFilter): Task[] {
       const where: string[] = [];
@@ -1796,8 +1813,7 @@ export function createTasksRepo(db: DatabaseSync) {
     },
 
     get(id: string): Task | null {
-      const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as TaskRow | undefined;
-      return row ? mapRow(row) : null;
+      return getById(id);
     },
 
     create(input: CreateTaskInput): Task {
@@ -1827,13 +1843,13 @@ export function createTasksRepo(db: DatabaseSync) {
         status === 'doing' ? now : null,
         status === 'done' ? now : null
       );
-      const created = this.get(id);
+      const created = getById(id);
       if (!created) throw new Error('任务创建后读取失败');
       return created;
     },
 
     update(id: string, patch: UpdateTaskInput): Task | null {
-      const existing = this.get(id);
+      const existing = getById(id);
       if (!existing) return null;
 
       const nextStatus = patch.status ?? existing.status;
@@ -1866,7 +1882,7 @@ export function createTasksRepo(db: DatabaseSync) {
         id
       );
 
-      return this.get(id);
+      return getById(id);
     },
 
     setStatus(id: string, status: TaskStatus): Task | null {
@@ -1890,14 +1906,14 @@ export function createTasksRepo(db: DatabaseSync) {
       return result;
     },
 
-    countOverdue(nowLocalDate: string): number {
+    countOverdue(nowLocalDateTime: string): number {
       const row = db
         .prepare(
           `SELECT COUNT(*) AS c FROM tasks
            WHERE status NOT IN ('done','canceled')
              AND due_at IS NOT NULL AND due_at < ?`
         )
-        .get(nowLocalDate) as { c: number };
+        .get(nowLocalDateTime) as { c: number };
       return row.c ?? 0;
     },
 
@@ -2025,7 +2041,7 @@ describe('任务仓储', () => {
     db.prepare(
       'INSERT INTO tasks (id, title, status, due_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).run('t3', '已完成过期', 'done', '2000-01-01T10:00', now, now);
-    expect(tasks.countOverdue('2026-11-05')).toBe(1);
+    expect(tasks.countOverdue('2026-11-05T12:00')).toBe(1);
   });
 
   it('删除任务返回 true', () => {
@@ -2089,17 +2105,23 @@ import type { Tag } from '../../src/types/entities';
 import { newId } from '../util/id';
 import { nullable } from '../lib/result';
 
-interface TagRow {
+type TagRow = {
   id: string;
   name: string;
   color: string | null;
-}
+};
 
 function mapRow(row: TagRow): Tag {
   return { id: row.id, name: row.name, color: row.color };
 }
 
 export function createTagsRepo(db: DatabaseSync) {
+  const selectById = db.prepare('SELECT * FROM tags WHERE id = ?');
+  const getById = (id: string): Tag | null => {
+    const row = selectById.get(id) as TagRow | undefined;
+    return row ? mapRow(row) : null;
+  };
+
   return {
     list(): Tag[] {
       const rows = db.prepare('SELECT * FROM tags ORDER BY name ASC').all() as TagRow[];
@@ -2107,8 +2129,7 @@ export function createTagsRepo(db: DatabaseSync) {
     },
 
     get(id: string): Tag | null {
-      const row = db.prepare('SELECT * FROM tags WHERE id = ?').get(id) as TagRow | undefined;
-      return row ? mapRow(row) : null;
+      return getById(id);
     },
 
     getByName(name: string): Tag | null {
@@ -2123,20 +2144,20 @@ export function createTagsRepo(db: DatabaseSync) {
         input.name,
         nullable(input.color)
       );
-      const created = this.get(id);
+      const created = getById(id);
       if (!created) throw new Error('标签创建后读取失败');
       return created;
     },
 
     update(id: string, patch: { name?: string; color?: string | null }): Tag | null {
-      const existing = this.get(id);
+      const existing = getById(id);
       if (!existing) return null;
       db.prepare('UPDATE tags SET name = ?, color = ? WHERE id = ?').run(
         patch.name ?? existing.name,
         patch.color === undefined ? existing.color : patch.color,
         id
       );
-      return this.get(id);
+      return getById(id);
     },
 
     remove(id: string): boolean {
@@ -2338,16 +2359,19 @@ export function createSettingsRepo(db: DatabaseSync) {
     `INSERT INTO settings (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`
   );
+  const readValue = (key: string): unknown => {
+    const row = selectOne.get(key) as { value: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.value) as unknown;
+    } catch {
+      return null;
+    }
+  };
 
   return {
     get<T>(key: string): T | null {
-      const row = selectOne.get(key) as { value: string } | undefined;
-      if (!row) return null;
-      try {
-        return JSON.parse(row.value) as T;
-      } catch {
-        return null;
-      }
+      return readValue(key) as T | null;
     },
 
     set(key: string, value: unknown): void {
@@ -2373,12 +2397,12 @@ export function createSettingsRepo(db: DatabaseSync) {
     },
 
     getString(key: string, fallback: string): string {
-      const value = this.get<unknown>(key);
+      const value = readValue(key);
       return typeof value === 'string' ? value : fallback;
     },
 
     getBoolean(key: string, fallback: boolean): boolean {
-      const value = this.get<unknown>(key);
+      const value = readValue(key);
       return typeof value === 'boolean' ? value : fallback;
     }
   };
@@ -2517,7 +2541,7 @@ interface WorkStationApi {
     setStatus(id: string, status: TaskStatus): Promise<Result<Task | null>>;
     remove(id: string): Promise<Result<boolean>>;
     countsByStatus(): Promise<Result<Record<TaskStatus, number>>>;
-    overdueCount(nowLocalDate: string): Promise<Result<number>>;
+    overdueCount(nowLocalDateTime: string): Promise<Result<number>>;
   };
   tags: {
     list(): Promise<Result<Tag[]>>;
@@ -2648,7 +2672,7 @@ export interface WorkStationApi {
     setStatus(id: string, status: TaskStatus): Promise<Result<Task | null>>;
     remove(id: string): Promise<Result<boolean>>;
     countsByStatus(): Promise<Result<Record<TaskStatus, number>>>;
-    overdueCount(nowLocalDate: string): Promise<Result<number>>;
+    overdueCount(nowLocalDateTime: string): Promise<Result<number>>;
   };
   tags: {
     list(): Promise<Result<Tag[]>>;
@@ -2719,7 +2743,7 @@ export function registerIpc(db: DatabaseSync, dbPath: string): void {
   handle('tasks:setStatus', (id: string, status: TaskStatus) => tasks.setStatus(id, status));
   handle('tasks:remove', (id: string) => tasks.remove(id));
   handle('tasks:countsByStatus', () => tasks.countByStatus());
-  handle('tasks:overdueCount', (nowLocalDate: string) => tasks.countOverdue(nowLocalDate));
+  handle('tasks:overdueCount', (nowLocalDateTime: string) => tasks.countOverdue(nowLocalDateTime));
 
   handle('tags:list', () => tags.list());
   handle('tags:create', (input: { name: string; color?: string | null }) => tags.create(input));
@@ -2797,8 +2821,8 @@ const api: WorkStationApi = {
       ipcRenderer.invoke('tasks:setStatus', id, status),
     remove: (id) => ipcRenderer.invoke('tasks:remove', id),
     countsByStatus: () => ipcRenderer.invoke('tasks:countsByStatus'),
-    overdueCount: (nowLocalDate: string) =>
-      ipcRenderer.invoke('tasks:overdueCount', nowLocalDate)
+    overdueCount: (nowLocalDateTime: string) =>
+      ipcRenderer.invoke('tasks:overdueCount', nowLocalDateTime)
   },
   tags: {
     list: () => ipcRenderer.invoke('tags:list'),
