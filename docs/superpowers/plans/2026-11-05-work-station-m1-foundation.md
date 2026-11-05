@@ -142,7 +142,7 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 ### 当前待办
 
 1. ~~**Task 12 任务列表页与快速添加**~~ ✅ 已完成（`8bb30c9` + `dbcefdd`）。
-2. **Task 13 打包配置、README 与 M1 手测清单** —— `engines.node >= 22.5.0`、README、`docs/M1-手测清单.md`、`npm run build:win` 产出 portable exe，并按可脚本化配方逐项验证。
+2. **Task 13 打包配置、README 与 M1 手测清单** —— `engines.node >= 22.13.0`、README、`docs/M1-手测清单.md`、`npm run build:win` 产出 portable exe，并按可脚本化配方逐项验证。
 3. **M1 收尾**：全分支最终评审 + 修复波（含延后 Minor 的统一评估）。
 
 ### 延后 Minor 清单
@@ -5297,11 +5297,11 @@ git commit -m "feat: 添加任务列表页与快速添加"
 
 ```json
 "engines": {
-  "node": ">=22.5.0"
+  "node": ">=22.13.0"
 }
 ```
 
-理由：主进程使用 `node:sqlite`，需要 Node ≥ 22.5（Electron 44 内置 Node 24.22，实际不受限，但本机 Node 22.22 也满足）。
+理由：主进程使用 `node:sqlite`。该模块 v22.5.0 引入但仍需 `--experimental-sqlite`，v22.13.0 起才默认可用，且 Electron 44 自身要求 Node ≥ 22.12，故下限取 **22.13**（评审 91fc7573 指出原 22.5 会误导用户）。
 
 - [ ] **Step 2: 写 README**
 
@@ -5316,8 +5316,8 @@ git commit -m "feat: 添加任务列表页与快速添加"
 
 **M1 骨架与数据层** —— 已完成
 
-- 项目与任务的增删改查、归档、软删除
-- 标签体系
+- 项目与任务的增删改查、归档（可恢复）、删除（不可恢复）
+- 标签体系的数据层与 IPC（管理界面在 M2）
 - 浅色 / 深色主题
 - Windows portable 单文件 exe 打包
 
@@ -5325,7 +5325,7 @@ M2（看板与进度）、M3（提醒）、M4（周报月报与统计）尚未�
 
 ## 环境要求
 
-- Node.js ≥ 22.5
+- Node.js ≥ 22.13
 - Windows（打包目标为 portable exe）
 
 ## 开发
@@ -5357,7 +5357,7 @@ npm run build:win
 | 开发期 | `.data/data.db`（项目目录下） |
 | 打包后 | `%APPDATA%\work-station\data.db` |
 
-数据库是单个 SQLite 文件，**复制该文件即完成备份**。
+数据库使用 WAL 模式。**退出应用后复制 `data.db` 即完成备份**；运行中复制需连同 `data.db-wal`、`data.db-shm` 一起复制，更稳妥的是取同目录 `backups\data-<日期>.db`（启动时已 checkpoint，最多 7 份）。
 
 ## 目录结构
 
