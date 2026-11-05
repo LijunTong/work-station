@@ -16,15 +16,15 @@
 
 > **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
 >
-> **最近更新：** 2026-11-05 · Task 10 完成（10/13）
+> **最近更新：** 2026-11-05 · Task 11 完成（11/13）
 
-**当前状态：M1 骨架与数据层进行中。13 个任务已完成 10 个，Task 10 通用 UI 组件集一次通过复审（VERDICT: PASS，0 Critical、0 Important，8 Minor 延后）。Task 11–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+**当前状态：M1 骨架与数据层进行中。13 个任务已完成 11 个，Task 11 项目管理页一次通过复审（VERDICT: PASS，0 Critical、0 Important，7 Minor 延后）。Task 12–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
 
 ### 里程碑总览
 
 | 里程碑 | 范围 | 状态 |
 | --- | --- | --- |
-| M1 | 骨架与数据层（13 任务） | 进行中 · 10/13 |
+| M1 | 骨架与数据层（13 任务） | 进行中 · 11/13 |
 | M2 | 看板与拖拽 | 未拆解 |
 | M3 | 提醒与报告 | 未拆解 |
 | M4 | 打磨与发布 | 未拆解 |
@@ -43,14 +43,14 @@
 | 8 | IPC 路由与 preload 桥接 | ✅ 完成（1 轮修复） | `6dcd6c7` `65b3c36` | 通过（1 个 Important 修复，复审 PASS） | 19 |
 | 9 | 渲染进程基础（API 客户端 / 主题 / 布局） | ✅ 完成 | `2e2b3e4` | 通过（0 Important，8 Minor 延后） | 6 |
 | 10 | 通用 UI 组件集 | ✅ 完成 | `3d9122f` | 通过（0 Important，8 Minor 延后） | 6 |
-| 11 | 项目管理页 | ⬜ 未开始 | — | — | — |
+| 11 | 项目管理页 | ✅ 完成 | `043555d` | 通过（0 Important，7 Minor 延后） | — |
 | 12 | 任务列表页与快速添加 | ⬜ 未开始 | — | — | — |
 | 13 | 打包配置、README、M1 手测清单 | ⬜ 未开始 | — | — | — |
 | — | M1 收尾：全分支最终评审 + 修复波 | ⬜ 未开始 | — | — | — |
 
 合计 **128** 条用例全绿（12 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
 
-### 已交付代码（Task 1–8）
+### 已交付代码（Task 1–11）
 
 ```
 electron/
@@ -79,7 +79,7 @@ src/
 ├─ hooks/useAsync.ts         异步加载 hook（loading / error / reload）
 ├─ styles/global.css         设计令牌 + 布局骨架（浅/深两套）
 ├─ components/               Badge / ProgressRing / EmptyState / Field / Drawer / Modal
-├─ features/settings/SettingsPage.tsx  主题设置页
+├─ features/projects/                  ProjectPage + ProjectForm（项目卡片/进度环/删除确认）
 └─ App.tsx / main.tsx / index.html   应用外壳（导航 + 主题恢复）
 tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14 · settings 16 · ipc 14 · preload 3 · result-parity 2 · ui 6 · format 6
 ```
@@ -131,7 +131,7 @@ tests/                       time 7 · db 17 · projects 18 · progress 6 · tas
 
 ```powershell
 cd "E:\Joont\AI Agent Workspace\work-station"
-npm test                            # 116 用例全绿（10 个测试文件）
+npm test                            # 128 用例全绿（12 个测试文件）
 npm run typecheck                   # tsc 双 program 无错
 npm run build                       # electron-vite 三端构建
 npm run build:win                   # electron-builder portable exe（Task 1 实测 104.7MB 可启动）
@@ -140,10 +140,9 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 
 ### 当前待办
 
-1. **Task 9 渲染进程基础** —— `useAsync` / Zustand UI store / 主题与布局骨架。必须落实 Task 8 的 5 条裁决：渲染进程只能经 `window.api`（不碰 DB/文件系统）；`Result<T>` 失败经 `call<T>` 转成 `ApiError` 并由 UI 展示；`app:info` 已可由设置页消费；IPC 入参不做运行时校验（错误文案是 SQLite 英文原文，UI 需兜底）；`projects:remove` 是级联硬删，UI 必须二次确认。另注意：`electron/main.ts` 的模块作用域副作用仍未收进 `main()`（Task 1 延后项）。
-2. **Task 10–13** 通用组件、项目管理页、任务列表页、打包与手测清单。Task 10 必须补渲染端 `toLocalDateTime`（`tasks.overdueCount` 需要墙钟串），并与 `src/lib/progress.ts` 的逾期口径保持一致。
-3. **M1 收尾**：全分支最终评审 + 修复波。
-
+1. **Task 12 任务列表页与快速添加** —— `TaskPage` / `TaskForm` / `QuickAdd`，日期分组折叠、已完成灰显不可反悔、chip 过滤、Ctrl+Enter 提交。必须复用 `@/lib/format` 的 `toLocalDateTime`/`toLocalDate`（禁止手拼）、`src/lib/progress.ts` 的 `computeProgress`（禁止复制）。
+2. **Task 13 打包配置、README 与 M1 手测清单** —— `engines.node >= 22.5.0`、README、`docs/M1-手测清单.md`、`npm run build:win` 产出 portable exe，并按可脚本化配方逐项验证。
+3. **M1 收尾**：全分支最终评审 + 修复波（含延后 Minor 的统一评估）。
 ### 延后 Minor 清单
 
 记账于 SDD 账本，暂不处理，留到 M1 收尾统一评估：
@@ -156,7 +155,9 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 - **Task 6**：`setTaskTags` 的失败路径无用例钉死也无契约文档 —— 未知 id 时抛原始 `ERR_SQLITE_ERROR: FOREIGN KEY constraint failed`（已实测，事务回滚后旧关联保留）；`listTagTaskIds` 无 `ORDER BY`，当前靠索引碰巧有序但不是契约；`create`/`update` 不校验空名与重名，校验应落在 Task 8 的 IPC 层；`listTaskTags`/`listTagTaskIds` 每次调用重新 prepare，与上提工厂闭包的风格不一致；`tags.remove()` 对不存在 id 返回 `false` 的路径无断言（房屋模式 `projects.test.ts` 同时覆盖 true/false）。
 - **Task 7**：`JSON.stringify` 对函数/Symbol 同样返回 `undefined` → `set` 传这类值仍抛绑定错误（现实路径不可达）；`getAll()` 用对象字面量累积，键名 `__proto__` 会静默丢键并劫持返回对象的原型（改用 `Object.create(null)` 可修）；新钉死的「按 key 升序」契约在整数样式键上不成立（JS 把数组索引样式键按数值升序提前，与 SQL 序分叉）；`remove` 每次现场 prepare（沿用房屋模式）；`node:sqlite` 的 ExperimentalWarning 噪音全仓库存在，非本任务引入。
 - **Task 8**：`handle()` 仍收裸 `string`，已导出的 `IpcChannel` 类型未接到入口 → 通道名拼错仍靠测试而非 `tsc` 发现；preload 的 `settings.get<T>` 用 `as` 满足渲染端 program 的 `noUnusedLocals`，改用显式返回类型注解更稳，且 `tests/preload.test.ts` 把 preload 拉进 `tsconfig.json` program 的副作用应注明；`Result` 漂移守卫只在 `npm run typecheck` 生效（`npm test` / `build` 不红，仓库无 CI，建议加 `check` 脚本）；preload 测试的方法→channel 表是手工清单，新增方法复用已有 channel 时不会红（应从实际 `api` 对象递归收集方法名）；首轮 8 条 Minor（handler 只挡同步抛出、`describeError` 的 `??` 死代码、两个逾期数采样时刻不同源、IPC 入参无运行时校验、`settings.get<T>` 纯调用方断言、mock 保真度、`dbPath` 暴露绝对路径、报告行号偏差）保留。
-
+- **Task 9**：`useAsync` 用 `[...deps, nonce]`（deps 定长是调用方契约，变长会触发 React 开发期警告）；`applyTheme` 对显式 light/dark 也求值 `systemPrefersDark()`（无 `window` 抛 ReferenceError，且 `setTheme` 先 set 后 apply，抛错后 store 与 dataset 不同步）；主题恢复无取消标志、无条件覆盖、空 catch 且只读一次；保存主题失败不回滚；`matchMedia` 查询串未被测试钉住（变异存活）；无 useAsync/App/SettingsPage 组件测试，`showToast` 断言钉死 `id: Date.now()`；首帧主题闪（`index.html` 未预置 `data-theme`，`electron/main.ts:17` 背景为深色）；未按字面跑 `npm run dev`。
+- **Task 10**：Drawer/Modal 缺 `role="dialog"`/`aria-modal`/`aria-labelledby`、无焦点管理与 body 滚动锁、关闭按钮可访问名只有 `×`；ProgressRing 对 `NaN` 无守卫；Badge 默认生成 `.badge-default` 但 CSS 无该规则；`global.css` 丢末尾换行；`formatHours` 负数 ties 朝 +∞、`NaN→"NaNh"`（`tasks.estimate/spent` 为 REAL 且无 CHECK ≥0）；`isOverdue` 相等边界无用例（`<`→`<=` 变异存活），parity 用例依赖非 UTC 时区；组件用全局 `React.ReactElement`；Field 隐式 label 只关联第一个控件。
+- **Task 11**：删除确认无 in-flight 保护（双击重复 IPC + 重复成功 toast，无数据损坏）；`tasksAsync.error` 从未渲染，tasks 故障时卡片静默按 0 任务/0% 渲染；错误态与「还没有项目」空状态同屏；`ProjectForm` 内联复制了 `CreateProjectInput` 的 9 字段结构；归档无二次确认、应用内无「取消归档」入口（repo 有 `unarchive` 未接入）；进度改 auto 保存会清掉原 `progressManual`；设计 6.1 的「进行中任务数」「颜色标签」未在卡片展示（颜色仅存 DB）；`reloadAll` 的 `useCallback` 依赖每次渲染都变（无效记忆化，无行为影响）。
 ---
 
 ## Global Constraints
