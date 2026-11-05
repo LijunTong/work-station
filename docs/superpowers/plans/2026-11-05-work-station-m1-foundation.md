@@ -16,15 +16,15 @@
 
 > **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
 >
-> **最近更新：** 2026-11-05 · Task 9 完成（9/13）
+> **最近更新：** 2026-11-05 · Task 10 完成（10/13）
 
-**当前状态：M1 骨架与数据层进行中。13 个任务已完成 9 个，Task 9 渲染进程基础（API 客户端 / 主题 / 布局）一次通过复审（VERDICT: PASS，0 Critical、0 Important）。Task 10–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+**当前状态：M1 骨架与数据层进行中。13 个任务已完成 10 个，Task 10 通用 UI 组件集一次通过复审（VERDICT: PASS，0 Critical、0 Important，8 Minor 延后）。Task 11–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
 
 ### 里程碑总览
 
 | 里程碑 | 范围 | 状态 |
 | --- | --- | --- |
-| M1 | 骨架与数据层（13 任务） | 进行中 · 9/13 |
+| M1 | 骨架与数据层（13 任务） | 进行中 · 10/13 |
 | M2 | 看板与拖拽 | 未拆解 |
 | M3 | 提醒与报告 | 未拆解 |
 | M4 | 打磨与发布 | 未拆解 |
@@ -42,13 +42,13 @@
 | 7 | 设置仓储 | ✅ 完成（1 轮修复） | `5ce4a4d` `f1aca3d` | 通过（1 个 Important 修复，复审 PASS） | 16 |
 | 8 | IPC 路由与 preload 桥接 | ✅ 完成（1 轮修复） | `6dcd6c7` `65b3c36` | 通过（1 个 Important 修复，复审 PASS） | 19 |
 | 9 | 渲染进程基础（API 客户端 / 主题 / 布局） | ✅ 完成 | `2e2b3e4` | 通过（0 Important，8 Minor 延后） | 6 |
-| 10 | 通用 UI 组件集 | ⬜ 未开始 | — | — | — |
+| 10 | 通用 UI 组件集 | ✅ 完成 | `3d9122f` | 通过（0 Important，8 Minor 延后） | 6 |
 | 11 | 项目管理页 | ⬜ 未开始 | — | — | — |
 | 12 | 任务列表页与快速添加 | ⬜ 未开始 | — | — | — |
 | 13 | 打包配置、README、M1 手测清单 | ⬜ 未开始 | — | — | — |
 | — | M1 收尾：全分支最终评审 + 修复波 | ⬜ 未开始 | — | — | — |
 
-合计 **122** 条用例全绿（11 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
+合计 **128** 条用例全绿（12 个测试文件），`npm run typecheck` 与 `npm run build` 通过。
 
 ### 已交付代码（Task 1–8）
 
@@ -74,12 +74,14 @@ src/
 ├─ types/env.d.ts            Window.api 全局声明
 ├─ lib/progress.ts           computeProgress（全项目唯一实现）
 ├─ lib/api.ts                ApiError + call<T>（Result 解包）
+├─ lib/format.ts             百分比/工时/日期格式化 + isOverdue + 墙钟串（与主进程同口径）
 ├─ store/ui.ts               theme / page / toast + 主题解析与落盘
 ├─ hooks/useAsync.ts         异步加载 hook（loading / error / reload）
 ├─ styles/global.css         设计令牌 + 布局骨架（浅/深两套）
+├─ components/               Badge / ProgressRing / EmptyState / Field / Drawer / Modal
 ├─ features/settings/SettingsPage.tsx  主题设置页
 └─ App.tsx / main.tsx / index.html   应用外壳（导航 + 主题恢复）
-tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14 · settings 16 · ipc 14 · preload 3 · result-parity 2 · ui 6
+tests/                       time 7 · db 17 · projects 18 · progress 6 · tasks 19 · tags 14 · settings 16 · ipc 14 · preload 3 · result-parity 2 · ui 6 · format 6
 ```
 
 ### 实施中发现并修掉的真实缺陷
