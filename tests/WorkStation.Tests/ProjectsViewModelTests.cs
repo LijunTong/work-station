@@ -66,26 +66,13 @@ public class ProjectsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void NewProject_BadDate_ShowsValidationError()
-    {
-        var vm = CreateVm();
-        vm.NewProjectCommand.Execute(null);
-        vm.Form!.Name = "日期错";
-        vm.Form.DueDate = "2026/12/01";
-
-        vm.Form.SaveCommand.Execute(null);
-
-        Assert.Contains("YYYY-MM-DD", vm.Form.Error);
-    }
-
-    [Fact]
     public void NewProject_DueBeforeStart_ShowsValidationError()
     {
         var vm = CreateVm();
         vm.NewProjectCommand.Execute(null);
         vm.Form!.Name = "顺序错";
-        vm.Form.StartDate = "2026-12-10";
-        vm.Form.DueDate = "2026-12-01";
+        vm.Form.StartDate = new DateTime(2026, 12, 10);
+        vm.Form.DueDate = new DateTime(2026, 12, 1);
 
         vm.Form.SaveCommand.Execute(null);
 

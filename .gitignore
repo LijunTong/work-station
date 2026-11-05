@@ -11,3 +11,6 @@ packages/
 
 # 发布产物
 dist/
+
+# 工作区记忆与本地偏好
+.workbuddy/

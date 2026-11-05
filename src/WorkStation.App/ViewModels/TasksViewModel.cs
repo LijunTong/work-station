@@ -25,6 +25,10 @@ public partial class TasksViewModel : ObservableObject
     /// <summary>折叠状态跨刷新保留：重新加载不该把用户折叠的组又展开。</summary>
     private readonly HashSet<string> _collapsed = [];
 
+    private bool _isReloading;
+    private bool _reloadPending;
+    private bool _isRebuildingOptions;
+
     public TasksViewModel(WorkStationService service, Action<string, bool> toast, Func<DateTime>? clock = null)
     {
         _service = service;
@@ -86,7 +90,11 @@ public partial class TasksViewModel : ObservableObject
 
     partial void OnSelectedStatusFilterChanged(StatusFilter value) => Reload();
 
-    partial void OnSelectedProjectChanged(ProjectOption? value) => Reload();
+    partial void OnSelectedProjectChanged(ProjectOption? value)
+    {
+        if (_isRebuildingOptions) return;
+        Reload();
+    }
 
     partial void OnSearchTextChanged(string value) => Reload();
 
@@ -102,6 +110,33 @@ public partial class TasksViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDeleteConfirmOpen));
 
     public void Reload()
+    {
+        // 重入保护：重建项目下拉会让 ComboBox 把 SelectedItem 写回 null，
+        // 从而再触发一次 Reload（见 ReloadProjectOptions）。允许它无限套娃、
+        // 或者让内外两层同时往里 Add，都会得到重复项。这里把嵌套请求合并成一次补跑。
+        if (_isReloading)
+        {
+            _reloadPending = true;
+            return;
+        }
+
+        _isReloading = true;
+        try
+        {
+            do
+            {
+                _reloadPending = false;
+                ReloadCore();
+            }
+            while (_reloadPending);
+        }
+        finally
+        {
+            _isReloading = false;
+        }
+    }
+
+    private void ReloadCore()
     {
         IsLoading = true;
         try
@@ -151,19 +186,30 @@ public partial class TasksViewModel : ObservableObject
     {
         var previous = SelectedProject?.Id;
 
-        ProjectOptions.Clear();
-        ProjectOptions.Add(ProjectOption.All);
-        foreach (var project in projects)
+        // Clear() 会让绑定中的 ComboBox 清空选中项并回写 SelectedProject = null，
+        // 这一步如果照常触发 Reload，就是在外层循环里再跑一遍完整的重建，
+        // 结果是每个项目被加两遍。重建期间直接吞掉这些选中变化。
+        _isRebuildingOptions = true;
+        try
         {
-            var archived = project.ArchivedAt is not null;
-            ProjectOptions.Add(new ProjectOption(
-                project.Id,
-                archived ? $"{project.Name}（已归档）" : project.Name,
-                archived));
-        }
+            ProjectOptions.Clear();
+            ProjectOptions.Add(ProjectOption.All);
+            foreach (var project in projects.DistinctBy(p => p.Id))
+            {
+                var archived = project.ArchivedAt is not null;
+                ProjectOptions.Add(new ProjectOption(
+                    project.Id,
+                    archived ? $"{project.Name}（已归档）" : project.Name,
+                    archived));
+            }
 
-        // 重建选项后恢复原选中项；找不到就回落到「全部项目」
-        SelectedProject = ProjectOptions.FirstOrDefault(o => o.Id == previous) ?? ProjectOptions[0];
+            // 重建选项后恢复原选中项；找不到就回落到「全部项目」
+            SelectedProject = ProjectOptions.FirstOrDefault(o => o.Id == previous) ?? ProjectOptions[0];
+        }
+        finally
+        {
+            _isRebuildingOptions = false;
+        }
     }
 
     private void BuildGroups(IReadOnlyList<TaskItem> tasks, IReadOnlyDictionary<string, string> projectNames)
@@ -501,8 +547,15 @@ public partial class TaskFormViewModel : ObservableObject
     [ObservableProperty]
     private int _priorityIndex;
 
+    /// <summary>截止日期。控件是 CalendarDatePicker，null 表示不设截止时间。</summary>
     [ObservableProperty]
-    private string _dueAtText = string.Empty;
+    private DateTime? _dueDate;
+
+    /// <summary>截止时刻。控件是 TimePicker；只选日期时默认落到 18:00。</summary>
+    [ObservableProperty]
+    private TimeSpan? _dueTime;
+
+    public bool HasDueDate => DueDate is not null;
 
     [ObservableProperty]
     private string _remindBefore = "0";
@@ -530,6 +583,27 @@ public partial class TaskFormViewModel : ObservableObject
     public bool IsBlocked => StatusIndex == 2;
 
     partial void OnStatusIndexChanged(int value) => OnPropertyChanged(nameof(IsBlocked));
+
+    partial void OnDueDateChanged(DateTime? value)
+    {
+        // 只挑日期时补一个下班前的默认时刻，并直接写进时间选择器，
+        // 让默认值可见可改，而不是藏在保存逻辑里。
+        if (value is not null && DueTime is null)
+        {
+            DueTime = DefaultDueTime;
+        }
+
+        OnPropertyChanged(nameof(HasDueDate));
+    }
+
+    private static readonly TimeSpan DefaultDueTime = new(18, 0, 0);
+
+    [RelayCommand]
+    private void ClearDue()
+    {
+        DueDate = null;
+        DueTime = null;
+    }
 
     private TaskFormViewModel(Action save, Action cancel)
     {
@@ -568,6 +642,8 @@ public partial class TaskFormViewModel : ObservableObject
             if (found >= 0) projectIndex = found;
         }
 
+        var hasDue = TryParseStoredDueAt(task.DueAt, out var due);
+
         return new TaskFormViewModel(save, cancel)
         {
             TaskId = task.Id,
@@ -590,7 +666,8 @@ public partial class TaskFormViewModel : ObservableObject
                 Priority.Medium => 2,
                 _ => 3
             },
-            DueAtText = task.DueAt is null ? string.Empty : task.DueAt.Replace('T', ' '),
+            DueDate = hasDue ? due.Date : null,
+            DueTime = hasDue ? due.TimeOfDay : null,
             RemindBefore = task.RemindBefore.ToString(CultureInfo.InvariantCulture),
             Estimate = task.Estimate?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty,
             Spent = task.Spent?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty,
@@ -606,9 +683,9 @@ public partial class TaskFormViewModel : ObservableObject
             return false;
         }
 
-        if (!TryParseDueAt(DueAtText, out _, out var dueError))
+        if (DueDate is null && DueTime is not null)
         {
-            Error = dueError;
+            Error = "选了时刻还要选日期，或者用「清除」去掉截止时间";
             return false;
         }
 
@@ -630,7 +707,6 @@ public partial class TaskFormViewModel : ObservableObject
 
     public CreateTaskInput BuildCreate()
     {
-        TryParseDueAt(DueAtText, out var dueAt, out _);
         return new CreateTaskInput
         {
             Title = Title.Trim(),
@@ -638,7 +714,7 @@ public partial class TaskFormViewModel : ObservableObject
             ProjectId = SelectedProjectId,
             Status = ToStatus(StatusIndex),
             Priority = ToPriority(PriorityIndex),
-            DueAt = dueAt,
+            DueAt = BuildDueAt(),
             RemindBefore = ParseNullableInt(RemindBefore) ?? 0,
             Estimate = ParseNullableDouble(Estimate),
             Spent = ParseNullableDouble(Spent),
@@ -648,7 +724,6 @@ public partial class TaskFormViewModel : ObservableObject
 
     public UpdateTaskInput BuildUpdate()
     {
-        TryParseDueAt(DueAtText, out var dueAt, out _);
         return new UpdateTaskInput
         {
             Title = Optional<string>.Some(Title.Trim()),
@@ -656,7 +731,7 @@ public partial class TaskFormViewModel : ObservableObject
             ProjectId = Optional<string?>.Some(SelectedProjectId),
             Status = Optional<TaskStatus>.Some(ToStatus(StatusIndex)),
             Priority = Optional<Priority>.Some(ToPriority(PriorityIndex)),
-            DueAt = Optional<string?>.Some(dueAt),
+            DueAt = Optional<string?>.Some(BuildDueAt()),
             RemindBefore = Optional<int?>.Some(ParseNullableInt(RemindBefore) ?? 0),
             Estimate = Optional<double?>.Some(ParseNullableDouble(Estimate)),
             Spent = Optional<double?>.Some(ParseNullableDouble(Spent)),
@@ -669,41 +744,38 @@ public partial class TaskFormViewModel : ObservableObject
 
     /// <summary>
     /// 表单里的项目选项 = 「独立任务」+ 未归档的真实项目。
-    /// 筛选下拉传进来的「全部项目」与已归档项目都不是可保存的值，这里必须过滤掉。
+    /// 筛选下拉传进来的「全部项目」与已归档项目都不是可保存的值，这里必须过滤掉；
+    /// 同时按 Id 去重，避免上游列表万一带上重复项时一路传到表单里。
     /// </summary>
     private static List<ProjectOption> FormChoices(IReadOnlyList<ProjectOption> choices)
     {
         var options = new List<ProjectOption> { ProjectOption.Standalone };
-        options.AddRange(choices.Where(o => o.Id is not null && !o.IsArchived));
+        options.AddRange(choices
+            .Where(o => o.Id is not null && !o.IsArchived)
+            .DistinctBy(o => o.Id));
         return options;
     }
 
     /// <summary>
-    /// 允许三种写法：空、日期、日期+时间。只给日期时补 18:00（下班前默认时刻），
-    /// 并在界面上写清楚，避免隐式规则让人猜。
+    /// 从库里存的本地时间串还原出日期/时刻。库里只有一种格式（yyyy-MM-ddTHH:mm），
+    /// 其余写法是历史数据兜底，解析不了就当没设截止时间。
     /// </summary>
-    private static bool TryParseDueAt(string text, out string? dueAt, out string? error)
+    private static bool TryParseStoredDueAt(string? value, out DateTime parsed)
     {
-        dueAt = null;
-        error = null;
+        parsed = default;
+        if (string.IsNullOrWhiteSpace(value)) return false;
 
-        var value = text.Trim();
-        if (value.Length == 0) return true;
+        string[] formats = ["yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd"];
+        return DateTime.TryParseExact(value.Trim(), formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed);
+    }
 
-        string[] formats = ["yyyy-MM-dd HH:mm", "yyyy-MM-ddTHH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd"];
-        if (!DateTime.TryParseExact(value, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
-        {
-            error = "截止时间格式应为 YYYY-MM-DD HH:mm（也可只填日期，默认 18:00）";
-            return false;
-        }
+    /// <summary>日期选择器 + 时间选择器合成库里要的 "yyyy-MM-ddTHH:mm"；只留时刻不给日期视为未设置。</summary>
+    private string? BuildDueAt()
+    {
+        if (DueDate is not { } date) return null;
 
-        if (value.Length == 10)
-        {
-            parsed = parsed.Date.AddHours(18);
-        }
-
-        dueAt = LocalTime.ToLocalDateTime(parsed);
-        return true;
+        var time = DueTime ?? DefaultDueTime;
+        return LocalTime.ToLocalDateTime(date.Date.Add(time));
     }
 
     private static bool IsOptionalNonNegativeInt(string value) =>

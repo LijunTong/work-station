@@ -22,6 +22,8 @@
     <!-- UI 层无头测试：加载真实 .axaml、实例化 ViewModel、模拟交互 -->
     <PackageReference Include="Avalonia.Headless" Version="12.1.5" />
     <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.5" />
+    <!-- 真实光栅化：截图回归用，纯逻辑测试不需要 -->
+    <PackageReference Include="Avalonia.Skia" Version="12.1.5" />
   </ItemGroup>
 
   <ItemGroup>

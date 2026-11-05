@@ -236,24 +236,37 @@
                     </StackPanel>
                   </Grid>
 
-                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel Spacing="4">
+                  <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto">
                       <TextBlock Text="截止时间" Classes="label" />
-                      <TextBox Text="{Binding DueAtText, Mode=TwoWay}"
-                               PlaceholderText="2026-11-06 18:00（只填日期默认 18:00）" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="4" Width="120">
-                      <TextBlock Text="提前提醒" Classes="label" />
-                      <TextBox Text="{Binding RemindBefore, Mode=TwoWay}" PlaceholderText="分钟" />
-                    </StackPanel>
-                  </Grid>
+                      <Button Grid.Column="1"
+                              Content="清除"
+                              Classes="sm nav-action"
+                              Padding="4,0"
+                              Command="{Binding ClearDueCommand}"
+                              IsVisible="{Binding HasDueDate}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                      <CalendarDatePicker SelectedDate="{Binding DueDate, Mode=TwoWay}"
+                                          PlaceholderText="不设置"
+                                          HorizontalAlignment="Stretch" />
+                      <TimePicker Grid.Column="1"
+                                  SelectedTime="{Binding DueTime, Mode=TwoWay}"
+                                  ClockIdentifier="24HourClock"
+                                  IsVisible="{Binding HasDueDate}" />
+                    </Grid>
+                  </StackPanel>
 
-                  <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                  <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
                     <StackPanel Spacing="4">
+                      <TextBlock Text="提前提醒（分钟）" Classes="label" />
+                      <TextBox Text="{Binding RemindBefore, Mode=TwoWay}" PlaceholderText="0" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4">
                       <TextBlock Text="预估工时（小时）" Classes="label" />
                       <TextBox Text="{Binding Estimate, Mode=TwoWay}" PlaceholderText="2" />
                     </StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="4">
+                    <StackPanel Grid.Column="2" Spacing="4">
                       <TextBlock Text="实际工时（小时）" Classes="label" />
                       <TextBox Text="{Binding Spent, Mode=TwoWay}" PlaceholderText="1.5" />
                     </StackPanel>

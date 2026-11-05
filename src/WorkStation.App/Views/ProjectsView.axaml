@@ -189,11 +189,15 @@
                   <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                     <StackPanel Spacing="4">
                       <TextBlock Text="开始日期" Classes="label" />
-                      <TextBox Text="{Binding StartDate, Mode=TwoWay}" PlaceholderText="YYYY-MM-DD" />
+                      <CalendarDatePicker SelectedDate="{Binding StartDate, Mode=TwoWay}"
+                                          PlaceholderText="不设置"
+                                          HorizontalAlignment="Stretch" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Spacing="4">
                       <TextBlock Text="目标日期" Classes="label" />
-                      <TextBox Text="{Binding DueDate, Mode=TwoWay}" PlaceholderText="YYYY-MM-DD" />
+                      <CalendarDatePicker SelectedDate="{Binding DueDate, Mode=TwoWay}"
+                                          PlaceholderText="不设置"
+                                          HorizontalAlignment="Stretch" />
                     </StackPanel>
                   </Grid>
 

@@ -165,32 +165,49 @@ public class TasksViewModelTests : IDisposable
     }
 
     [Fact]
-    public void TaskForm_Validation_RejectsBadDueAt()
+    public void TaskForm_PickDateOnly_GetsDefaultHour()
     {
         var vm = CreateVm();
         vm.NewTaskCommand.Execute(null);
+        vm.Form!.Title = "只选日期";
+        vm.Form.DueDate = new DateTime(2026, 11, 6);
 
-        vm.Form!.Title = "时间写错";
-        vm.Form.DueAtText = "明天下午";
-        vm.Form.Validate();
+        // 只挑日期时，时间选择器里要直接显示默认的 18:00，而不是留空让人猜
+        Assert.Equal(new TimeSpan(18, 0, 0), vm.Form.DueTime);
 
-        Assert.False(vm.Form.Validate());
-        Assert.Contains("YYYY-MM-DD HH:mm", vm.Form.Error);
-    }
-
-    [Fact]
-    public void TaskForm_DateFormatOnly_GetsDefaultHour()
-    {
-        var vm = CreateVm();
-        vm.NewTaskCommand.Execute(null);
-        vm.Form!.Title = "只填日期";
-        vm.Form.DueAtText = "2026-11-06";
-
-        vm.Form.Validate();
+        Assert.True(vm.Form.Validate());
         vm.SaveFormCommand.Execute(null);
 
         var task = _service.TasksList().Data!.Single();
         Assert.Equal("2026-11-06T18:00", task.DueAt);
+    }
+
+    [Fact]
+    public void TaskForm_PickTimeWithoutDate_IsRejected()
+    {
+        var vm = CreateVm();
+        vm.NewTaskCommand.Execute(null);
+        vm.Form!.Title = "只有时刻";
+        vm.Form.DueTime = new TimeSpan(9, 30, 0);
+
+        Assert.False(vm.Form.Validate());
+        Assert.Contains("选日期", vm.Form.Error);
+    }
+
+    [Fact]
+    public void TaskForm_ClearDue_RemovesDueAt()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput { Title = "要清空的", DueAt = "2026-11-06T18:00" }).Data!;
+        var vm = CreateVm();
+
+        vm.Groups.Single().Tasks.Single().EditCommand.Execute(null);
+        Assert.Equal(new DateTime(2026, 11, 6), vm.Form!.DueDate);
+        Assert.Equal(new TimeSpan(18, 0, 0), vm.Form.DueTime);
+
+        vm.Form.ClearDueCommand.Execute(null);
+        vm.SaveFormCommand.Execute(null);
+
+        Assert.Null(_service.TasksGet(task.Id).Data!.DueAt);
     }
 
     [Fact]

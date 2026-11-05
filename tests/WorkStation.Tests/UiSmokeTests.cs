@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Microsoft.Data.Sqlite;
 using WorkStation.App.ViewModels;
 using WorkStation.App.Views;
+using WorkStation.Core.Models;
 using WorkStation.Core.Services;
 
 namespace WorkStation.Tests;
@@ -107,6 +108,41 @@ public class UiSmokeTests : IDisposable
         Assert.True(vm.HasStartupError);
         Assert.False(vm.IsReady);
         Assert.Contains("database is locked", vm.StartupError);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void TasksPage_ProjectDropdown_StaysDeduplicated()
+    {
+        var first = _service.ProjectsCreate(new CreateProjectInput { Name = "P1" }).Data!;
+        _service.ProjectsCreate(new CreateProjectInput { Name = "P2" });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.ShowTasksCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        // 切换筛选会重建选项列表：Clear() 时 ComboBox 会把 SelectedItem 写回 null，
+        // 若没做重入保护就会多跑一遍重建，下拉里每个项目出现两次。
+        vm.Tasks!.SelectedProject = vm.Tasks.ProjectOptions.First(o => o.Id == first.Id);
+        Dispatcher.UIThread.RunJobs();
+        vm.Tasks.SelectedProject = vm.Tasks.ProjectOptions[0];
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(
+            ["全部项目", "P1", "P2"],
+            vm.Tasks.ProjectOptions.Select(o => o.Name).ToArray());
+
+        vm.Tasks.NewTaskCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(
+            ["独立任务", "P1", "P2"],
+            vm.Tasks.Form!.ProjectChoices.Select(o => o.Name).ToArray());
 
         window.Close();
     }

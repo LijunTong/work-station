@@ -10,5 +10,7 @@ public static class TestAppBuilder
 {
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<WorkStation.App.App>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions());
+            // UseHeadlessDrawing=false + Skia = 真的画出来，可以截帧检查视觉
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .UseSkia();
 }

@@ -358,11 +358,13 @@ public partial class ProjectFormViewModel : ObservableObject
     [ObservableProperty]
     private int _priorityIndex;
 
+    /// <summary>开始日期。控件是 CalendarDatePicker，null 表示不设。</summary>
     [ObservableProperty]
-    private string _startDate = string.Empty;
+    private DateTime? _startDate;
 
+    /// <summary>目标日期。控件是 CalendarDatePicker，null 表示不设。</summary>
     [ObservableProperty]
-    private string _dueDate = string.Empty;
+    private DateTime? _dueDate;
 
     [ObservableProperty]
     private int _progressModeIndex;
@@ -417,8 +419,8 @@ public partial class ProjectFormViewModel : ObservableObject
             Priority.Medium => 2,
             _ => 3
         },
-        StartDate = project.StartDate ?? string.Empty,
-        DueDate = project.DueDate ?? string.Empty,
+        StartDate = ParseStoredDate(project.StartDate),
+        DueDate = ParseStoredDate(project.DueDate),
         ProgressModeIndex = project.ProgressMode == ProgressMode.Manual ? 1 : 0,
         ProgressManual = (project.ProgressManual ?? 0).ToString(CultureInfo.InvariantCulture)
     };
@@ -431,20 +433,7 @@ public partial class ProjectFormViewModel : ObservableObject
             return false;
         }
 
-        if (!IsDateOrEmpty(StartDate))
-        {
-            Error = "开始日期格式应为 YYYY-MM-DD";
-            return false;
-        }
-
-        if (!IsDateOrEmpty(DueDate))
-        {
-            Error = "目标日期格式应为 YYYY-MM-DD";
-            return false;
-        }
-
-        if (!string.IsNullOrWhiteSpace(StartDate) && !string.IsNullOrWhiteSpace(DueDate)
-            && string.CompareOrdinal(StartDate, DueDate) > 0)
+        if (StartDate is { } start && DueDate is { } due && start.Date > due.Date)
         {
             Error = "目标日期不能早于开始日期";
             return false;
@@ -469,8 +458,8 @@ public partial class ProjectFormViewModel : ObservableObject
             Description = Description.Trim(),
             Status = ToStatus(StatusIndex),
             Priority = ToPriority(PriorityIndex),
-            StartDate = NullIfEmpty(StartDate),
-            DueDate = NullIfEmpty(DueDate),
+            StartDate = FormatDate(StartDate),
+            DueDate = FormatDate(DueDate),
             ProgressMode = ProgressModeIndex == 1 ? ProgressMode.Manual : ProgressMode.Auto,
             ProgressManual = ProgressModeIndex == 1 && TryParseProgress(out var value) ? value : null
         };
@@ -485,8 +474,8 @@ public partial class ProjectFormViewModel : ObservableObject
             Description = Optional<string?>.Some(Description.Trim()),
             Status = Optional<ProjectStatus>.Some(ToStatus(StatusIndex)),
             Priority = Optional<Priority>.Some(ToPriority(PriorityIndex)),
-            StartDate = Optional<string?>.Some(NullIfEmpty(StartDate)),
-            DueDate = Optional<string?>.Some(NullIfEmpty(DueDate)),
+            StartDate = Optional<string?>.Some(FormatDate(StartDate)),
+            DueDate = Optional<string?>.Some(FormatDate(DueDate)),
             ProgressMode = Optional<ProgressMode>.Some(ProgressModeIndex == 1 ? ProgressMode.Manual : ProgressMode.Auto),
             ProgressManual = Optional<int?>.Some(ProgressModeIndex == 1 && TryParseProgress(out var value) ? value : null)
         };
@@ -496,11 +485,15 @@ public partial class ProjectFormViewModel : ObservableObject
         int.TryParse(ProgressManual, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)
         && value is >= 0 and <= 100;
 
-    private static bool IsDateOrEmpty(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return true;
-        return DateOnly.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
-    }
+    /// <summary>库里项目日期只有 yyyy-MM-dd，选择器给的是 DateTime，落库前统一截到日期。</summary>
+    private static string? FormatDate(DateTime? value) =>
+        value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    /// <summary>读回历史数据；存的是本地日期串，解析不了就当没设置。</summary>
+    private static DateTime? ParseStoredDate(string? value) =>
+        DateTime.TryParseExact(value?.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+            ? parsed
+            : null;
 
     private static string? NullIfEmpty(string value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

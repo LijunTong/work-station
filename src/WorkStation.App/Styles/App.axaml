@@ -71,6 +71,39 @@
     <Setter Property="MinHeight" Value="30" />
   </Style>
 
+  <!-- 日期/时间选择器：外形与 ComboBox 对齐，免得表单里一眼看出是两套控件 -->
+  <Style Selector="CalendarDatePicker">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource AppRadius}" />
+    <Setter Property="MinHeight" Value="30" />
+  </Style>
+
+  <Style Selector="TimePicker">
+    <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource AppRadius}" />
+    <Setter Property="MinHeight" Value="30" />
+  </Style>
+
+  <!-- 全局 Button 的 10,6 内边距会把选择器里的日历按钮撑宽，但它同时也是图标的容器：
+       只收窄内边距、保留最小可点面积，否则日历图标会被裁掉（20px 宽时完全看不见）。 -->
+  <Style Selector="CalendarDatePicker /template/ Button">
+    <Setter Property="Padding" Value="4,2" />
+    <Setter Property="MinWidth" Value="28" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <!-- 模板给这层 Button 塞了 242px 的 MinWidth，24 小时制下会让控件比列还宽、压到日期框上 -->
+  <Style Selector="TimePicker /template/ Button">
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource AppRadius}" />
+  </Style>
+
   <!-- 侧边栏导航 -->
   <Style Selector="Button.nav">
     <Setter Property="Background" Value="Transparent" />
