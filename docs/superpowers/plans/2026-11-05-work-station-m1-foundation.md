@@ -4205,6 +4205,7 @@ import { isOverdue, toLocalDateTime } from '@/lib/format';
 import { computeProgress } from '@/lib/progress';
 import { useAsync } from '@/hooks/useAsync';
 import { useUiStore } from '@/store/ui';
+import type { CreateProjectInput } from '@/types/api';
 import type { Project, Task } from '@/types/entities';
 import { ProjectForm } from './ProjectForm';
 
@@ -4252,7 +4253,7 @@ export function ProjectPage(): React.ReactElement {
     tasksAsync.reload();
   }, [projectsAsync, tasksAsync]);
 
-  const handleSubmit = async (input: CreateInput): Promise<void> => {
+  const handleSubmit = async (input: CreateProjectInput): Promise<void> => {
     setSubmitting(true);
     try {
       if (editing) {
@@ -4426,18 +4427,6 @@ export function ProjectPage(): React.ReactElement {
     </section>
   );
 }
-
-type CreateInput = {
-  name: string;
-  description: string;
-  status: Project['status'];
-  priority: Project['priority'];
-  color: string | null;
-  progressMode: Project['progressMode'];
-  progressManual: number | null;
-  startDate: string | null;
-  dueDate: string | null;
-};
 ```
 
 - [ ] **Step 4: 接入 App 并补样式**
@@ -4537,24 +4526,40 @@ import { ProjectPage } from '@/features/projects/ProjectPage';
 }
 ```
 
-- [ ] **Step 5: 类型检查与冒烟验证**
+- [ ] **Step 5: 类型检查、构建与冒烟验证**
 
 ```bash
-npm run typecheck && npm run dev
+npm run typecheck
+npm run build
 ```
 
-Expected:
-- 类型检查通过
-- 窗口「项目」页显示「还没有项目」空状态
+Expected: 两条都退出码 0。
+
+冒烟验证（不要用 `npm run dev`，那个进程不会自己退出；用构建产物 + CDP 驱动真实窗口）：
+
+```powershell
+# 本机环境常驻 ELECTRON_RUN_AS_NODE=1，会让 Electron 不启动窗口，先清掉
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+.\node_modules\.bin\electron.cmd . --remote-debugging-port=9333
+```
+
+再用 CDP（`http://127.0.0.1:9333/json` 取 webSocketDebuggerUrl，`Runtime.evaluate`）逐条核对：
+- 「项目」页显示「还没有项目」空状态（若开发库已有项目，先记录初始行数再判断）
 - 点「新建项目」→ 抽屉打开 → 填名称 → 保存 → 卡片出现，进度环显示 0%
-- 点「编辑」能改名称；点「删除」弹确认框，取消后项目仍在
+- 点「编辑」能改名称并保存
+- 点「删除」弹确认框，点「取消」后项目仍在；再点「删除」→「确认删除」后卡片消失
+- 杀掉进程重启，项目仍在（证明真的落库，不是只改了前端状态）
+
+把每一条的实际观察结果写进报告（DOM 文本/断言值，不要只说"验证通过"）。
 
 - [ ] **Step 6: 提交**
 
 ```bash
-git add -A
+git add src/features/projects src/App.tsx src/styles/global.css
 git commit -m "feat: 添加项目管理页"
 ```
+
+（不要 `git add -A`：工作区里有与本任务无关的未跟踪文件，别带进提交。）
 
 ---
 
@@ -4578,12 +4583,14 @@ git commit -m "feat: 添加项目管理页"
 ```tsx
 import { useState } from 'react';
 import { call } from '@/lib/api';
+import { useUiStore } from '@/store/ui';
 
 interface QuickAddProps {
   onCreated: () => void;
 }
 
 export function QuickAdd({ onCreated }: QuickAddProps): React.ReactElement {
+  const showToast = useUiStore((s) => s.showToast);
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -4596,8 +4603,9 @@ export function QuickAdd({ onCreated }: QuickAddProps): React.ReactElement {
       await call(() => window.api.tasks.create({ title: trimmed }));
       setTitle('');
       onCreated();
-    } catch {
-      // 失败时保留输入内容，让用户可以重试
+    } catch (error) {
+      // 失败时保留输入内容，让用户可以重试；但必须给出可见反馈，否则用户分不清「没成功」和「没响应」
+      showToast(error instanceof Error ? error.message : '添加失败', 'error');
     } finally {
       setBusy(false);
     }
@@ -4678,8 +4686,7 @@ export function TaskForm({
   const [spent, setSpent] = useState(initial?.spent ?? 0);
   const [blockedReason, setBlockedReason] = useState(initial?.blockedReason ?? '');
 
-  const handleSubmit = async (event: React.FormEvent): Promise<void> => {
-    event.preventDefault();
+  const submit = async (): Promise<void> => {
     if (!title.trim()) return;
     await onSubmit({
       title: title.trim(),
@@ -4694,8 +4701,22 @@ export function TaskForm({
     });
   };
 
+  const handleSubmit = async (event: React.FormEvent): Promise<void> => {
+    event.preventDefault();
+    await submit();
+  };
+
   return (
-    <form onSubmit={(event) => void handleSubmit(event)}>
+    <form
+      onSubmit={(event) => void handleSubmit(event)}
+      onKeyDown={(event) => {
+        // 设计文档要求「Ctrl+Enter 确认」，这里用 requestSubmit 走正常提交路径
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+          event.preventDefault();
+          event.currentTarget.requestSubmit();
+        }
+      }}
+    >
       <Field label="任务标题">
         <input
           value={title}
@@ -4813,6 +4834,13 @@ const PRIORITY_TONE: Record<string, 'danger' | 'warning' | 'accent' | 'default'>
   medium: 'warning',
   low: 'accent',
   none: 'default'
+};
+
+const PRIORITY_LABEL: Record<string, string> = {
+  high: '高',
+  medium: '中',
+  low: '低',
+  none: '无'
 };
 
 type GroupKey = 'overdue' | 'today' | 'week' | 'later' | 'someday';
@@ -4945,41 +4973,58 @@ export function TaskPage(): React.ReactElement {
     return projects.find((p) => p.id === projectId)?.name ?? '未知项目';
   };
 
-  const renderTask = (task: Task): React.ReactElement => (
-    <li key={task.id} className="task-item">
-      <button
-        type="button"
-        className="task-check"
-        aria-label="标记为已完成"
-        onClick={() => void handleToggleDone(task)}
-      />
-      <div className="task-body" onClick={() => {
-        setEditing(task);
-        setDrawerOpen(true);
-      }}>
-        <div className="task-title">{task.title}</div>
-        <div className="task-meta">
-          <span>{projectName(task.projectId)}</span>
-          {task.dueAt && (
-            <span className={isOverdue(task.dueAt, nowDateTime) ? 'task-due-overdue' : ''}>
-              截止 {formatLocalDateTime(task.dueAt)}
-            </span>
-          )}
-          {task.status === 'blocked' && <Badge tone="warning">已阻塞</Badge>}
-          {task.priority !== 'none' && (
-            <Badge tone={PRIORITY_TONE[task.priority]}>{task.priority}</Badge>
-          )}
+  const renderTask = (task: Task): React.ReactElement => {
+    const finished = task.status === 'done' || task.status === 'canceled';
+    return (
+      <li key={task.id} className={finished ? 'task-item task-item-done' : 'task-item'}>
+        {finished ? (
+          <span className="task-check task-check-done" aria-hidden="true" />
+        ) : (
+          <button
+            type="button"
+            className="task-check"
+            aria-label="标记为已完成"
+            onClick={() => void handleToggleDone(task)}
+          />
+        )}
+        <div
+          className="task-body"
+          onClick={() => {
+            setEditing(task);
+            setDrawerOpen(true);
+          }}
+        >
+          <div className="task-title">{task.title}</div>
+          <div className="task-meta">
+            <span>{projectName(task.projectId)}</span>
+            {task.dueAt && (
+              <span
+                className={
+                  !finished && isOverdue(task.dueAt, nowDateTime) ? 'task-due-overdue' : ''
+                }
+              >
+                截止 {formatLocalDateTime(task.dueAt)}
+              </span>
+            )}
+            {task.status === 'blocked' && <Badge tone="warning">已阻塞</Badge>}
+            {task.status === 'done' && <Badge tone="success">已完成</Badge>}
+            {task.priority !== 'none' && (
+              <Badge tone={PRIORITY_TONE[task.priority]}>
+                {PRIORITY_LABEL[task.priority] ?? task.priority}
+              </Badge>
+            )}
+          </div>
         </div>
-      </div>
-      <button
-        type="button"
-        className="btn btn-sm btn-danger"
-        onClick={() => setPendingDelete(task)}
-      >
-        删除
-      </button>
-    </li>
-  );
+        <button
+          type="button"
+          className="btn btn-sm btn-danger"
+          onClick={() => setPendingDelete(task)}
+        >
+          删除
+        </button>
+      </li>
+    );
+  };
 
   return (
     <section className="task-page">
@@ -5166,7 +5211,15 @@ import { TaskPage } from '@/features/tasks/TaskPage';
   border: 1px solid var(--border);
   background: transparent;
   flex: none;
+  padding: 0;
 }
+
+.task-check-done {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.task-item-done { opacity: 0.55; }
 
 .task-body { flex: 1; cursor: pointer; }
 
@@ -5184,25 +5237,41 @@ import { TaskPage } from '@/features/tasks/TaskPage';
 .task-due-overdue { color: var(--danger); }
 ```
 
-- [ ] **Step 5: 类型检查与冒烟验证**
+- [ ] **Step 5: 类型检查、构建与冒烟验证**
 
 ```bash
-npm run typecheck && npm run dev
+npm run typecheck
+npm run build
 ```
 
-Expected:
-- 类型检查通过
+Expected: 两条都退出码 0。
+
+冒烟验证（不要用 `npm run dev`，那个进程不会自己退出；用构建产物 + CDP 驱动真实窗口）：
+
+```powershell
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+.\node_modules\.bin\electron.cmd . --remote-debugging-port=9333
+```
+
+再用 CDP（`http://127.0.0.1:9333/json` 取 webSocketDebuggerUrl，`Runtime.evaluate`）逐条核对：
 - 任务页显示快速添加条 → 输入「写周报」→ 回车 → 任务出现在「无期限」组
 - 点左侧「项目」新建一个项目 → 回任务页 → 点任务打开抽屉 → 选该项目 → 保存 → 任务显示项目名
 - 筛选 chip「已完成」能过滤出已完成任务
 - 设置一个过期截止时间 → 任务出现在「逾期」组且截止时间为红色
+- 点左侧圆圈把任务标记完成 → 该行灰显并移到「已完结」，圆圈变实心且不再可点
+- 在表单里按 Ctrl+Enter 能提交（不用点「保存」）
+- 杀掉进程重启，任务与项目关联仍在
+
+把每一条的实际观察结果写进报告（DOM 文本/断言值，不要只说"验证通过"）。
 
 - [ ] **Step 6: 提交**
 
 ```bash
-git add -A
+git add src/features/tasks src/App.tsx src/styles/global.css
 git commit -m "feat: 添加任务列表页与快速添加"
 ```
+
+（不要 `git add -A`：工作区里有与本任务无关的未跟踪文件，别带进提交。）
 
 ---
 
