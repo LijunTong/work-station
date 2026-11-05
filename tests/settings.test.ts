@@ -40,6 +40,19 @@ describe('设置仓储', () => {
     expect(settings.getAll()).toEqual({ a: 1, b: 'two' });
   });
 
+  it('getAll 按 key 升序返回', () => {
+    // 乱序写入：没有 ORDER BY 时返回的是插入顺序（rowid 序），不是 key 升序
+    settings.set('b', 1);
+    settings.set('a', 2);
+    settings.set('c', 3);
+    expect(Object.keys(settings.getAll())).toEqual(['a', 'b', 'c']);
+
+    // 覆盖写不改行序（upsert 更新后行仍在原位），顺序依然由 ORDER BY 决定
+    settings.set('b', 9);
+    expect(Object.keys(settings.getAll())).toEqual(['a', 'b', 'c']);
+    expect(settings.getAll()).toEqual({ a: 2, b: 9, c: 3 });
+  });
+
   it('损坏的 JSON 值被当作不存在', () => {
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('broken', '{oops');
     expect(settings.get('broken')).toBeNull();
@@ -85,6 +98,12 @@ describe('设置仓储', () => {
   it('写入 undefined 时按 null 存取', () => {
     // undefined 不能直接绑定到 node:sqlite，归一成 JSON null
     settings.set('unset', undefined);
+    // 直接断言存储值：证明归一后确实落了行，且存的是 JSON null 文本
+    // （只断言 get() === null 是恒真的——键不存在时同样返回 null）
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('unset') as
+      | { value: string }
+      | undefined;
+    expect(row?.value).toBe('null');
     expect(settings.get('unset')).toBeNull();
     expect(settings.getAll()).toEqual({ unset: null });
   });

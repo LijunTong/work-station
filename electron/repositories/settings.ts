@@ -13,7 +13,9 @@ type SettingsRow = {
 
 export function createSettingsRepo(db: DatabaseSync) {
   const selectOne = db.prepare('SELECT value FROM settings WHERE key = ?');
-  const selectAll = db.prepare('SELECT key, value FROM settings');
+  // 列表查询必须显式定序（与 projects.ts / tags.ts 的既有约定一致）：
+  // 不加 ORDER BY 时这是全表扫描，返回的是插入顺序（rowid 序）而非 key 序
+  const selectAll = db.prepare('SELECT key, value FROM settings ORDER BY key ASC');
   const upsert = db.prepare(
     `INSERT INTO settings (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`
