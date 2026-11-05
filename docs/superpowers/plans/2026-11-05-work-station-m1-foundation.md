@@ -5419,7 +5419,7 @@ docs/         设计与计划文档
 npm run typecheck && npm run test
 ```
 
-Expected: 类型检查 0 错误；测试全部通过，数量应不少于 60 个用例（当前约 66 个）。
+Expected: 类型检查 0 错误；测试全部通过，数量不少于 **128** 个（Task 1–12 累计基线：12 个测试文件 / 128 用例）。
 
 - [ ] **Step 5: 打包验证**
 
@@ -5433,12 +5433,30 @@ Expected: `dist/WorkStation-0.1.0-portable.exe` 生成。
 
 按 `docs/M1-手测清单.md` 逐项验证。**每项必须实际验证**，不能只看代码就判定通过。发现的问题当场修复并补一条回归测试。
 
+可脚本化的验证方式（本机环境常驻 `ELECTRON_RUN_AS_NODE=1`，启动 Electron 前必须清掉）：
+
+```powershell
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+.\dist\WorkStation-0.1.0-portable.exe --remote-debugging-port=9333
+```
+
+- UI 项：用 `http://127.0.0.1:9333/json` 的 webSocketDebuggerUrl + `Runtime.evaluate` 驱动，逐条记录 DOM 断言值。
+- 数据位置项：启动后到 `%APPDATA%` 下找 `data.db`（`Get-ChildItem -Recurse -Filter data.db $env:APPDATA`），把真实路径写进 README 与报告；若 README 里写的 `%APPDATA%\work-station\data.db` 与实际不符，**改 README 而不是改代码**。
+- 断网项：`Remove-Item Env:*proxy*` 或在无网络条件下启动，确认界面与增删改查正常（本应用无网络依赖，属于确认性验证）。
+- 损坏恢复项：先 `Copy-Item data.db data.db.bak`，再把 `data.db` 写入乱码字节（`Set-Content -Encoding Byte`），重启 exe，确认弹「数据库已损坏」、存在 `data.db.corrupt-<日期>`、且能新建空库；验完用 `.bak` 还原。
+- 备份项：确认 `backups/` 下有 `data-<日期>.db` 且数量 ≤ 7。
+- 重启持久化项：建 1 个项目 + 1 个任务 → 杀进程 → 重启 → 断言仍在。
+
+**每一条都要在报告里写"实际观察到的值"**（DOM 文本、文件列表、进程退出码），不接受"验证通过"四个字。确实无法自动化的项（例如双击 exe 的体感、主题视觉观感），写明"未自动化 + 理由"，并保留在手测清单里给人工复核。
+
 - [ ] **Step 7: 提交**
 
 ```bash
-git add -A
+git add README.md docs/M1-手测清单.md build/.gitkeep package.json
 git commit -m "docs: 补充 README 与 M1 手测清单"
 ```
+
+（不要 `git add -A`：工作区里有与本任务无关的未跟踪文件。）
 
 ---
 
