@@ -947,7 +947,7 @@ export function backupDatabase(db: DatabaseSync, targetPath: string): void {
 }
 ```
 
-**注意**：`db.location()` 返回当前数据库文件路径。若 `openDatabase` 传入的是 `:memory:`，`db.location()` 返回 `''`，此时 `backupDatabase` 会抛错——测试中不要调用它。
+**注意**：`db.location()` 返回当前数据库文件路径（已实测）。若 `openDatabase` 传入的是 `:memory:`，`db.location()` 返回 **`null`**（不是空字符串），此时 `backupDatabase` 会因 `copyFileSync(null, ...)` 抛错 —— **测试中不要调用它**，生产路径永远传真实文件路径。
 
 - [ ] **Step 4: 写数据库的失败测试**
 
@@ -1276,7 +1276,7 @@ import type {
   ProjectStatus
 } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso } from '../util/time';
+import { nowIso, toLocalDate } from '../util/time';
 import { nullable } from '../lib/result';
 
 interface ProjectRow {
@@ -1458,7 +1458,7 @@ export function createProjectsRepo(db: DatabaseSync) {
     },
 
     countTasks(projectId: string): { total: number; done: number; overdue: number; doing: number } {
-      const now = nowIso().slice(0, 10);
+      const now = toLocalDate(new Date());
       const row = db
         .prepare(
           `SELECT
@@ -1488,7 +1488,7 @@ export function createProjectsRepo(db: DatabaseSync) {
 export type ProjectsRepo = ReturnType<typeof createProjectsRepo>;
 ```
 
-**注意**：`countTasks` 的逾期判定用 `due_at < ?` 配合 `nowIso().slice(0, 10)`（今天的本地日历日）。`due_at` 存的是 `YYYY-MM-DDTHH:mm`，字典序与本地时间顺序一致，故比较成立。
+**注意**：`countTasks` 的逾期判定用 `due_at < ?` 配合 `toLocalDate(new Date())`（**本地**日历日）。`due_at` 存的是 `YYYY-MM-DDTHH:mm`，字典序与本地时间顺序一致，故比较成立。**不要用 `nowIso().slice(0, 10)`** —— 那是 UTC 日期，会与本地墙钟相差最多一天，跨时区时逾期判定会错。
 
 - [ ] **Step 6: 写项目仓储的失败测试**
 
@@ -1570,7 +1570,7 @@ describe('项目仓储', () => {
     expect(repo.get(created.id)?.progressManual).toBe(42);
   });
 
-  it('countTasks 统计总��、完成数与进行中数', () => {
+  it('countTasks 统计总数、完成数与进行中数', () => {
     const project = repo.create({ name: '统计项目' });
     const now = new Date().toISOString();
     const ins = db.prepare(
@@ -1660,7 +1660,7 @@ git commit -m "feat: 添加项目仓储与进度计算"
 import type { DatabaseSync } from 'node:sqlite';
 import type { Priority, Task, TaskStatus } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso } from '../util/time';
+import { nowIso, toLocalDate } from '../util/time';
 import { nullable } from '../lib/result';
 
 interface TaskRow {
