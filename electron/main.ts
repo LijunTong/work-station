@@ -93,20 +93,27 @@ function runDailyBackup(db: DatabaseSync, dbPath: string): void {
   }
 }
 
-app.whenReady().then(() => {
-  const dbPath = resolveDbPath();
-  recoverIfCorrupt(dbPath);
+app
+  .whenReady()
+  .then(() => {
+    const dbPath = resolveDbPath();
+    recoverIfCorrupt(dbPath);
 
-  const db = openDatabase(dbPath);
-  runMigrations(db);
-  runDailyBackup(db, dbPath);
+    const db = openDatabase(dbPath);
+    runMigrations(db);
+    runDailyBackup(db, dbPath);
 
-  createMainWindow();
+    createMainWindow();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    });
+  })
+  .catch((error: unknown) => {
+    // 启动链里任何失败都必须让用户看到，否则表现为「进程在、窗口不弹、无提示」
+    dialog.showErrorBox('启动失败', String(error));
+    app.quit();
   });
-});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
