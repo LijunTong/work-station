@@ -61,6 +61,8 @@
 
 所有「到期」「截止」类比较都用**本地墙钟字符串**做字典序比较——因为 `YYYY-MM-DDTHH:mm` 格式定长且本地有序，字符串比较等价于时间比较。**禁止**用 `new Date('2026-11-05T14:30')` 解析（会被当成本地时区，且不带秒的字符串在不同引擎行为不一致）。
 
+**逾期判定全项目统一为墙钟口径**：`due_at < 当前本地墙钟时刻` 即为逾期。当前时刻用 `toLocalDateTime(new Date())` 取。**不要**用 `toLocalDate(new Date())`（只到天 —— 会让「今天 09:00 到期、现在 10:00」的任务漏判），**更不要**用 `nowIso().slice(0, 10)`（UTC 日期，与本地墙钟差最多一天，跨时区会错）。项目卡片徽标、看板概览条、任务列表标红三处口径必须一致，否则同一个任务会在列表标红却不计入项目徽标。
+
 ### 命名约定
 
 - 数据库列：`snake_case`
@@ -1200,7 +1202,7 @@ git commit -m "feat: 添加 SQLite 连接、版本化迁移与完整性检查"
 `src/lib/progress.ts`：
 
 ```ts
-import type { TaskStatus } from '@/types/entities';
+import type { TaskStatus } from '../types/entities';
 
 export function computeProgress(tasks: Array<{ status: TaskStatus }>): number {
   const counted = tasks.filter((t) => t.status !== 'canceled');
@@ -1276,7 +1278,7 @@ import type {
   ProjectStatus
 } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso, toLocalDate } from '../util/time';
+import { nowIso, toLocalDateTime } from '../util/time';
 import { nullable } from '../lib/result';
 
 interface ProjectRow {
@@ -1458,7 +1460,7 @@ export function createProjectsRepo(db: DatabaseSync) {
     },
 
     countTasks(projectId: string): { total: number; done: number; overdue: number; doing: number } {
-      const now = toLocalDate(new Date());
+      const now = toLocalDateTime(new Date());
       const row = db
         .prepare(
           `SELECT
@@ -1488,7 +1490,7 @@ export function createProjectsRepo(db: DatabaseSync) {
 export type ProjectsRepo = ReturnType<typeof createProjectsRepo>;
 ```
 
-**注意**：`countTasks` 的逾期判定用 `due_at < ?` 配合 `toLocalDate(new Date())`（**本地**日历日）。`due_at` 存的是 `YYYY-MM-DDTHH:mm`，字典序与本地时间顺序一致，故比较成立。**不要用 `nowIso().slice(0, 10)`** —— 那是 UTC 日期，会与本地墙钟相差最多一天，跨时区时逾期判定会错。
+**注意**：`countTasks` 的逾期判定用 `due_at < ?` 配合 `toLocalDateTime(new Date())`（**本地墙钟当前时刻**）。`due_at` 与之同为 `YYYY-MM-DDTHH:mm` 定长格式，字典序即时间序。**不要用 `nowIso().slice(0, 10)`**（UTC 日期，会与本地墙钟差最多一天）。**也不要退回 `toLocalDate(new Date())`（只到天）** —— 那会让「今天 09:00 到期、现在 10:00」的任务不算逾期，与 Task 10 的 `isOverdue(dueAt, nowLocalDateTime)`（墙钟口径）及 Task 11 项目卡片不一致，同一个任务会在任务列表标红、在项目卡片却不计入逾期徽标。全项目统一用墙钟口径。
 
 - [ ] **Step 6: 写项目仓储的失败测试**
 
@@ -1660,7 +1662,7 @@ git commit -m "feat: 添加项目仓储与进度计算"
 import type { DatabaseSync } from 'node:sqlite';
 import type { Priority, Task, TaskStatus } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso, toLocalDate } from '../util/time';
+import { nowIso, toLocalDateTime } from '../util/time';
 import { nullable } from '../lib/result';
 
 interface TaskRow {
@@ -3966,6 +3968,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Modal } from '@/components/Modal';
 import { ProgressRing } from '@/components/ProgressRing';
 import { call } from '@/lib/api';
+import { isOverdue } from '@/lib/format';
 import { computeProgress } from '@/lib/progress';
 import { useAsync } from '@/hooks/useAsync';
 import { useUiStore } from '@/store/ui';
@@ -4007,8 +4010,8 @@ export function ProjectPage(): React.ReactElement {
   const projects = projectsAsync.data ?? [];
   const tasks = tasksAsync.data ?? [];
 
-  const today = new Date();
-  const todayLocal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const now = new Date();
+  const nowLocalDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
   const reloadAll = useCallback(() => {
     projectsAsync.reload();
@@ -4106,8 +4109,7 @@ export function ProjectPage(): React.ReactElement {
             (task) =>
               task.status !== 'done' &&
               task.status !== 'canceled' &&
-              task.dueAt !== null &&
-              task.dueAt < todayLocal
+              isOverdue(task.dueAt, nowLocalDateTime)
           ).length;
 
           return (

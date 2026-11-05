@@ -6,7 +6,7 @@ import type {
   ProjectStatus
 } from '../../src/types/entities';
 import { newId } from '../util/id';
-import { nowIso, toLocalDate } from '../util/time';
+import { nowIso, toLocalDateTime } from '../util/time';
 import { nullable } from '../lib/result';
 
 // 用 type 而非 interface：node:sqlite 的 all() 返回 Record<string, SQLOutputValue>[]，
@@ -81,6 +81,13 @@ export function createProjectsRepo(db: DatabaseSync) {
   const selectById = db.prepare('SELECT * FROM projects WHERE id = ?');
   const selectByName = db.prepare('SELECT * FROM projects WHERE name = ?');
 
+  // 局部查询函数：内部调用不依赖返回对象的 this 绑定，
+  // 解构（const { create } = repo）或把方法当回调传（list().map(repo.get)）都不会炸
+  function getById(id: string): Project | null {
+    const row = selectById.get(id) as ProjectRow | undefined;
+    return row ? mapRow(row) : null;
+  }
+
   return {
     list(options?: { includeArchived?: boolean }): Project[] {
       const stmt = options?.includeArchived ? selectAll : selectActive;
@@ -88,8 +95,7 @@ export function createProjectsRepo(db: DatabaseSync) {
     },
 
     get(id: string): Project | null {
-      const row = selectById.get(id) as ProjectRow | undefined;
-      return row ? mapRow(row) : null;
+      return getById(id);
     },
 
     getByName(name: string): Project | null {
@@ -121,13 +127,13 @@ export function createProjectsRepo(db: DatabaseSync) {
         now,
         now
       );
-      const created = this.get(id);
+      const created = getById(id);
       if (!created) throw new Error('项目创建后读取失败');
       return created;
     },
 
     update(id: string, patch: UpdateProjectInput): Project | null {
-      const existing = this.get(id);
+      const existing = getById(id);
       if (!existing) return null;
 
       // 合并后的记录每个字段都已确定，用 Required 去掉可选性：
@@ -169,13 +175,15 @@ export function createProjectsRepo(db: DatabaseSync) {
         id
       );
 
-      return this.get(id);
+      return getById(id);
     },
 
     archive(id: string): boolean {
+      // archived_at 与 updated_at 语义相同，取一次时间戳复用，避免两次调用差 1ms
+      const now = nowIso();
       const result = db
         .prepare('UPDATE projects SET archived_at = ?, updated_at = ? WHERE id = ?')
-        .run(nowIso(), nowIso(), id);
+        .run(now, now, id);
       return Number(result.changes) > 0;
     },
 
@@ -192,7 +200,9 @@ export function createProjectsRepo(db: DatabaseSync) {
     },
 
     countTasks(projectId: string): { total: number; done: number; overdue: number; doing: number } {
-      const now = toLocalDate(new Date());
+      // 本地墙钟当前时刻（YYYY-MM-DDTHH:mm），与 due_at 同格式，字典序即时间序。
+      // 全项目统一墙钟口径：与 Task 10 的 isOverdue(dueAt, nowLocalDateTime)、Task 11 徽标一致
+      const now = toLocalDateTime(new Date());
       const row = db
         .prepare(
           `SELECT
