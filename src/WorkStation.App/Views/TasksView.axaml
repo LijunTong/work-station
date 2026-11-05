@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WorkStation.App.ViewModels"
+             xmlns:controls="using:WorkStation.App.Controls"
              x:Class="WorkStation.App.Views.TasksView"
              x:DataType="vm:TasksViewModel"
              x:CompileBindings="True">
@@ -137,12 +138,16 @@
                                       Orientation="Horizontal"
                                       Spacing="1"
                                       VerticalAlignment="Center">
-                            <Button Content="编辑"
-                                    Classes="ghost sm"
-                                    Command="{Binding EditCommand}" />
-                            <Button Content="删除"
-                                    Classes="ghost sm dangerish"
-                                    Command="{Binding DeleteCommand}" />
+                            <Button Classes="icon sm"
+                                    Command="{Binding EditCommand}"
+                                    ToolTip.Tip="编辑">
+                              <controls:Icon Kind="Edit" Size="13" />
+                            </Button>
+                            <Button Classes="icon sm dangerish"
+                                    Command="{Binding DeleteCommand}"
+                                    ToolTip.Tip="删除">
+                              <controls:Icon Kind="Trash" Size="13" />
+                            </Button>
                           </StackPanel>
 
                         </Grid>
@@ -200,7 +205,12 @@
                         BorderBrush="{DynamicResource LineBrush}">
                   <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Text="{Binding TitleText}" Classes="section-title" VerticalAlignment="Center" />
-                    <Button Grid.Column="1" Content="✕" Classes="icon" Command="{Binding CancelCommand}" />
+                    <Button Grid.Column="1"
+                            Classes="icon"
+                            Command="{Binding CancelCommand}"
+                            ToolTip.Tip="关闭（Esc）">
+                      <controls:Icon Kind="Close" Size="13" />
+                    </Button>
                   </Grid>
                 </Border>
 
@@ -252,11 +262,14 @@
                       <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,5">
                         <TextBlock Text="截止时间" Classes="label" Margin="0" />
                         <Button Grid.Column="1"
-                                Content="清除"
-                                Classes="ghost sm"
-                                Padding="4,0"
+                                Classes="icon sm"
+                                Width="20"
+                                Height="18"
                                 Command="{Binding ClearDueCommand}"
-                                IsVisible="{Binding HasDueDate}" />
+                                IsVisible="{Binding HasDueDate}"
+                                ToolTip.Tip="清除截止时间">
+                          <controls:Icon Kind="Close" Size="11" />
+                        </Button>
                       </Grid>
                       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <CalendarDatePicker SelectedDate="{Binding DueDate, Mode=TwoWay}"

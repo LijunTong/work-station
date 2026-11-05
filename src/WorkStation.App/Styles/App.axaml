@@ -113,31 +113,8 @@
     <Setter Property="Opacity" Value="0.88" />
   </Style>
 
-  <!-- 幽灵按钮：列表行、卡片底部这类高频但不重要的操作用它，避免满屏描边 -->
-  <Style Selector="Button.ghost">
-    <Setter Property="Background" Value="Transparent" />
-    <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
-    <Setter Property="Padding" Value="8,4" />
-  </Style>
-
-  <Style Selector="Button.ghost:pointerover">
-    <Setter Property="Background" Value="{DynamicResource BgSunkenBrush}" />
-    <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-  </Style>
-
-  <Style Selector="Button.ghost.dangerish:pointerover">
-    <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
-    <Setter Property="Background" Value="{DynamicResource DangerSoftBrush}" />
-  </Style>
-
-  <Style Selector="Button.sm">
-    <Setter Property="Padding" Value="8,3" />
-    <Setter Property="FontSize" Value="{DynamicResource FontXs}" />
-  </Style>
-
-  <!-- 图标按钮：正方形，无底色 -->
+  <!-- 图标按钮：正方形。里面放 Controls:Icon，图标颜色继承 Foreground，
+       所以悬停、危险、强调三种状态的换色只写在按钮上就够了 -->
   <Style Selector="Button.icon">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
@@ -146,12 +123,41 @@
     <Setter Property="Width" Value="26" />
     <Setter Property="Height" Value="26" />
     <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
-    <Setter Property="FontSize" Value="14" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
 
   <Style Selector="Button.icon:pointerover">
     <Setter Property="Background" Value="{DynamicResource BgSunkenBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+
+  <!-- 行内小图标：跟着任务行/卡片操作行的密度走 -->
+  <Style Selector="Button.icon.sm">
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
+  </Style>
+
+  <!-- 破坏性操作：静止时与普通图标一致，悬停才转红 -->
+  <Style Selector="Button.icon.dangerish:pointerover">
+    <Setter Property="Background" Value="{DynamicResource DangerSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+  </Style>
+
+  <!-- 浅强调图标：合成框这类「必须一眼看出是按钮」的位置。
+       类名不能叫 accent —— Fluent 主题自带 Button.accent，会盖成系统蓝实底按钮 -->
+  <Style Selector="Button.icon.tinted">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    <!-- 深色下 AccentSoft 与 BgPanel 只差一档明度，只靠底色仍旧看不出是按钮，
+         补一圈描边把轮廓立起来 -->
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="Button.icon.tinted:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
   </Style>
 
   <!-- ========== 输入控件 ========== -->
@@ -167,13 +173,21 @@
     <Setter Property="MinHeight" Value="32" />
   </Style>
 
-  <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+  <Style Selector="TextBox:pointerover:not(.bare) /template/ Border#PART_BorderElement">
     <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
   </Style>
 
-  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+  <!-- 聚焦描边只给「自带底色的常规输入框」。
+       裸输入框外面已经有容器，容器自己会亮边（Border.composer:focus-within）；
+       给裸输入框加 1px 描边会直接压在文字上，把首字切掉。 -->
+  <Style Selector="TextBox:focus:not(.bare) /template/ Border#PART_BorderElement">
     <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
     <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="TextBox.bare:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
   </Style>
 
   <!-- 嵌在合成框里的裸输入：不要底色和描边，交给外层容器 -->
@@ -372,11 +386,17 @@
     <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
-    <Setter Property="Padding" Value="12,7" />
+    <Setter Property="Padding" Value="12,6" />
   </Style>
 
   <Style Selector="Border.composer:pointerover">
     <Setter Property="BorderBrush" Value="{DynamicResource LineStrongBrush}" />
+  </Style>
+
+  <!-- 焦点落在里面的输入框时，亮的是整个容器：既保留「正在输入」的反馈，
+       又不会出现一条压在文字上的描边 -->
+  <Style Selector="Border.composer:focus-within">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
   </Style>
 
   <!-- 设置页的分组容器：比卡片更「平」，靠间距而不是描边分隔 -->

@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:WorkStation.App.ViewModels"
         xmlns:views="using:WorkStation.App.Views"
+        xmlns:controls="using:WorkStation.App.Controls"
         x:Class="WorkStation.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         x:CompileBindings="True"
@@ -156,13 +157,9 @@
                   Classes="composer"
                   Width="352"
                   VerticalAlignment="Center">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9">
-              <TextBlock Text="＋"
-                         FontSize="15"
-                         Foreground="{DynamicResource TextFaintBrush}"
-                         VerticalAlignment="Center" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
               <TextBox Name="QuickAddBox"
-                       Grid.Column="1"
+                       Grid.Column="0"
                        Classes="bare"
                        Text="{Binding QuickAddTitle, Mode=TwoWay}"
                        PlaceholderText="记一件事，回车添加…"
@@ -171,10 +168,12 @@
                   <KeyBinding Gesture="Enter" Command="{Binding QuickAddCommand}" />
                 </TextBox.KeyBindings>
               </TextBox>
-              <Button Grid.Column="2"
-                      Content="详细新建"
-                      Classes="ghost sm"
-                      Command="{Binding NewTaskCommand}" />
+              <Button Grid.Column="1"
+                      Classes="icon tinted"
+                      Command="{Binding NewTaskCommand}"
+                      ToolTip.Tip="详细新建（填截止时间、项目等）">
+                <controls:Icon Kind="Plus" Size="13" />
+              </Button>
             </Grid>
           </Border>
         </Grid>
@@ -197,9 +196,11 @@
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="快捷键" Classes="section-title" VerticalAlignment="Center" />
             <Button Grid.Column="1"
-                    Content="✕"
                     Classes="icon"
-                    Command="{Binding CloseShortcutHelpCommand}" />
+                    Command="{Binding CloseShortcutHelpCommand}"
+                    ToolTip.Tip="关闭（Esc）">
+              <controls:Icon Kind="Close" Size="13" />
+            </Button>
           </Grid>
 
           <Grid ColumnDefinitions="96,*"

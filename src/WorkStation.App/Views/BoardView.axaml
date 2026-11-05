@@ -85,10 +85,12 @@
       </ItemsControl>
 
       <Button Grid.Column="4"
-              Content="清除筛选"
-              Classes="ghost sm"
+              Classes="icon sm"
               IsVisible="{Binding HasFilter}"
-              Command="{Binding ClearFiltersCommand}" />
+              Command="{Binding ClearFiltersCommand}"
+              ToolTip.Tip="清除筛选">
+        <controls:Icon Kind="Close" Size="13" />
+      </Button>
 
       <TextBox Grid.Column="3"
                Width="200"
@@ -136,11 +138,14 @@
                     <TextBlock Text="{Binding CountText}" />
                   </Border>
                   <Button Grid.Column="2"
-                          Content="{Binding DoneWindowLabel}"
-                          Classes="ghost sm"
-                          Padding="6,2"
+                          Classes="icon sm"
+                          Width="20"
+                          Height="20"
                           IsVisible="{Binding IsDone}"
-                          Command="{Binding ToggleDoneWindowCommand}" />
+                          Command="{Binding ToggleDoneWindowCommand}"
+                          ToolTip.Tip="{Binding DoneWindowLabel}">
+                    <controls:Icon Kind="Clock" Size="12" />
+                  </Button>
                 </Grid>
 
                 <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
@@ -309,11 +314,12 @@
                                 </StackPanel>
                               </Grid>
 
-                              <Button Content="进入任务看板 →"
-                                      Classes="ghost sm"
-                                      Padding="0,2"
+                              <Button Classes="icon sm tinted"
                                       HorizontalAlignment="Left"
-                                      Command="{Binding OpenTasksCommand}" />
+                                      Command="{Binding OpenTasksCommand}"
+                                      ToolTip.Tip="进入该项目的任务看板">
+                                <controls:Icon Kind="ArrowRight" Size="13" />
+                              </Button>
 
                             </StackPanel>
                           </Border>

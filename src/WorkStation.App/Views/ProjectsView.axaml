@@ -122,18 +122,27 @@
                     </StackPanel>
                   </Grid>
 
-                  <!-- 操作：默认都是安静的文字按钮，删除只在悬停时变红 -->
+                  <!-- 操作：图标按钮，含义靠 tooltip 兜底；删除只在悬停时转红 -->
                   <Border Grid.Row="3"
                           Margin="0,14,-16,-1"
                           Padding="12,6"
                           BorderThickness="0,1,0,0"
                           BorderBrush="{DynamicResource LineBrush}">
                     <StackPanel Orientation="Horizontal" Spacing="2">
-                      <Button Content="编辑" Classes="ghost sm" Command="{Binding EditCommand}" />
-                      <Button Content="{Binding ArchiveLabel}" Classes="ghost sm" Command="{Binding ToggleArchiveCommand}" />
-                      <Button Content="删除"
-                              Classes="ghost sm dangerish"
-                              Command="{Binding DeleteCommand}" />
+                      <Button Classes="icon sm" Command="{Binding EditCommand}" ToolTip.Tip="编辑">
+                        <controls:Icon Kind="Edit" Size="13" />
+                      </Button>
+                      <Button Classes="icon sm"
+                              Command="{Binding ToggleArchiveCommand}"
+                              ToolTip.Tip="{Binding ArchiveLabel}">
+                        <Panel>
+                          <controls:Icon Kind="Archive" Size="13" IsVisible="{Binding !IsArchived}" />
+                          <controls:Icon Kind="Unarchive" Size="13" IsVisible="{Binding IsArchived}" />
+                        </Panel>
+                      </Button>
+                      <Button Classes="icon sm dangerish" Command="{Binding DeleteCommand}" ToolTip.Tip="删除">
+                        <controls:Icon Kind="Trash" Size="13" />
+                      </Button>
                     </StackPanel>
                   </Border>
 
@@ -187,7 +196,12 @@
                         BorderBrush="{DynamicResource LineBrush}">
                   <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Text="{Binding Title}" Classes="section-title" VerticalAlignment="Center" />
-                    <Button Grid.Column="1" Content="✕" Classes="icon" Command="{Binding CancelCommand}" />
+                    <Button Grid.Column="1"
+                            Classes="icon"
+                            Command="{Binding CancelCommand}"
+                            ToolTip.Tip="关闭（Esc）">
+                      <controls:Icon Kind="Close" Size="13" />
+                    </Button>
                   </Grid>
                 </Border>
 

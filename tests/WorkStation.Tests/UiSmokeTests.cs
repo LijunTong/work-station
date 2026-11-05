@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Microsoft.Data.Sqlite;
+using WorkStation.App.Controls;
 using WorkStation.App.ViewModels;
 using WorkStation.App.Views;
 using WorkStation.Core.Models;
@@ -219,7 +220,61 @@ public class UiSmokeTests : IDisposable
     }
 
     /// <summary>
-    /// 合成框里「占位文字」和「详细新建」必须落在同一条中心线上。
+    /// 图标按钮的两条硬规则：里面必须真的有一个图标，且必须带 tooltip。
+    /// 图标本身不承载文字，没有 tooltip 的图标按钮等于一个没有名字的控件。
+    /// </summary>
+    [AvaloniaFact]
+    public void IconButtons_HaveGlyphAndTooltip()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "验收项目" }).Data!;
+        _service.TasksCreate(new CreateTaskInput { Title = "验收任务", ProjectId = project.Id });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var problems = new List<string>();
+
+        void Inspect(string page)
+        {
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            foreach (var button in window.GetVisualDescendants().OfType<Button>()
+                         .Where(b => b.Classes.Contains("icon") && b.IsVisible))
+            {
+                var tip = ToolTip.GetTip(button) as string;
+                if (string.IsNullOrWhiteSpace(tip))
+                {
+                    problems.Add($"{page}: 图标按钮缺少 tooltip（位于 {button.TranslatePoint(default, window)}）");
+                }
+
+                // 内容可能还没被 ContentPresenter 实例化（例如抽屉还没打开），
+                // 所以同时认 Content 本身
+                if (button.Content is not Icon && !button.GetVisualDescendants().OfType<Icon>().Any())
+                {
+                    problems.Add($"{page}: 图标按钮里没有 Icon");
+                }
+            }
+        }
+
+        Inspect("看板");
+        vm.Board!.SwitchBoardCommand.Execute(nameof(BoardMode.Projects));
+        Inspect("项目看板");
+
+        vm.ShowTasksCommand.Execute(null);
+        Inspect("任务");
+
+        vm.ShowProjectsCommand.Execute(null);
+        Inspect("项目");
+
+        Assert.Empty(problems);
+        window.Close();
+    }
+
+    /// <summary>
+    /// 合成框里「占位文字」和「新建按钮」必须落在同一条中心线上。
     ///
     /// TextBox 的 TextPresenter 默认会被 MinHeight 撑满整个输入框高度，而文字是贴着
     /// 行框顶部绘制的，于是占位文字比同一行的按钮文字高 2.5px——肉眼就是「没对齐」。
