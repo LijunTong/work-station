@@ -1,6 +1,7 @@
 import { useEffect, type ReactElement } from 'react';
 import { ProjectPage } from '@/features/projects/ProjectPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
+import { TaskPage } from '@/features/tasks/TaskPage';
 import { call } from '@/lib/api';
 import { isTheme, useUiStore, type Page } from '@/store/ui';
 
@@ -67,7 +68,7 @@ export default function App(): ReactElement {
       </nav>
       <main className="app-main">
         {page === 'projects' && <ProjectPage />}
-        {page === 'tasks' && <div className="placeholder">任务页（Task 12 实现）</div>}
+        {page === 'tasks' && <TaskPage />}
         {page === 'settings' && <SettingsPage />}
       </main>
       {toast && (
