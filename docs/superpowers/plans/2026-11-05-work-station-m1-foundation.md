@@ -16,9 +16,9 @@
 
 > **维护说明：** 本节由控制器在每个任务评审通过后更新。逐轮的完整记录（每条发现、每轮修复、每条延后 Minor）在 SDD 账本 `.superpowers/sdd/2026-11-05-work-station-m1-foundation/progress.md`，该账本是 scratch，不入库。
 >
-> **最近更新：** 2026-11-05 · Task 5 修复轮 1
+> **最近更新：** 2026-11-05 · Task 5 完成（5/13）
 
-**当前状态：M1 骨架与数据层进行中。13 个任务已完成 5 个；Task 5 评审提出的 4 个 Important 已修复并落到工作区，待复审与提交。Task 6–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
+**当前状态：M1 骨架与数据层进行中。13 个任务已完成 5 个，Task 5 的 4 个 Important 已修复并通过复审（VERDICT: PASS）。Task 6–13 与 M1 收尾未开始。M2/M3/M4 刻意未提前拆解 —— 任务拆分依赖 M1 产出的真实代码结构，提前写必然与实现脱节。**
 
 ### 里程碑总览
 
@@ -37,7 +37,7 @@
 | 2 | 共享类型与工具函数 | ✅ 完成 | `9fe2c69` | 通过 | 7 |
 | 3 | 数据库连接、迁移与完整性检查 | ✅ 完成 | `2aac476` `0412c8a` `f830e26` | 通过（2 轮修复） | 17 |
 | 4 | 项目仓储与进度计算 | ✅ 完成 | `1660c77` `4b6d88c` | 通过（1 轮修复） | 18 + 6 |
-| 5 | 任务仓储 | 🔄 修复轮 1 已落地，待复审提交 | `8ab6a27`（+ 工作区未提交改动） | 结论通过，提出 4 个 Important，现已全部修复 | 19 |
+| 5 | 任务仓储 | ✅ 完成（1 轮修复） | `8ab6a27` `c7a7043` | 通过（4 个 Important 全部修复，复审 PASS） | 19 |
 | 6 | 标签仓储 | ⬜ 未开始 | — | — | — |
 | 7 | 设置仓储 | ⬜ 未开始 | — | — | — |
 | 8 | IPC 路由与 preload 桥接 | ⬜ 未开始 | — | — | — |
@@ -119,9 +119,9 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 
 ### 当前待办
 
-1. **Task 5 修复轮 1**：4 个 Important 的代码与测试已落到工作区（`dueAt` 格式校验 / 状态迁移保留原值 / `dueBefore`+`dueAfter` / `tagIds` 筛选），待复审 + 提交。
-2. **Task 6 标签仓储、Task 7 设置仓储** —— 照抄 Task 4/5 的定稿仓储模板。
-3. **Task 8 IPC 与 preload** —— 收尾必须重跑 `npm run typecheck`：`src/lib/progress.ts` 会在这一步首次进入主进程 program，此前 `@` 别名问题不会触发。
+1. **Task 6 标签仓储** —— 照抄 Task 4/5 的定稿仓储模板（`type XxxRow`、闭包不依赖 `this`、可空字段 update 语义、冻结时钟）。
+2. **Task 7 设置仓储** —— 同上。
+3. **Task 8 IPC 与 preload** —— 收尾必须重跑 `npm run typecheck`：`src/lib/progress.ts` 会在这一步首次进入主进程 program，此前 `@` 别名问题不会触发。`TaskFilter.tagIds` 是 Task 5 新增的对外签名，IPC 层需按新签名接入；仓储抛的裸 `Error`（无错误码）需在此映射为用户可见错误。
 4. **Task 9–13** 渲染端与打包。
 5. **M1 收尾**：全分支最终评审 + 修复波。
 
@@ -132,8 +132,8 @@ npx vitest run tests/tasks.test.ts  # 单文件聚焦
 - **Task 1**：electron-builder 把 react/react-dom/zustand/@dnd-kit 打进 asar（exe 104.7MB）→ 可移入 devDependencies 瘦身；`electron/main.ts` 有模块作用域副作用 → Task 8 顺手收进 `main()`。
 - **Task 2**：`isLocalDateTime` 不校验日历有效性（冻结契约）；`toLocalDate` 年份不补零到 4 位；`entities.ts` 的 channel 是内联字面量、缺 `ReminderChannel` 命名类型；`newId` / `nowIso` 无直接断言。
 - **Task 3**：损坏快照 stamp 只到天、同日二次损坏会覆盖上次快照；`copyFileSync` 备份非原子；`reminders.kind='task_due'` 但 `task_id` 可空、缺跨列约束；`db.close()` 自身抛错被吞；回滚失败原因完全不可观测；`runMigrations`（包装+cause）与 `withTransaction`（原样重抛）错误契约不一致；`main.ts` 用 `String(error)` 丢弃堆栈；测试里 PRAGMA foreign_keys 断言恒真、给虚假安全感；测试的 `rmSync` 在 Windows 遇未关闭句柄会把单条失败升级为套件级失败。
-- **Task 4**：`countTasks` 的类型断言漏 `| undefined`；`create` 硬编码 `sort_order=0` → 「把项目置顶」目前无法表达（留给 M2）；`projects:remove` 是级联硬删且无二次确认（Task 8 的 UI 需要知道这是破坏性操作）。
-- **Task 5**：`includeDone:false` 只排除 done 不排除 canceled，与本仓储对 canceled 的处理不一致；`status` 与 `includeDone` 不可组合，后者被 `else if` 静默吞掉；`countOverdue` 入参无格式护栏（误传日期串会少算）；`row.c ?? 0` 是无效防御；`ALL_STATUSES.filter(...)` 计算两次；`countByStatus` 对未知 status 直接写键；测试里有恒真断言；`create` 不能指定 `sortOrder`，排序要两次写入。
+- **Task 4**：`countTasks` 的类型断言漏 `| undefined`；`create` 硬编码 `sort_order=0` → 「把项目置顶」目前无法表达（留给 M2）；`projects:remove` 是级联硬删且无二次确认（Task 8 的 UI 需要知道这是破坏性操作）；`projects.dueDate` 无格式校验 —— 存的是本地日历日，当前无人把它与墙钟串比较暂无错判，但 M2 项目到期徽标落地前必须明确格式约定。
+- **Task 5**：`includeDone:false` 只排除 done 不排除 canceled，与本仓储对 canceled 的处理不一致；`status` 与 `includeDone` 不可组合，后者被 `else if` 静默吞掉；`countOverdue` 入参无格式护栏（误传日期串会少算）；**读取侧仍无格式护栏** —— `dueBefore`/`dueAfter`/`countOverdue` 传日期串或 ISO 串仍会静默比错（写入侧同类风险已修掉，读取侧是另一半）；`row.c ?? 0` 是无效防御；`ALL_STATUSES.filter(...)` 计算两次；`countByStatus` 对未知 status 直接写键；测试里有恒真断言；`create` 不能指定 `sortOrder`，排序要两次写入；`update` 对不存在的任务 + 非法 `dueAt` 返回 null 而非抛错，两条错误契约不对称（Task 8 的 IPC 错误映射需注意）；`assertLocalDateTime` 抛裸 `Error` 无错误码，Task 8 需自行映射为用户可见错误；测试里 `clock.nowIsoCalls` 未在 `beforeEach` 重置，当前无断言依赖它。
 
 ---
 
