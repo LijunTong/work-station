@@ -4,6 +4,64 @@
 
 > 技术栈已由 Electron + React 迁移到 Avalonia + C#。迁移原因与取舍见设计文档决策 #14；旧 Electron 数据（同结构的 SQLite 库）可直接复用。
 
+## 界面示例
+
+**仪表盘** —— 打开就是今天要看的东西：今日 / 本周 / 本月三个口径的完成情况，
+需要立刻处理的事排在最上面，下面是趋势与分布。
+
+![仪表盘](docs/images/dashboard.png)
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/board-light.png" alt="任务看板" width="100%" />
+      <p align="center"><b>任务看板</b><br>拖拽换列即改状态并落库；逾期单独成列</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/tasks.png" alt="任务清单" width="100%" />
+      <p align="center"><b>任务清单</b><br>按日期分组，分组可折叠，状态与项目可筛</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/projects.png" alt="项目" width="100%" />
+      <p align="center"><b>项目</b><br>进度环、任务统计、目标日期与优先级</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/reminders.png" alt="提醒" width="100%" />
+      <p align="center"><b>提醒</b><br>到点即弹，行内直接「完成 / 稍后 / 删除」</p>
+    </td>
+  </tr>
+</table>
+
+**深色模式** —— 不是简单反色，明暗两套配色各自调过对比度与语义色。
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/board-dark.png" alt="深色模式" width="100%" />
+      <p align="center"><b>深色模式</b><br>跟随系统或手动切换，即时生效</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/custom-theme.png" alt="自定义主题色" width="100%" />
+      <p align="center"><b>自定义主题色</b><br>主色 + 强调色自由取色，整窗跟着变</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/command-palette.png" alt="命令面板" width="100%" />
+      <p align="center"><b>命令面板</b><br><code>Ctrl+K</code> 全键盘搜任务、跳页面、执行动作</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/custom-theme-dialog.png" alt="取色器" width="100%" />
+      <p align="center"><b>取色器</b><br>主色 / 强调色两枚，十六进制可手填</p>
+    </td>
+  </tr>
+</table>
+
+> 截图来自 `Avalonia.Headless` 的真实渲染（`tests/WorkStation.Tests/VisualCheck.cs`），
+> 不是设计稿 —— 界面改了就重跑一次，README 里的图始终跟代码一致。
+
 ## 当前状态
 
 **M1 骨架与数据层** —— 功能完成
@@ -37,7 +95,17 @@
 - **单实例**：重复启动不再开第二个进程，只把已有窗口抬到前台
 - **设置**：「提醒」分组 —— 每日站会开关与时间、关闭窗口时驻留托盘
 
-M4（周报月报与统计）尚未开始；标签管理界面仍是 M2 遗留的已知缺口，见 `docs/M2-手测清单.md` 末尾。
+**M4 界面重做** —— 功能完成
+
+- **仪表盘**：默认进入的首页。今日 / 本周 / 本月三个口径的完成情况、需要立刻处理的事、
+  近 7 天到期与完成趋势、任务状态与优先级分布
+- **看板**：任务看板新增「已逾期」列，逾期任务不再混在待办里
+- **主题色**：内置橙 / 红 / 绿 / 蓝四色之外，支持自定义主色与强调色（取色器 + 十六进制 + 实时预览），
+  明暗切换后自定义色不会被冲掉
+- **字体**：可从系统字体列表里挑一个，中文回退链保留（换西文字体不影响中文显示）
+- **统一工具栏**：任务 / 项目 / 提醒三页的顶部操作区统一成卡片式工具栏
+
+M5（周报月报与统计）尚未开始；标签管理界面仍是 M2 遗留的已知缺口，见 `docs/M2-手测清单.md` 末尾。
 
 ## 快捷键
 
@@ -69,23 +137,38 @@ dotnet run --project src/WorkStation.App
 
 开发期数据库落在仓库内 `.data/data.db`；发布版落在用户应用数据目录。
 
+### 更新 README 里的界面图
+
+README 顶部的界面示例来自 `Avalonia.Headless` 的真实渲染（不是设计稿）。界面改了就重跑：
+
+```bash
+# 1. 重新生成截图到 .shots/
+dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter FullyQualifiedName~VisualCheck
+
+# 2. 同步到 README 引用的位置（docs/images/）
+python tools/sync-readme-images.py
+```
+
+`VisualCheck` 的输出目录是从仓库根自动定位的（认 `work-station.slnx` 那层），换机器也能跑。
+
 ## 测试
 
 ```bash
 dotnet test
 ```
 
-当前 **432 个用例**，覆盖：
+当前 **441 个用例**，覆盖：
 
 | 层 | 内容 |
 | --- | --- |
-| Core 单元 | 时间三类格式、进度计算、任务分组（含周日边界）、格式化、看板口径（列顺序 / 已完成窗口 / 概览计数）、提醒排期（提前量 / 重复下一次 / 到点判定 / 站会去重） |
+| Core 单元 | 时间三类格式、进度计算、任务分组（含周日边界）、格式化、看板口径（列顺序 / 已完成窗口 / 概览计数）、提醒排期（提前量 / 重复下一次 / 到点判定 / 站会去重）、仪表盘统计、任务排序 |
 | 数据层 | 迁移、完整性检查、损坏恢复、备份轮转、五个仓储的 CRUD 与聚合、任务截止时间与提醒的同步（幂等） |
 | 服务层 | Result 契约（不抛异常）、错误码映射、中文化错误文案、提醒三条写入口自动排期、站会时间校验 |
-| ViewModel | 快速添加、分组顺序、折叠保持、筛选与搜索、表单校验、归档与删除确认、看板拖拽改状态、命令面板检索、提醒页两组与行内动作、通知点击跳转、自定义主题色与字体选择 |
+| ViewModel | 快速添加、分组顺序、折叠保持、筛选与搜索、表单校验、归档与删除确认、看板拖拽改状态、命令面板检索、提醒页两组与行内动作、通知点击跳转、自定义主题色与字体选择、仪表盘统计 |
 | 调度器 | 单次节拍（先落状态后发通知）、重复规则顺延、任务已完结转忽略、通知失败落 `Failed`、站会一天只发一次 |
-| UI 冒烟 | 真实 XAML 加载（Headless）、主窗口导航（含提醒页）、键盘快捷键、看板双击开抽屉、命令面板键盘滚动跟随、主题切换落盘 |
+| UI 冒烟 | 真实 XAML 加载（Headless）、主窗口导航（含提醒页）、键盘快捷键、看板双击开抽屉、命令面板键盘滚动跟随、主题切换落盘、菜单交互、排版与字号 |
 | 安装器 | 自包含发布配置、安装包源文件路径、免管理员安装、卸载项注册、卸载时询问是否删数据、语言包与向导图片编码、`rollForward` 配置 |
+| Linux 打包 | ar 头布局、control 字段、文件权限、符号链接目标、md5sums 一致性、图标尺寸命名 |
 
 UI 层用 `Avalonia.Headless` 承载，XAML 解析失败或编译绑定路径写错会直接让测试变红。
 
@@ -210,19 +293,25 @@ src/
 │  ├─ Data/Repositories/       projects / tasks / tags / settings / reminders
 │  ├─ Services/                WorkStationService（UI 唯一入口，Result 契约）
 │  ├─ Board/                   看板列顺序、已完成窗口、概览计数
+│  ├─ Dashboard/               仪表盘统计口径
 │  ├─ Projects/                项目统计与进度口径（列表卡与看板卡共用）
 │  ├─ Reminders/               提醒排期（提前量 / 重复下一次）与站会判定
-│  └─ Time/ Formatting/        日期格式、进度计算、任务分组
+│  ├─ TaskOrdering.cs          任务排序（优先级 / 截止时间）
+│  └─ Time/ Formatting/        日期格式、进度计算、任务分组、任务默认值
 └─ WorkStation.App/            Avalonia 界面层
    ├─ AppServices.cs           启动装配：恢复 → 迁移 → 备份 → 服务
-   ├─ ViewModels/              主窗口、看板、项目页、任务页、提醒页、设置页、命令面板
-   ├─ Views/                   MainWindow / BoardView / ProjectsView / TasksView / RemindersView / SettingsView / CommandPaletteView
+   ├─ ViewModels/              主窗口、仪表盘、看板、项目页、任务页、提醒页、设置页、命令面板
+   ├─ Views/                   MainWindow / DashboardView / BoardView / ProjectsView / TasksView /
+   │                           RemindersView / SettingsView / CommandPaletteView /
+   │                           ProjectTasksDialogView / CustomThemeDialogView
    ├─ Services/                提醒调度器（ReminderPump）与通知出口（INotificationSink）
-   ├─ Platform/                托盘常驻（TrayHost）、单实例（SingleInstance）
-   ├─ Controls/                ProgressRing 进度环、Icon 线性图标、DueDateField 日期字段
+   ├─ Platform/                托盘常驻（TrayHost）、单实例（SingleInstance）、启动日志（AppLog）
+   ├─ Controls/                AppIcons 线性图标、AppTrendChart 趋势图
+   ├─ Converters/              布尔转可见性等值转换器
+   ├─ Themes/                  SukiUI 取色器皮肤
    ├─ Assets/                  应用图标（app.png / app.ico）
-   └─ Styles/                  设计令牌（浅/深两套）与控件样式
-tests/WorkStation.Tests/       xUnit v3 + Avalonia.Headless
+   └─ App.axaml                全局样式与设计令牌（浅/深两套）
+tests/WorkStation.Tests/       xUnit v3 + Avalonia.Headless（含 VisualCheck 截图回归）
 tools/publish.ps1              多平台发布
 docs/                          设计文档、实施计划、手测清单
 ```

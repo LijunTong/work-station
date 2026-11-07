@@ -22,7 +22,32 @@ namespace WorkStation.Tests;
 /// </summary>
 public class VisualCheck
 {
-    private const string OutDir = @"E:\Joont\AI Agent Workspace\work-station\.shots";
+    /// <summary>
+    /// 截图输出目录。
+    ///
+    /// 之前这里写的是绝对路径，换台机器（或 CI 上）就写到别人电脑上去了 ——
+    /// 现在从测试程序集的位置往上找仓库根，认准带 work-station.slnx 的那一层。
+    /// </summary>
+    private static readonly string OutDir = ResolveRepoRoot() is { } root
+        ? Path.Combine(root, ".shots")
+        : Path.Combine(AppContext.BaseDirectory, ".shots");
+
+    /// <summary>从当前目录往上找仓库根（认 work-station.slnx 这个标志文件）。</summary>
+    private static string? ResolveRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "work-station.slnx")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return null;
+    }
 
     [AvaloniaFact]
     public void CaptureShell()
