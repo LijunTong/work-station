@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using WorkStation.Core;
+using WorkStation.Core.Data;
 using WorkStation.Core.Models;
 using WorkStation.Core.Services;
 
@@ -39,6 +40,28 @@ public class WorkStationServiceTests : IDisposable
 
         Assert.False(result.Ok);
         Assert.Equal(ErrorCodes.ValidationFailed, result.Error?.Code);
+    }
+
+    /// <summary>新任务默认「结束前一小时」提醒；显式传 0 表示不提醒，原样保留。</summary>
+    [Fact]
+    public void CreateTask_DefaultsToRemindOneHourBeforeDue()
+    {
+        var created = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "默认提前一小时",
+            DueAt = "2026-11-06T18:00"
+        }).Data!;
+
+        Assert.Equal(60, created.RemindBefore);
+
+        var explicitNone = _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "明确不提醒",
+            DueAt = "2026-11-06T18:00",
+            RemindBefore = 0
+        }).Data!;
+
+        Assert.Equal(0, explicitNone.RemindBefore);
     }
 
     [Fact]
@@ -83,6 +106,49 @@ public class WorkStationServiceTests : IDisposable
 
         Assert.True(result.Ok);
         Assert.Null(result.Data);
+    }
+
+    /// <summary>改数据目录：整库复制到新目录 + 引导配置里记住新路径。内存库无文件可搬，必须用临时文件库。</summary>
+    [Fact]
+    public void ChangeDataDirectory_CopiesDatabaseAndWritesConfig()
+    {
+        var (connection, directory) = TestDb.OpenTempFile("migrate");
+        try
+        {
+            var service = new WorkStationService(connection, Path.Combine(directory, "data.db"), "0.1.0-test");
+            service.ProjectsCreate(new CreateProjectInput { Name = "搬家前建的" });
+
+            var target = Path.Combine(directory, "moved");
+            var configPath = Path.Combine(directory, "app-config.json");
+
+            var result = service.ChangeDataDirectory(target, configPath);
+
+            Assert.True(result.Ok);
+            Assert.True(File.Exists(Path.Combine(target, "data.db")));
+            Assert.True(File.Exists(configPath));
+
+            // 新库是真的搬过去的数据，不是空库
+            using var moved = Database.OpenDatabase(Path.Combine(target, "data.db"));
+            var movedService = new WorkStationService(moved, Path.Combine(target, "data.db"));
+            Assert.Contains(movedService.ProjectsList().Data!, p => p.Name == "搬家前建的");
+
+            // 引导配置读得回来
+            Assert.Equal(Path.GetFullPath(target), AppPaths.ReadDataDirectoryOverride(configPath));
+        }
+        finally
+        {
+            connection.Dispose();
+            TestDb.DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void ChangeDataDirectory_Empty_ReturnsValidationFailed()
+    {
+        var result = _service.ChangeDataDirectory("  ", Path.Combine(Path.GetTempPath(), $"ws-cfg-{Guid.NewGuid():N}.json"));
+
+        Assert.False(result.Ok);
+        Assert.Equal(ErrorCodes.ValidationFailed, result.Error?.Code);
     }
 
     [Fact]

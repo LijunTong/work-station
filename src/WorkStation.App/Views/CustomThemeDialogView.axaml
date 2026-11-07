@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WorkStation.App.ViewModels"
+             x:Class="WorkStation.App.Views.CustomThemeDialogView"
+             x:DataType="vm:SettingsViewModel">
+  <!--
+    自定义主题色弹窗的内容。
+    参照 SukiUI 官方 Demo 的 CustomThemeDialogView：一个主色取色器 + 一个强调色取色器。
+    这里多做了两件事：
+      - 主色/强调色各配一个十六进制文本，方便对着设计稿手输精确值；
+      - 底部一块实时预览，改颜色时能立刻看到主色与强调色的关系。
+    弹窗外壳（Suki 对话框、取消/应用按钮）由 MainWindow 统一负责，这里只管内容。
+  -->
+  <StackPanel Width="440" Spacing="18">
+
+    <TextBlock Text="主色决定按钮、强调线这类主视觉；强调色用在高亮与选中态。"
+               TextWrapping="Wrap"
+               Foreground="{DynamicResource SukiMuteText}" />
+
+    <!-- 主色 -->
+    <Grid ColumnDefinitions="56,Auto,*" ColumnSpacing="12">
+      <TextBlock Text="主色" VerticalAlignment="Center" />
+      <ColorPicker Grid.Column="1"
+                   Color="{Binding CustomPrimaryColor, Mode=TwoWay}"
+                   VerticalAlignment="Center" />
+      <TextBlock Grid.Column="2"
+                 Text="{Binding CustomPrimaryHex}"
+                 VerticalAlignment="Center"
+                 FontFamily="Consolas, Microsoft YaHei UI, Segoe UI"
+                 Foreground="{DynamicResource SukiLowText}" />
+    </Grid>
+
+    <!-- 强调色 -->
+    <Grid ColumnDefinitions="56,Auto,*" ColumnSpacing="12">
+      <TextBlock Text="强调色" VerticalAlignment="Center" />
+      <ColorPicker Grid.Column="1"
+                   Color="{Binding CustomAccentColor, Mode=TwoWay}"
+                   VerticalAlignment="Center" />
+      <TextBlock Grid.Column="2"
+                 Text="{Binding CustomAccentHex}"
+                 VerticalAlignment="Center"
+                 FontFamily="Consolas, Microsoft YaHei UI, Segoe UI"
+                 Foreground="{DynamicResource SukiLowText}" />
+    </Grid>
+
+    <!-- 预览 -->
+    <Border Background="{DynamicResource SukiCardBackground}"
+            BorderBrush="{DynamicResource SukiBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Padding="14">
+      <StackPanel Spacing="10">
+        <TextBlock Text="预览" Foreground="{DynamicResource SukiMuteText}" FontSize="12" />
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <Border Width="40" Height="40" CornerRadius="20" Background="{Binding CustomPrimaryBrush}" />
+          <Border Width="40" Height="40" CornerRadius="20" Background="{Binding CustomAccentBrush}" />
+          <TextBlock Text="主色与强调色"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource SukiLowText}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+  </StackPanel>
+</UserControl>

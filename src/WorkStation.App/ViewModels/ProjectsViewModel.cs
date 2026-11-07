@@ -10,7 +10,7 @@ using WorkStation.Core.Services;
 namespace WorkStation.App.ViewModels;
 
 /// <summary>项目页。卡片列表 + 新建/编辑抽屉 + 归档与删除。</summary>
-public partial class ProjectsViewModel : ObservableObject
+public partial class ProjectsViewModel : ObservableObject, IDeleteConfirmation, IEditorDialog
 {
     private readonly WorkStationService _service;
     private readonly Action<string, bool> _toast;
@@ -50,6 +50,12 @@ public partial class ProjectsViewModel : ObservableObject
     public bool HasError => Error is not null;
 
     public bool IsDeleteConfirmOpen => PendingDelete is not null;
+    string IDeleteConfirmation.DeleteTargetName => PendingDelete?.Name ?? string.Empty;
+    System.Windows.Input.ICommand IDeleteConfirmation.Cancel => CancelDeleteCommand;
+    System.Windows.Input.ICommand IDeleteConfirmation.Confirm => ConfirmDeleteCommand;
+    object? IEditorDialog.Form => Form;
+    string IEditorDialog.DialogTemplateKey => "ProjectFormTemplate";
+    void IEditorDialog.DismissForm() => CloseForm();
 
     partial void OnIncludeArchivedChanged(bool value) => Reload();
 
@@ -102,7 +108,8 @@ public partial class ProjectsViewModel : ObservableObject
                     projectTasks ?? [],
                     EditProject,
                     ArchiveProject,
-                    RequestDelete));
+                    RequestDelete,
+                    OpenProjectTasks));
             }
         }
         finally
@@ -201,14 +208,13 @@ public partial class ProjectsViewModel : ObservableObject
         Reload();
     }
 
+    /// <summary>从项目卡片「查看任务」进来：跳任务页并按该项目筛选。null = 不筛选。</summary>
     [RelayCommand]
-    private void OpenTaskPage()
-    {
-        // 由 MainWindowViewModel 在构造时挂上，避免子 VM 反向依赖父 VM
-        NavigateToTasks?.Invoke();
-    }
+    private void OpenProjectTasks(ProjectCardViewModel card) =>
+        NavigateToTasks?.Invoke(card.Project.Id);
 
-    public Action? NavigateToTasks { get; set; }
+    /// <summary>由 MainWindowViewModel 在构造时挂上，避免子 VM 反向依赖父 VM。</summary>
+    public Action<string?>? NavigateToTasks { get; set; }
 }
 
 /// <summary>项目卡片。进度口径与 ProgressCalculator 一致：auto 排除 canceled，manual 取手动值。</summary>
@@ -217,6 +223,7 @@ public sealed partial class ProjectCardViewModel : ObservableObject
     private readonly Action<ProjectCardViewModel> _edit;
     private readonly Action<ProjectCardViewModel> _archive;
     private readonly Action<ProjectCardViewModel> _delete;
+    private readonly Action<ProjectCardViewModel> _openTasks;
 
     private ProjectCardViewModel(
         Project project,
@@ -224,7 +231,8 @@ public sealed partial class ProjectCardViewModel : ObservableObject
         int progress,
         Action<ProjectCardViewModel> edit,
         Action<ProjectCardViewModel> archive,
-        Action<ProjectCardViewModel> delete)
+        Action<ProjectCardViewModel> delete,
+        Action<ProjectCardViewModel> openTasks)
     {
         Project = project;
         Counts = counts;
@@ -232,6 +240,7 @@ public sealed partial class ProjectCardViewModel : ObservableObject
         _edit = edit;
         _archive = archive;
         _delete = delete;
+        _openTasks = openTasks;
     }
 
     public Project Project { get; }
@@ -272,44 +281,71 @@ public sealed partial class ProjectCardViewModel : ObservableObject
 
     public bool HasPriority => Project.Priority != Priority.None;
 
+    /// <summary>
+    /// 优先级色条的颜色。与任务行完全一致：高=危险色、中=警示色、低=中性色。
+    /// 同一套颜色才能让「任务高优先级」和「项目高优先级」在扫视时是同一件事。
+    /// </summary>
+    public IBrush PriorityBrush => Project.Priority switch
+    {
+        Priority.High => ThemeBrushes.Get("SukiDangerColor"),
+        Priority.Medium => ThemeBrushes.Get("SukiWarningColor"),
+        Priority.Low => ThemeBrushes.Get("SukiMuteText"),
+        _ => Brushes.Transparent
+    };
+
     public string MetaText => $"{Counts.Total} 个任务 · 进行中 {Counts.Doing}";
 
     public string OverdueText => Counts.Overdue > 0 ? $"逾期 {Counts.Overdue}" : string.Empty;
 
     public bool HasOverdue => Counts.Overdue > 0;
 
-    public string DueText => string.IsNullOrEmpty(Project.DueDate)
-        ? "无目标日期"
-        : $"目标 {Formatting.FormatLocalDateTime(Project.DueDate)}";
+    public string DueText
+    {
+        get
+        {
+            var due = string.IsNullOrEmpty(Project.DueDate)
+                ? "无目标日期"
+                : $"目标 {Formatting.FormatLocalDateTime(Project.DueDate)}";
+
+            // 与看板项目卡同一格式：逾期数字单独在左侧标红，这里补分隔点避免糊成一句
+            return HasOverdue ? $"· {due}" : due;
+        }
+    }
 
     public bool IsDueSoon => !string.IsNullOrEmpty(Project.DueDate)
                              && string.CompareOrdinal(Project.DueDate, Core.Time.LocalTime.ToLocalDate(DateTime.Now)) < 0
                              && Project.Status != ProjectStatus.Done;
 
+    /// <summary>
+    /// 项目的起止区间。项目一定有起止（表单里是必填），老项目可能是空的，
+    /// 这时显示「未设置起止时间」而不是假装没有这回事。
+    /// </summary>
+    public string DateRangeText
+    {
+        get
+        {
+            var start = Project.StartDate;
+            var due = Project.DueDate;
+
+            if (!string.IsNullOrEmpty(start) && !string.IsNullOrEmpty(due)) return $"{start} ~ {due}";
+            if (!string.IsNullOrEmpty(due)) return $"结束 {due}";
+            if (!string.IsNullOrEmpty(start)) return $"开始 {start}";
+            return "未设置起止时间";
+        }
+    }
+
+    public bool HasDateRange => !string.IsNullOrEmpty(Project.StartDate) || !string.IsNullOrEmpty(Project.DueDate);
+
     public IBrush AccentBrush => ParseColor(Project.Color);
 
-    /// <summary>
-    /// 状态圆点。这里刻意用「中间调」而不是主题色板里的语义色：
-    /// 同一份 hex 要同时在白底和 #161A21 上看得清，浅色系的 semantic 色在深色主题会糊。
-    /// </summary>
+    /// <summary>状态圆点，颜色一律取 Suki 当前主题的语义色。</summary>
     public IBrush StatusBrush => Project.Status switch
     {
-        ProjectStatus.Active => Brush.Parse("#2F62E8"),
-        ProjectStatus.Planning => Brush.Parse("#8B95A6"),
-        ProjectStatus.Paused => Brush.Parse("#C08A2E"),
-        _ => Brush.Parse("#0F8A62")
+        ProjectStatus.Active => ThemeBrushes.Get("SukiPrimaryColor"),
+        ProjectStatus.Planning => ThemeBrushes.Get("SukiMuteText"),
+        ProjectStatus.Paused => ThemeBrushes.Get("SukiWarningColor"),
+        _ => ThemeBrushes.Get("SukiSuccessColor")
     };
-
-    /// <summary>
-    /// 进度环跟随项目色；项目没配色时回落到强调色 —— 早先直接绑 AccentBrush，
-    /// 无色的项目环会解析成 Transparent，整个环直接消失。
-    /// </summary>
-    public IBrush RingBrush => HasColor
-        ? ParseColor(Project.Color)
-        : AccentFallback;
-
-    /// <summary>取不到主题资源时（例如纯 ViewModel 单测里没有 Application）退回一个中调蓝。</summary>
-    private static IBrush AccentFallback => ThemeBrushes.Get("AccentBrush", "#2F62E8");
 
     [RelayCommand]
     private void Edit() => _edit(this);
@@ -320,16 +356,20 @@ public sealed partial class ProjectCardViewModel : ObservableObject
     [RelayCommand]
     private void Delete() => _delete(this);
 
+    [RelayCommand]
+    private void OpenTasks() => _openTasks(this);
+
     public static ProjectCardViewModel Create(
         Project project,
         IReadOnlyList<TaskItem> tasks,
         Action<ProjectCardViewModel> edit,
         Action<ProjectCardViewModel> archive,
-        Action<ProjectCardViewModel> delete)
+        Action<ProjectCardViewModel> delete,
+        Action<ProjectCardViewModel> openTasks)
     {
         var (counts, progress) = Core.Projects.ProjectSummary.Compute(project, tasks, DateTime.Now);
 
-        return new ProjectCardViewModel(project, counts, progress, edit, archive, delete);
+        return new ProjectCardViewModel(project, counts, progress, edit, archive, delete, openTasks);
     }
 
     private static IBrush ParseColor(string? color)
@@ -347,7 +387,7 @@ public sealed partial class ProjectCardViewModel : ObservableObject
 }
 
 /// <summary>新建/编辑项目的表单状态。校验放在这里，错误就地显示，不弹窗。</summary>
-public partial class ProjectFormViewModel : ObservableObject
+public partial class ProjectFormViewModel : ObservableObject, IEditorForm
 {
     private readonly Action _save;
     private readonly Action _cancel;
@@ -403,14 +443,30 @@ public partial class ProjectFormViewModel : ObservableObject
         _cancel = cancel;
     }
 
+    System.Windows.Input.ICommand IEditorForm.Save => SaveCommand;
+    System.Windows.Input.ICommand IEditorForm.Cancel => CancelCommand;
+
     [RelayCommand]
     private void Save() => _save();
 
     [RelayCommand]
     private void Cancel() => _cancel();
 
-    public static ProjectFormViewModel ForCreate(Action save, Action cancel) =>
-        new(save, cancel);
+    public static ProjectFormViewModel ForCreate(Action save, Action cancel)
+    {
+        var form = new ProjectFormViewModel(save, cancel);
+
+        // 起止时间是必填项，新建时先给一段默认区间：
+        // 从今天起、往后两周。用户可以随时改，但不会面对一个空的必填框。
+        var today = DateTime.Now.Date;
+        form.StartDate = today;
+        form.DueDate = today.AddDays(DefaultSpanDays);
+
+        return form;
+    }
+
+    /// <summary>新建项目时默认给的时间跨度（天）。</summary>
+    private const int DefaultSpanDays = 14;
 
     public static ProjectFormViewModel ForEdit(Project project, Action save, Action cancel) => new(save, cancel)
     {
@@ -445,9 +501,23 @@ public partial class ProjectFormViewModel : ObservableObject
             return false;
         }
 
+        // 项目的起止时间是必填的：任务默认落在项目区间里，
+        // 项目没有区间，任务也就无从继承。
+        if (StartDate is null)
+        {
+            Error = "请填写项目开始日期";
+            return false;
+        }
+
+        if (DueDate is null)
+        {
+            Error = "请填写项目结束日期";
+            return false;
+        }
+
         if (StartDate is { } start && DueDate is { } due && start.Date > due.Date)
         {
-            Error = "目标日期不能早于开始日期";
+            Error = "结束日期不能早于开始日期";
             return false;
         }
 

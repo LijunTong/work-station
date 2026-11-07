@@ -36,6 +36,47 @@ public class TaskBoardTests
             TaskBoard.ColumnOrder);
     }
 
+    /// <summary>
+    /// 「本月」口径：到期日在本月内、且还没到点。
+    /// 与「本周」同一套思路 —— 逾期的已经在「逾期」里，不在这里重复计数。
+    /// </summary>
+    [Fact]
+    public void MonthScope_CountsUpcomingTasksDueThisMonth()
+    {
+        TaskItem[] tasks =
+        [
+            Task("本月内", dueAt: "2026-11-25T18:00"),
+            Task("本月内但已过点", dueAt: "2026-11-04T09:00"),
+            Task("下个月", dueAt: "2026-12-02T09:00"),
+            Task("无期限")
+        ];
+
+        var overview = TaskBoard.ComputeOverview(tasks, Now);
+
+        Assert.Equal(1, overview.Month);
+        Assert.True(TaskBoard.MatchesTimeScope(tasks[0], BoardTimeScope.Month, Now));
+        Assert.False(TaskBoard.MatchesTimeScope(tasks[1], BoardTimeScope.Month, Now));
+        Assert.False(TaskBoard.MatchesTimeScope(tasks[2], BoardTimeScope.Month, Now));
+        Assert.False(TaskBoard.MatchesTimeScope(tasks[3], BoardTimeScope.Month, Now));
+    }
+
+    /// <summary>概览条上的本月计数与筛选结果必须一致（点进去数量要对得上）。</summary>
+    [Fact]
+    public void MonthScope_CountMatchesFilter()
+    {
+        TaskItem[] tasks =
+        [
+            Task("一", dueAt: "2026-11-06T18:00"),
+            Task("二", dueAt: "2026-11-20T18:00"),
+            Task("三", dueAt: "2026-12-01T18:00")
+        ];
+
+        var overview = TaskBoard.ComputeOverview(tasks, Now);
+        var matched = tasks.Count(t => TaskBoard.MatchesTimeScope(t, BoardTimeScope.Month, Now));
+
+        Assert.Equal(overview.Month, matched);
+    }
+
     [Fact]
     public void Overview_CountsByGroup_ExcludingCanceled()
     {

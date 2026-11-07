@@ -16,6 +16,12 @@ public static class AppPaths
 
     public const string DatabaseFileName = "data.db";
 
+    /// <summary>
+    /// 引导配置文件名。数据目录的自定义值存在这里，**不能**存进数据库 ——
+    /// 「库在哪」本身就是要读的配置，放库里就是鸡生蛋。
+    /// </summary>
+    public const string ConfigFileName = "app-config.json";
+
     /// <summary>打包后的数据库路径：应用数据目录 / work-station / data.db。</summary>
     public static string DefaultDatabasePath() =>
         Path.Combine(
@@ -23,6 +29,17 @@ public static class AppPaths
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 AppFolderName),
             DatabaseFileName);
+
+    /// <summary>
+    /// 引导配置文件路径：应用数据目录 / work-station / app-config.json。
+    /// 固定不随数据目录挪动 —— 挪走数据后还得能找到这份配置。
+    /// </summary>
+    public static string ConfigFilePath() =>
+        Path.Combine(
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                AppFolderName),
+            ConfigFileName);
 
     /// <summary>备份目录：数据库同级的 backups/。</summary>
     public static string BackupDirectory(string databasePath) =>
@@ -54,11 +71,16 @@ public static class AppPaths
     /// <summary>
     /// 运行期实际使用的数据库路径。
     ///
-    /// 开发期（输出目录在 bin\ 下）用仓库内的 .data\data.db；
-    /// 打包后用应用数据目录 —— 与 Electron 版完全一致，旧数据可以直接复用。
+    /// 优先级：
+    /// 1. 用户自定义数据目录（app-config.json 的 dataDirectory，目录存在才算数）；
+    /// 2. 开发期（输出目录在 bin\ 下）用仓库内的 .data\data.db；
+    /// 3. 打包后用应用数据目录 —— 与 Electron 版完全一致，旧数据可以直接复用。
     /// </summary>
-    public static string ResolveDatabasePath()
+    public static string ResolveDatabasePath(string? configPath = null)
     {
+        var customDirectory = ReadDataDirectoryOverride(configPath);
+        if (customDirectory is not null) return Path.Combine(customDirectory, DatabaseFileName);
+
         var baseDirectory = AppContext.BaseDirectory;
         var inBuildOutput = baseDirectory.Contains(
             $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
@@ -71,5 +93,50 @@ public static class AppPaths
         }
 
         return DefaultDatabasePath();
+    }
+
+    /// <summary>
+    /// 读用户自定义数据目录。没配置、目录不存在或配置损坏都返回 null（回落默认路径）。
+    /// </summary>
+    public static string? ReadDataDirectoryOverride(string? configPath = null)
+    {
+        var path = configPath ?? ConfigFilePath();
+        try
+        {
+            if (!File.Exists(path)) return null;
+
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            if (!document.RootElement.TryGetProperty("dataDirectory", out var element)) return null;
+
+            var directory = element.GetString();
+            return string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)
+                ? null
+                : Path.GetFullPath(directory);
+        }
+        catch (Exception)
+        {
+            // 配置损坏不能挡住启动：当没配置处理
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 写（或清除）用户自定义数据目录。传 null/空串即恢复默认位置。
+    /// </summary>
+    public static void WriteDataDirectoryOverride(string? directory, string? configPath = null)
+    {
+        var path = configPath ?? ConfigFilePath();
+        var folder = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            if (File.Exists(path)) File.Delete(path);
+            return;
+        }
+
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            new Dictionary<string, string?> { ["dataDirectory"] = Path.GetFullPath(directory) });
+        File.WriteAllText(path, json);
     }
 }

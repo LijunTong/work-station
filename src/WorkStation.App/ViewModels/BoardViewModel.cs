@@ -48,22 +48,22 @@ public partial class BoardViewModel : ObservableObject
         _clock = clock ?? (() => DateTime.Now);
         _dataChanged = dataChanged;
 
+        // 口径顺序：今日 / 本周 / 本月 / 逾期。
+        // 逾期排在最后：它是「异常集合」而不是一个时间段，和三个时间口径并列时会读成同类。
         OverviewChips =
         [
             new BoardChip("today", "今日", SelectOverview, showCount: true),
-            new BoardChip("overdue", "逾期", SelectOverview, showCount: true),
-            new BoardChip("blocked", "已阻塞", SelectOverview, showCount: true),
             new BoardChip("week", "本周", SelectOverview, showCount: true),
-            // 提醒不是看板上的筛选：点它是离开看板去提醒页，所以单独放在最后
-            new BoardChip("reminders", "提醒", SelectOverview, showCount: true)
+            new BoardChip("month", "本月", SelectOverview, showCount: true),
+            new BoardChip("overdue", "逾期", SelectOverview, showCount: true)
         ];
 
         PriorityChips =
         [
-            new BoardChip("all", "全部优先级", chip => SelectedPriority = chip),
-            new BoardChip("high", "高", chip => SelectedPriority = chip),
-            new BoardChip("medium", "中", chip => SelectedPriority = chip),
-            new BoardChip("low", "低", chip => SelectedPriority = chip)
+            new BoardChip("all", "全部优先级", SelectPriority),
+            new BoardChip("high", "高", SelectPriority),
+            new BoardChip("medium", "中", SelectPriority),
+            new BoardChip("low", "低", SelectPriority)
         ];
 
         _selectedPriority = PriorityChips[0];
@@ -86,9 +86,6 @@ public partial class BoardViewModel : ObservableObject
 
     /// <summary>项目卡片上的「进入任务看板」：带项目筛选跳到任务页。</summary>
     public Action<string>? OpenProjectTasksRequested { get; set; }
-
-    /// <summary>概览条的「提醒」不是筛选，而是跳到提醒页。</summary>
-    public Action? OpenRemindersRequested { get; set; }
 
     [ObservableProperty]
     private bool _isTaskBoard = true;
@@ -129,6 +126,55 @@ public partial class BoardViewModel : ObservableObject
         || !string.IsNullOrWhiteSpace(SearchText);
 
     public string DoneWindowLabel => ShowAllDone ? "只看近 7 天" : "显示全部";
+
+    /// <summary>
+    /// 逾期任务数（未完成且已到点）。
+    ///
+    /// 逾期是**时间属性**、不是工作流状态，所以看板不给它单开一列：
+    /// 同一张卡会同时出现在「待办」和「已逾期」里，数量对不上，
+    /// 「拖进逾期列」也定义不出动作。逾期做成**视图入口**更合适 ——
+    /// 顶部一条提示，点一下切到逾期口径。
+    /// </summary>
+    public int OverdueCount { get; private set; }
+
+    /// <summary>最早那条逾期的日期（MM-dd）。</summary>
+    public string EarliestOverdueText { get; private set; } = string.Empty;
+
+    /// <summary>顶部提示条文案。</summary>
+    public string OverdueHintText => OverdueCount > 0
+        ? $"{OverdueCount} 条已逾期，最早 {EarliestOverdueText}"
+        : string.Empty;
+
+    /// <summary>有逾期任务、且当前不是「只看逾期」口径时才提示（已经在看逾期就别再催）。</summary>
+    public bool ShowOverdueHint => OverdueCount > 0 && TimeScope != BoardTimeScope.Overdue;
+
+    /// <summary>顶部提示条：切到「只看逾期」。</summary>
+    [RelayCommand]
+    private void ShowOverdueOnly() => ShowScope(BoardTimeScope.Overdue);
+
+    /// <summary>统计逾期任务与最早逾期日期，供顶部提示条使用。</summary>
+    private void UpdateOverdueHint(IReadOnlyList<TaskItem> tasks, DateTime now)
+    {
+        var overdue = tasks
+            .Where(TaskBoard.IsOpen)
+            .Where(t => TaskGrouping.Group(t, now) == TaskGroup.Overdue)
+            .ToList();
+
+        OverdueCount = overdue.Count;
+
+        var earliest = overdue
+            .Select(t => t.DueAt)
+            .Where(d => !string.IsNullOrEmpty(d))
+            .OrderBy(d => d, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+        EarliestOverdueText = earliest is { Length: >= 10 } ? earliest.Substring(5, 5) : string.Empty;
+
+        OnPropertyChanged(nameof(OverdueCount));
+        OnPropertyChanged(nameof(EarliestOverdueText));
+        OnPropertyChanged(nameof(OverdueHintText));
+        OnPropertyChanged(nameof(ShowOverdueHint));
+    }
 
     partial void OnIsTaskBoardChanged(bool value) => OnPropertyChanged(nameof(IsProjectBoard));
 
@@ -211,13 +257,11 @@ public partial class BoardViewModel : ObservableObject
             var now = _clock();
 
             var overview = TaskBoard.ComputeOverview(tasks, now);
-            OverviewChips[0].Count = overview.Today;
-            OverviewChips[1].Count = overview.Overdue;
-            OverviewChips[2].Count = overview.Blocked;
-            OverviewChips[3].Count = overview.Week;
-
-            var reminderCounts = _service.RemindersCounts();
-            OverviewChips[4].Count = reminderCounts is { Ok: true, Data: { } counts } ? counts.Unhandled : 0;
+            UpdateOverdueHint(tasks, now);
+            SetChipCount("today", overview.Today);
+            SetChipCount("overdue", overview.Overdue);
+            SetChipCount("week", overview.Week);
+            SetChipCount("month", overview.Month);
 
             RebuildProjectOptions(projects);
 
@@ -286,11 +330,9 @@ public partial class BoardViewModel : ObservableObject
             }
 
             var cards = (status == TaskStatus.Done
-                    ? matching.OrderByDescending(t => t.CompletedAt ?? t.UpdatedAt, StringComparer.Ordinal)
-                    : matching
-                        .OrderBy(t => string.IsNullOrEmpty(t.DueAt) ? 1 : 0)
-                        .ThenBy(t => t.DueAt, StringComparer.Ordinal)
-                        .ThenBy(t => t.CreatedAt, StringComparer.Ordinal))
+                    ? matching.OrderBy(t => t, TaskOrdering.CompletedTaskComparer())
+                    : // 未完成：优先级在前，同优先级再按逾期、截止时间
+                    matching.OrderBy(t => t, TaskOrdering.OpenTaskComparer(now)))
                 .Select(t =>
                 {
                     projectById.TryGetValue(t.ProjectId ?? string.Empty, out var project);
@@ -314,7 +356,9 @@ public partial class BoardViewModel : ObservableObject
         {
             var cards = projects
                 .Where(p => p.ArchivedAt is null && p.Status == status)
-                .OrderByDescending(p => p.Priority)
+                // 优先级高的项目排前面。用显式权重：Priority 的枚举值是高=0、无=3，
+                // 直接 OrderByDescending 会把「无优先级」顶到最前。
+                .OrderBy(p => TaskOrdering.PriorityWeight(p.Priority))
                 .ThenBy(p => p.SortOrder)
                 .ThenBy(p => p.CreatedAt, StringComparer.Ordinal)
                 .Select(p =>
@@ -355,19 +399,17 @@ public partial class BoardViewModel : ObservableObject
         if (!ReferenceEquals(SelectedProject, next)) SelectedProject = next;
     }
 
+    private void SelectPriority(BoardChip chip)
+    {
+        // ToggleButton 点击会先翻转 IsSelected：单选语义下不允许取消唯一选中项，点击当前项直接复位
+        chip.IsSelected = true;
+        if (!ReferenceEquals(SelectedPriority, chip)) SelectedPriority = chip;
+    }
+
     private void SelectOverview(BoardChip chip)
     {
-        if (chip.Key == "reminders")
-        {
-            OpenRemindersRequested?.Invoke();
-            return;
-        }
-
         switch (chip.Key)
         {
-            case "blocked":
-                OnlyBlocked = !OnlyBlocked;
-                break;
             case "today":
                 TimeScope = TimeScope == BoardTimeScope.Today ? BoardTimeScope.All : BoardTimeScope.Today;
                 break;
@@ -377,18 +419,42 @@ public partial class BoardViewModel : ObservableObject
             case "week":
                 TimeScope = TimeScope == BoardTimeScope.Week ? BoardTimeScope.All : BoardTimeScope.Week;
                 break;
+            case "month":
+                TimeScope = TimeScope == BoardTimeScope.Month ? BoardTimeScope.All : BoardTimeScope.Month;
+                break;
         }
 
         SyncOverviewChips();
+        OnPropertyChanged(nameof(ShowOverdueHint));
         ReloadIfNeeded();
     }
 
     private void SyncOverviewChips()
     {
-        OverviewChips[0].IsSelected = TimeScope == BoardTimeScope.Today;
-        OverviewChips[1].IsSelected = TimeScope == BoardTimeScope.Overdue;
-        OverviewChips[2].IsSelected = OnlyBlocked;
-        OverviewChips[3].IsSelected = TimeScope == BoardTimeScope.Week;
+        foreach (var chip in OverviewChips)
+        {
+            chip.IsSelected = chip.Key switch
+            {
+                "today" => TimeScope == BoardTimeScope.Today,
+                "overdue" => TimeScope == BoardTimeScope.Overdue,
+                "week" => TimeScope == BoardTimeScope.Week,
+                "month" => TimeScope == BoardTimeScope.Month,
+                _ => false
+            };
+        }
+    }
+
+    /// <summary>按 key 写概览条上的数字。用 key 而不是下标：增删胶囊时下标会整体错位。</summary>
+    private void SetChipCount(string key, int count)
+    {
+        foreach (var chip in OverviewChips)
+        {
+            if (chip.Key == key)
+            {
+                chip.Count = count;
+                return;
+            }
+        }
     }
 
     [RelayCommand]
@@ -401,6 +467,27 @@ public partial class BoardViewModel : ObservableObject
     public void ShowToday()
     {
         TimeScope = BoardTimeScope.Today;
+        SyncOverviewChips();
+        Reload();
+    }
+
+    /// <summary>
+    /// 外部入口（仪表盘跳转）：套用指定的时间口径并刷新。
+    /// 「阻塞」不是时间口径，由仪表盘单独走 OnlyBlocked 通道。
+    /// </summary>
+    public void ShowScope(BoardTimeScope scope)
+    {
+        TimeScope = scope;
+        SyncOverviewChips();
+        OnPropertyChanged(nameof(ShowOverdueHint));
+        Reload();
+    }
+
+    /// <summary>外部入口（仪表盘跳转）：只看已阻塞的任务。</summary>
+    public void ShowBlockedOnly()
+    {
+        OnlyBlocked = true;
+        TimeScope = BoardTimeScope.All;
         SyncOverviewChips();
         Reload();
     }
@@ -544,15 +631,13 @@ public sealed partial class BoardChip : ObservableObject
     public string CountText => Count.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// 概览条数字的颜色。只有「逾期」「已阻塞」在非零时才用语义色 ——
+    /// 概览条数字的颜色。只有「逾期」在非零时才用语义色 ——
     /// 每个数字都染色等于没有重点。
     /// </summary>
     public IBrush CountBrush => (Key, Count > 0) switch
     {
-        ("overdue", true) => ThemeBrushes.Get("DangerBrush", "#C0392F"),
-        ("blocked", true) => ThemeBrushes.Get("WarningBrush", "#9A5B06"),
-        ("reminders", true) => ThemeBrushes.Get("AccentBrush", "#2F62E8"),
-        _ => ThemeBrushes.Get("TextBrush", "#12161D")
+        ("overdue", true) => ThemeBrushes.Get("SukiDangerColor"),
+        _ => ThemeBrushes.Get("SukiText")
     };
 
     [ObservableProperty]
@@ -593,6 +678,20 @@ public sealed partial class BoardColumnViewModel : ObservableObject
     public ObservableCollection<BoardTaskCardViewModel> Cards { get; }
 
     public bool IsDone => Status == TaskStatus.Done;
+
+    /// <summary>四种状态各用一个 Suki 语义色，列头色带 / 标题 / 边框 / 淡底色都取它。</summary>
+    private string StatusColorKey => Status switch
+    {
+        TaskStatus.Todo => "SukiMuteText",
+        TaskStatus.Doing => "SukiPrimaryColor",
+        TaskStatus.Blocked => "SukiDangerColor",
+        TaskStatus.Done => "SukiSuccessColor",
+        _ => "SukiDisabledText"
+    };
+
+    public IBrush StatusBrush => ThemeBrushes.Get(StatusColorKey);
+
+    public IBrush StatusTint => ThemeBrushes.Tint(StatusColorKey);
 
     /// <summary>「已完成」列的窗口是否已放宽到全部历史。</summary>
     public bool ShowAllDone { get; }
@@ -638,6 +737,19 @@ public sealed partial class BoardProjectColumnViewModel : ObservableObject
 
     public string Title { get; }
 
+    /// <summary>规划 / 进行 / 暂停 / 完成分别用中性、主色、警示、成功色。</summary>
+    private string StatusColorKey => Status switch
+    {
+        ProjectStatus.Planning => "SukiMuteText",
+        ProjectStatus.Active => "SukiPrimaryColor",
+        ProjectStatus.Paused => "SukiWarningColor",
+        _ => "SukiSuccessColor"
+    };
+
+    public IBrush StatusBrush => ThemeBrushes.Get(StatusColorKey);
+
+    public IBrush StatusTint => ThemeBrushes.Tint(StatusColorKey);
+
     public ObservableCollection<BoardProjectCardViewModel> Cards { get; }
 
     public int Count => Cards.Count;
@@ -661,7 +773,7 @@ public sealed partial class BoardProjectColumnViewModel : ObservableObject
 /// <summary>看板任务卡片。</summary>
 public sealed class BoardTaskCardViewModel
 {
-    private static readonly IBrush NeutralDot = Brush.Parse("#8B95A6");
+    private static IBrush NeutralDot => ThemeBrushes.Get("SukiMuteText");
 
     public BoardTaskCardViewModel(TaskItem task, string? projectName, string? projectColor, DateTime now)
     {
@@ -692,9 +804,9 @@ public sealed class BoardTaskCardViewModel
 
     public IBrush PriorityBrush => Task.Priority switch
     {
-        Priority.High => Brush.Parse("#D9534F"),
-        Priority.Medium => Brush.Parse("#D9932B"),
-        Priority.Low => Brush.Parse("#8A94A6"),
+        Priority.High => ThemeBrushes.Get("SukiDangerColor"),
+        Priority.Medium => ThemeBrushes.Get("SukiWarningColor"),
+        Priority.Low => ThemeBrushes.Get("SukiMuteText"),
         _ => Brushes.Transparent
     };
 
@@ -732,6 +844,11 @@ public sealed class BoardTaskCardViewModel
     }
 
     public bool HasFooter => FooterText.Length > 0;
+
+    /// <summary>底部元信息色：逾期拉红，平时弱化。</summary>
+    public IBrush FooterBrush => IsOverdue
+        ? ThemeBrushes.Get("SukiDangerColor")
+        : ThemeBrushes.Get("SukiMuteText");
 
     private static IBrush ParseColor(string color)
     {
@@ -795,25 +912,45 @@ public sealed class BoardProjectCardViewModel
 
     public string Description => Project.Description;
 
-    public string DueText
+    /// <summary>有没有优先级。与任务卡一致：无优先级时不画标识。</summary>
+    public bool HasPriority => Project.Priority != Priority.None;
+
+    /// <summary>优先级色条的颜色，与任务卡完全一致。</summary>
+    public IBrush PriorityBrush => Project.Priority switch
+    {
+        Priority.High => ThemeBrushes.Get("SukiDangerColor"),
+        Priority.Medium => ThemeBrushes.Get("SukiWarningColor"),
+        Priority.Low => ThemeBrushes.Get("SukiMuteText"),
+        _ => Brushes.Transparent
+    };
+
+    /// <summary>优先级文字（高/中/低）。</summary>
+    public string PriorityText => Project.Priority switch
+    {
+        Priority.High => "高",
+        Priority.Medium => "中",
+        Priority.Low => "低",
+        _ => string.Empty
+    };
+
+    /// <summary>项目的起止区间。与项目页卡片同一套文案与口径。</summary>
+    public string DateRangeText
     {
         get
         {
-            var due = string.IsNullOrEmpty(Project.DueDate)
-                ? "无目标日期"
-                : $"目标 {Formatting.FormatLocalDateTime(Project.DueDate)}";
+            var start = Project.StartDate;
+            var due = Project.DueDate;
 
-            // 逾期数字在左边单独用红色显示，这里补一个分隔点，避免「逾期 3 目标 11-05」糊成一句
-            return HasOverdue ? $"· {due}" : due;
+            if (!string.IsNullOrEmpty(start) && !string.IsNullOrEmpty(due)) return $"{start} ~ {due}";
+            if (!string.IsNullOrEmpty(due)) return $"结束 {due}";
+            if (!string.IsNullOrEmpty(start)) return $"开始 {start}";
+            return "未设置起止时间";
         }
     }
 
     public IBrush AccentBrush => _accent ?? Brushes.Transparent;
 
     public bool HasColor => _accent is not null;
-
-    /// <summary>进度环跟随项目色；无色时回落到强调色，否则整个环会解析成透明而消失。</summary>
-    public IBrush RingBrush => _accent ?? AccentFallback;
 
     private readonly IBrush? _accent;
 
@@ -829,6 +966,4 @@ public sealed class BoardProjectCardViewModel
             return null;
         }
     }
-
-    private static IBrush AccentFallback => ThemeBrushes.Get("AccentBrush", "#2F62E8");
 }

@@ -15,6 +15,13 @@
     <CodePage>65001</CodePage>
     <!-- 编译期校验绑定路径：写错 x:DataType 下的属性名在 build 期就报错 -->
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!--
+      运行时回退：默认策略是 Minor（同 major 内滚动补丁），跨 major 是不允许的 ——
+      机器上只有 .NET 9 时，本应用（要 .NET 10）会直接起不来。
+      改成 LatestMajor 后，装了更高版本（12.x、13.x…）的机器照样能跑，
+      启动器的检测口径也据此定成「主版本 ≥ 10 即算满足」。
+    -->
+    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,7 +29,9 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.5" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.5" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.5" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.5" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageReference Include="SukiUI" Version="7.0.1" />
   </ItemGroup>
 
   <ItemGroup>

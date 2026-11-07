@@ -1,155 +1,339 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WorkStation.App.ViewModels"
+             xmlns:controls="clr-namespace:WorkStation.App.Controls"
+             xmlns:conv="clr-namespace:WorkStation.App.Converters"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
              x:Class="WorkStation.App.Views.SettingsView"
              x:DataType="vm:SettingsViewModel"
              x:CompileBindings="True">
 
-  <ScrollViewer>
-    <!-- 不设 MaxWidth：Avalonia 里 Stretch + MaxWidth 会把内容居中，
-         导致卡片左边缘和页面标题对不齐。让三个分组和标题同处一条视觉轴。 -->
-    <StackPanel Margin="{DynamicResource PagePadding}" Spacing="14">
+  <!--
+    SukiUI 的 SettingsLayout.Items 是 IEnumerable&lt;SettingsLayoutItem&gt; 且初始为 null，
+    XAML 的多子元素集合语法会在 null 上调用 Add 直接抛 NRE。
+    所以分组内容先放资源里，由 code-behind 一次性把 Items 赋成数组。
+    分组标题、卡片、左侧摘要导航和滚动全部由 SettingsLayout 提供。
+  -->
+  <UserControl.Resources>
 
-      <!-- 外观 -->
-      <Border Classes="group-panel" Padding="20,18">
-        <StackPanel Spacing="14">
-          <StackPanel Spacing="3">
-            <TextBlock Text="外观" FontSize="14" FontWeight="SemiBold" />
-            <TextBlock Text="切换即时生效，重启后保持。"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontXs}" />
-          </StackPanel>
+    <conv:EqualConverter x:Key="Equal" />
 
-          <Border Classes="segment">
-            <StackPanel Orientation="Horizontal" Spacing="2">
-              <Button Content="跟随系统"
-                      Classes="seg"
-                      Classes.active="{Binding IsSystemTheme}"
-                      Command="{Binding SetThemeCommand}"
-                      CommandParameter="system" />
-              <Button Content="浅色"
-                      Classes="seg"
-                      Classes.active="{Binding IsLightTheme}"
-                      Command="{Binding SetThemeCommand}"
-                      CommandParameter="light" />
-              <Button Content="深色"
-                      Classes="seg"
-                      Classes.active="{Binding IsDarkTheme}"
-                      Command="{Binding SetThemeCommand}"
-                      CommandParameter="dark" />
-            </StackPanel>
-          </Border>
+    <StackPanel x:Key="AppearanceContent" Spacing="16">
+      <TextBlock Text="明暗" Classes="subhead" />
+      <Border Classes="divider" />
+
+      <!-- Base Theme：两张大圆角卡片，选中时金色描边 + 右上角对勾徽章 -->
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+        <Border Grid.Column="0"
+                Classes="theme-card"
+                Classes.selected="{Binding IsLightTheme}"
+                PointerPressed="OnThemeCardPressed"
+                Tag="light"
+                Cursor="Hand">
+          <Grid>
+            <Grid RowDefinitions="*,Auto" Margin="12">
+              <Border Classes="preview" Background="#FFFFFF">
+                <StackPanel Margin="12" Spacing="6" VerticalAlignment="Center">
+                  <Border Height="9" Width="56" HorizontalAlignment="Left" Background="#B8BDC7" CornerRadius="3" />
+                  <Border Height="6" Width="80" HorizontalAlignment="Left" Background="#DDE1E7" CornerRadius="3" />
+                  <Border Height="6" Width="66" HorizontalAlignment="Left" Background="#DDE1E7" CornerRadius="3" />
+                </StackPanel>
+              </Border>
+              <TextBlock Grid.Row="1" Text="浅色" Classes="card-label" Margin="0,8,0,2" HorizontalAlignment="Center" />
+            </Grid>
+            <Grid Classes="check-badge" IsVisible="{Binding IsLightTheme}" HorizontalAlignment="Right" VerticalAlignment="Top">
+              <Ellipse Fill="#F5A623" Width="22" Height="22" />
+              <PathIcon Data="{x:Static controls:AppIcons.Check}" Width="12" Height="12" Foreground="#23262E" />
+            </Grid>
+          </Grid>
+        </Border>
+
+        <Border Grid.Column="1"
+                Classes="theme-card"
+                Classes.selected="{Binding IsDarkTheme}"
+                PointerPressed="OnThemeCardPressed"
+                Tag="dark"
+                Cursor="Hand">
+          <Grid>
+            <Grid RowDefinitions="*,Auto" Margin="12">
+              <Border Classes="preview" Background="#23262E">
+                <StackPanel Margin="12" Spacing="6" VerticalAlignment="Center">
+                  <Border Height="9" Width="56" HorizontalAlignment="Left" Background="#4A5160" CornerRadius="3" />
+                  <Border Height="6" Width="80" HorizontalAlignment="Left" Background="#2C313C" CornerRadius="3" />
+                  <Border Height="6" Width="66" HorizontalAlignment="Left" Background="#2C313C" CornerRadius="3" />
+                </StackPanel>
+              </Border>
+              <TextBlock Grid.Row="1" Text="深色" Classes="card-label" Margin="0,8,0,2" HorizontalAlignment="Center" />
+            </Grid>
+            <Grid Classes="check-badge" IsVisible="{Binding IsDarkTheme}" HorizontalAlignment="Right" VerticalAlignment="Top">
+              <Ellipse Fill="#F5A623" Width="22" Height="22" />
+              <PathIcon Data="{x:Static controls:AppIcons.Check}" Width="12" Height="12" Foreground="#23262E" />
+            </Grid>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Button Content="跟随系统外观"
+              Classes="Basic"
+              Classes.Outlined="{Binding IsSystemTheme}"
+              Command="{Binding SetThemeCommand}"
+              CommandParameter="system"
+              HorizontalAlignment="Left"
+              Margin="0,2,0,0" />
+
+      <TextBlock Text="主题色" Classes="subhead" Margin="0,8,0,0" />
+      <Border Classes="divider" />
+
+      <!-- Color Theme：一排圆形色块，选中时金色环 + 白色对勾 -->
+      <StackPanel Orientation="Horizontal" Spacing="18" Margin="0,2,0,0">
+        <Border Classes="swatch"
+                Classes.selected="{Binding ThemeColorName, Converter={StaticResource Equal}, ConverterParameter=Orange}"
+                PointerPressed="OnColorSwatchPressed"
+                Tag="Orange"
+                Cursor="Hand"
+                ToolTip.Tip="橙">
+          <Grid>
+            <Ellipse Width="34" Height="34" Fill="#D48806" />
+            <PathIcon Data="{x:Static controls:AppIcons.Check}" Width="18" Height="18" Foreground="White"
+                      IsVisible="{Binding ThemeColorName, Converter={StaticResource Equal}, ConverterParameter=Orange}" />
+          </Grid>
+        </Border>
+
+        <Border Classes="swatch"
+                Classes.selected="{Binding ThemeColorName, Converter={StaticResource Equal}, ConverterParameter=Red}"
+                PointerPressed="OnColorSwatchPressed"
+                Tag="Red"
+                Cursor="Hand"
+                ToolTip.Tip="红">
+          <Grid>
+            <Ellipse Width="34" Height="34" Fill="#D03A2F" />
+            <PathIcon Data="{x:Static controls:AppIcons.Check}" Width="18" Height="18" Foreground="White"
+                      IsVisible="{Binding ThemeColorName, Converter={StaticResource Equal}, ConverterParameter=Red}" />
+          </Grid>
+        </Border>
+
+        <Border Classes="swatch"
+                Classes.selected="{Binding ThemeColorName, Converter={StaticResource Equal}, ConverterParameter=Green}"
+                PointerPressed="OnColorSwatchPressed"
+                Tag="Green"
+                Cursor="Hand"
+                ToolTip.Tip="绿">
+          <Grid>
+            <Ellipse Width="34" Height="34" Fill="#537834" />
+            <PathIcon Data="{x:Static controls:AppIcons.Check}" Width="18" Height="18" Foreground="White"
+                      IsVisible="{Binding ThemeColorName, Converter={StaticResource Equal}, ConverterParameter=Green}" />
+          </Grid>
+        </Border>
+
+        <Border Classes="swatch"
+                Classes.selected="{Binding ThemeColorName, Converter={StaticResource Equal}, ConverterParameter=Blue}"
+                PointerPressed="OnColorSwatchPressed"
+                Tag="Blue"
+                Cursor="Hand"
+                ToolTip.Tip="蓝">
+          <Grid>
+            <Ellipse Width="34" Height="34" Fill="#0A59F7" />
+            <PathIcon Data="{x:Static controls:AppIcons.Check}" Width="18" Height="18" Foreground="White"
+                      IsVisible="{Binding ThemeColorName, Converter={StaticResource Equal}, ConverterParameter=Blue}" />
+          </Grid>
+        </Border>
+
+        <!-- 自定义：点开取色器，主色与强调色自己挑。
+             圆点用主色到强调色的渐变，一眼能看出当前存的是哪一套。 -->
+        <Border Classes="swatch"
+                Classes.selected="{Binding IsCustomThemeColor}"
+                PointerPressed="OnColorSwatchPressed"
+                Tag="Custom"
+                Cursor="Hand"
+                ToolTip.Tip="自定义主题色…">
+          <Grid>
+            <Ellipse Width="34" Height="34">
+              <Ellipse.Fill>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                  <GradientStop Color="{Binding CustomPrimaryColor}" Offset="0" />
+                  <GradientStop Color="{Binding CustomAccentColor}" Offset="1" />
+                </LinearGradientBrush>
+              </Ellipse.Fill>
+            </Ellipse>
+            <PathIcon Data="{x:Static controls:AppIcons.Check}" Width="18" Height="18" Foreground="White"
+                      IsVisible="{Binding IsCustomThemeColor}" />
+          </Grid>
+        </Border>
+      </StackPanel>
+
+      <TextBlock Text="{Binding CustomThemeSummary}" TextWrapping="Wrap" Foreground="{DynamicResource SukiMuteText}" Margin="0,6,0,0" />
+
+      <TextBlock Text="字体" Classes="subhead" Margin="0,8,0,0" />
+      <Border Classes="divider" />
+
+      <!-- 字体：SukiUI 给正文控件单独指定了字体，浮层（ComboBox 下拉、ToolTip）
+           走窗口级字体，所以两处一起换才整块统一。 -->
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <StackPanel Spacing="2" VerticalAlignment="Center">
+          <TextBlock Text="界面字体" />
+          <TextBlock Text="{Binding SelectedFontLabel}" TextWrapping="Wrap" Foreground="{DynamicResource SukiMuteText}" />
         </StackPanel>
-      </Border>
+        <ComboBox Grid.Column="1"
+                  Width="200"
+                  MaxDropDownHeight="320"
+                  ItemsSource="{Binding FontOptions}"
+                  SelectedItem="{Binding SelectedFont, Mode=TwoWay}" />
+      </Grid>
 
-      <!-- 提醒 -->
-      <Border Classes="group-panel" Padding="20,18">
-        <StackPanel Spacing="14">
-          <StackPanel Spacing="3">
-            <TextBlock Text="提醒" FontSize="14" FontWeight="SemiBold" />
-            <TextBlock Text="到点会在窗口右下角弹出。关掉窗口后应用驻留托盘，提醒照常触发。"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontXs}"
-                       TextWrapping="Wrap" />
-          </StackPanel>
-
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <StackPanel Spacing="2" VerticalAlignment="Center">
-              <TextBlock Text="每日站会提醒" FontSize="{DynamicResource FontBody}" />
-              <TextBlock Text="每天固定时间汇报昨日完成、逾期和今晚到期。"
-                         Classes="dim"
-                         FontSize="{DynamicResource FontXs}" />
-            </StackPanel>
-            <CheckBox Grid.Column="1"
-                      Content="开启"
-                      IsChecked="{Binding DailyReviewEnabled, Mode=TwoWay}"
-                      VerticalAlignment="Center" />
-          </Grid>
-
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <TextBlock Text="站会时间"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontSm}"
-                       VerticalAlignment="Center" />
-            <ComboBox Grid.Column="1"
-                      Width="112"
-                      ItemsSource="{Binding DailyReviewTimeOptions}"
-                      SelectedItem="{Binding DailyReviewTime, Mode=TwoWay}"
-                      IsEnabled="{Binding DailyReviewEnabled}" />
-          </Grid>
-
-          <Border Height="1" Background="{DynamicResource LineBrush}" />
-
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <StackPanel Spacing="2" VerticalAlignment="Center">
-              <TextBlock Text="关闭窗口时驻留托盘" FontSize="{DynamicResource FontBody}" />
-              <TextBlock Text="关掉就是退出：不再接收提醒，直到下次打开。"
-                         Classes="dim"
-                         FontSize="{DynamicResource FontXs}" />
-            </StackPanel>
-            <CheckBox Grid.Column="1"
-                      Content="驻留"
-                      IsChecked="{Binding CloseToTray, Mode=TwoWay}"
-                      VerticalAlignment="Center" />
-          </Grid>
-
-          <!-- 找不到托盘图标的用户，第一步都是「它是不是没生效」。Windows 11 默认把新图标塞进
-               ^ 折叠区，不给这句话就只能靠猜 -->
-          <TextBlock Text="图标在任务栏右下角。Windows 11 会把它收进 ^ 折叠区，拖出来就能常驻；退出请用托盘菜单里的「退出」。"
-                     Classes="dim"
-                     FontSize="{DynamicResource FontXs}"
+      <Border Background="{DynamicResource SukiCardBackground}"
+              BorderBrush="{DynamicResource SukiBorderBrush}"
+              BorderThickness="1"
+              CornerRadius="12"
+              Padding="14">
+        <StackPanel Spacing="4">
+          <TextBlock Text="预览" Foreground="{DynamicResource SukiMuteText}" FontSize="12" />
+          <TextBlock Text="今日事今日毕 · The quick brown fox jumps over the lazy dog · 0123456789"
+                     FontFamily="{Binding SelectedFontFamily}"
                      TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
-      <!-- 数据 -->
-      <Border Classes="group-panel" Padding="20,18">
-        <StackPanel Spacing="14">
-          <StackPanel Spacing="3">
-            <TextBlock Text="数据" FontSize="14" FontWeight="SemiBold" />
-            <TextBlock Text="全部数据保存在本机，不联网。退出应用后复制 data.db 即完成备份。"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontXs}"
-                       TextWrapping="Wrap" />
-          </StackPanel>
-
-          <StackPanel Spacing="0">
-            <TextBlock Text="数据库" Classes="label" />
-            <Border Background="{DynamicResource BgSunkenBrush}"
-                    CornerRadius="{DynamicResource RadiusSm}"
-                    Padding="10,8">
-              <SelectableTextBlock Classes="mono" Text="{Binding DatabasePath}" />
-            </Border>
-          </StackPanel>
-
-          <StackPanel Spacing="0">
-            <TextBlock Text="备份目录" Classes="label" />
-            <Border Background="{DynamicResource BgSunkenBrush}"
-                    CornerRadius="{DynamicResource RadiusSm}"
-                    Padding="10,8">
-              <SelectableTextBlock Classes="mono" Text="{Binding BackupDirectory}" />
-            </Border>
-          </StackPanel>
-        </StackPanel>
-      </Border>
-
-      <!-- 关于 -->
-      <Border Classes="group-panel" Padding="20,18">
-        <StackPanel Spacing="12">
-          <TextBlock Text="关于" FontSize="14" FontWeight="SemiBold" />
-
-          <Grid ColumnDefinitions="96,*" RowDefinitions="Auto,Auto" RowSpacing="8">
-            <TextBlock Text="版本" Classes="dim" FontSize="{DynamicResource FontXs}" />
-            <TextBlock Grid.Column="1" Text="{Binding Version}" FontSize="{DynamicResource FontXs}" />
-            <TextBlock Grid.Row="1" Text="存储" Classes="dim" FontSize="{DynamicResource FontXs}" />
-            <TextBlock Grid.Row="1"
-                       Grid.Column="1"
-                       Text="SQLite 单文件 · WAL 模式"
-                       FontSize="{DynamicResource FontXs}" />
-          </Grid>
-        </StackPanel>
-      </Border>
-
+      <TextBlock Text="切换即时生效，重启后保持。" TextWrapping="Wrap" Margin="0,6,0,0" />
     </StackPanel>
-  </ScrollViewer>
+
+    <StackPanel x:Key="RemindersContent" Spacing="14">
+      <TextBlock Text="到点会在窗口右下角弹出。关掉窗口后应用驻留托盘，提醒照常触发。"
+                 TextWrapping="Wrap" />
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Spacing="2" VerticalAlignment="Center">
+          <TextBlock Text="每日站会提醒" />
+          <TextBlock Text="每天固定时间汇报昨日完成、逾期和今晚到期。" TextWrapping="Wrap" />
+        </StackPanel>
+        <ToggleSwitch Grid.Column="1"
+                      IsChecked="{Binding DailyReviewEnabled, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+      </Grid>
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <TextBlock Text="站会时间" VerticalAlignment="Center" />
+        <ComboBox Grid.Column="1"
+                  Width="112"
+                  ItemsSource="{Binding DailyReviewTimeOptions}"
+                  SelectedItem="{Binding DailyReviewTime, Mode=TwoWay}"
+                  IsEnabled="{Binding DailyReviewEnabled}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Spacing="2" VerticalAlignment="Center">
+          <TextBlock Text="关闭窗口时驻留托盘" />
+          <TextBlock Text="关掉就是退出：不再接收提醒，直到下次打开。" TextWrapping="Wrap" />
+        </StackPanel>
+        <ToggleSwitch Grid.Column="1"
+                      IsChecked="{Binding CloseToTray, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+      </Grid>
+
+      <TextBlock Text="图标在任务栏右下角。Windows 11 会把它收进 ^ 折叠区，拖出来就能常驻；退出请用托盘菜单里的「退出」。"
+                 TextWrapping="Wrap" />
+    </StackPanel>
+
+    <StackPanel x:Key="DataContent" Spacing="14">
+      <TextBlock Text="全部数据保存在本机，不联网。退出应用后复制 data.db 即完成备份。"
+                 TextWrapping="Wrap" />
+
+      <!-- 数据保存目录：可改。选新目录后整库复制过去，重启后生效 -->
+      <StackPanel Spacing="2">
+        <TextBlock Text="数据保存目录" />
+        <SelectableTextBlock Text="{Binding DataDirectory}"
+                             Foreground="{DynamicResource SukiLowText}"
+                             TextWrapping="Wrap" />
+      </StackPanel>
+      <Button Content="更改数据目录…"
+              Click="OnChangeDataDirClick"
+              HorizontalAlignment="Left" />
+
+      <!-- 路径只是说明信息，之前套了灰底边框看起来像可编辑输入框；改成纯文本 -->
+      <StackPanel Spacing="2">
+        <TextBlock Text="数据库" />
+        <SelectableTextBlock Text="{Binding DatabasePath}"
+                             Foreground="{DynamicResource SukiLowText}"
+                             TextWrapping="Wrap" />
+      </StackPanel>
+
+      <StackPanel Spacing="2">
+        <TextBlock Text="备份目录" />
+        <SelectableTextBlock Text="{Binding BackupDirectory}"
+                             Foreground="{DynamicResource SukiLowText}"
+                             TextWrapping="Wrap" />
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel x:Key="AboutContent" Spacing="10">
+      <Grid ColumnDefinitions="96,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+        <TextBlock Text="版本" />
+        <TextBlock Grid.Column="1" Text="{Binding Version}" />
+        <TextBlock Grid.Row="1" Text="作者" />
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="Joont" />
+        <TextBlock Grid.Row="2" Text="存储" />
+        <TextBlock Grid.Row="2" Grid.Column="1" Text="SQLite 单文件 · WAL 模式" />
+      </Grid>
+
+      <TextBlock Text="本地优先的任务与项目工作台。所有数据只保存在这台电脑上。"
+                 Foreground="{DynamicResource SukiMuteText}"
+                 TextWrapping="Wrap" />
+    </StackPanel>
+
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <Style Selector="TextBlock.subhead">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeSubhead}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+    </Style>
+    <Style Selector="Border.divider">
+      <Setter Property="Height" Value="1" />
+      <Setter Property="Background" Value="{DynamicResource SukiBorderBrush}" />
+      <Setter Property="Margin" Value="0,2,0,10" />
+    </Style>
+    <Style Selector="TextBlock.card-label">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+    </Style>
+
+    <!-- Base Theme 卡片：常驻浅色描边保证两张都可见（浅色卡在浅色主题下不会白底白边消失），
+         选中才换成金色描边 + 右上角对勾 -->
+    <Style Selector="Border.theme-card">
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SukiBorderBrush}" />
+      <Setter Property="Background" Value="{DynamicResource SukiCardBackground}" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Border.theme-card.selected">
+      <Setter Property="BorderBrush" Value="#F5A623" />
+    </Style>
+    <Style Selector="Border.preview">
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Height" Value="92" />
+    </Style>
+    <Style Selector="Grid.check-badge">
+      <Setter Property="Width" Value="22" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="Margin" Value="-8,-8,0,0" />
+      <Setter Property="ZIndex" Value="1" />
+    </Style>
+
+    <!-- Color Theme 色块 -->
+    <Style Selector="Border.swatch">
+      <Setter Property="Width" Value="44" />
+      <Setter Property="Height" Value="44" />
+      <Setter Property="CornerRadius" Value="22" />
+      <Setter Property="BorderThickness" Value="3" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Border.swatch.selected">
+      <Setter Property="BorderBrush" Value="#F5A623" />
+    </Style>
+  </UserControl.Styles>
+
+  <suki:SettingsLayout Name="Layout" />
 </UserControl>

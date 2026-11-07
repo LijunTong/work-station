@@ -1,15 +1,218 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
+             xmlns:controls="using:WorkStation.App.Controls"
              x:Class="WorkStation.App.App">
-  <Application.Styles>
-    <FluentTheme />
-    <StyleInclude Source="avares://WorkStation/Styles/App.axaml" />
-  </Application.Styles>
+  <!-- 外观交给 SukiUI：颜色一律用 Suki 的主题键，控件用 Suki 的样式类与控件。
+       这里只定「尺寸」与「材质」。
+
+       材质为什么要自己定：SukiUI 的 SukiCardBackground 是不透明的（浅色 White /
+       深色 #323232）。铺满一屏之后就是一叠白盒子，底下有再好看的渐变也透不上来，
+       玻璃感等于没有 —— 这正是之前整页发平、发灰的原因。
+       下面按主题定义了半透明的面板色，卡片才能真的"浮在背景上"。 -->
   <Application.Resources>
     <ResourceDictionary>
-      <ResourceDictionary.MergedDictionaries>
-        <ResourceInclude Source="avares://WorkStation/Styles/Tokens.axaml" />
-      </ResourceDictionary.MergedDictionaries>
+
+      <!-- 主题相关的材质。Light / Dark 各一份，跟随 SukiTheme 的明暗切换。 -->
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <!-- 面板：60% 白，背景的浅晕能明确透上来 -->
+          <SolidColorBrush x:Key="SurfaceGlass" Color="#99FFFFFF" />
+          <!-- 抬升的面板（页面头、弹窗）：更实一点，保证标题清晰 -->
+          <SolidColorBrush x:Key="SurfaceGlassRaised" Color="#D9FFFFFF" />
+          <!-- 下沉区域（表头、分组底）：比卡片更透 -->
+          <SolidColorBrush x:Key="SurfaceGlassSunken" Color="#4DFFFFFF" />
+          <!-- 发丝描边：只用来交代边界，不要抢视线 -->
+          <SolidColorBrush x:Key="SurfaceStroke" Color="#14000000" />
+          <SolidColorBrush x:Key="SurfaceStrokeSoft" Color="#0A000000" />
+          <SolidColorBrush x:Key="SurfaceHover" Color="#0F000000" />
+          <SolidColorBrush x:Key="SurfaceDivider" Color="#10000000" />
+          <SolidColorBrush x:Key="SurfaceWarning" Color="#1AF5A524" />
+          <SolidColorBrush x:Key="SurfaceAttention" Color="#14CF3F45" />
+          <!-- 逾期标记的底：比警示色更实一点，小标签才立得住 -->
+          <SolidColorBrush x:Key="SurfaceDanger" Color="#1FCF3F45" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="SurfaceGlass" Color="#24FFFFFF" />
+          <SolidColorBrush x:Key="SurfaceGlassRaised" Color="#38FFFFFF" />
+          <SolidColorBrush x:Key="SurfaceGlassSunken" Color="#14FFFFFF" />
+          <SolidColorBrush x:Key="SurfaceStroke" Color="#1FFFFFFF" />
+          <SolidColorBrush x:Key="SurfaceStrokeSoft" Color="#12FFFFFF" />
+          <SolidColorBrush x:Key="SurfaceHover" Color="#14FFFFFF" />
+          <SolidColorBrush x:Key="SurfaceDivider" Color="#14FFFFFF" />
+          <SolidColorBrush x:Key="SurfaceWarning" Color="#26F5A524" />
+          <SolidColorBrush x:Key="SurfaceAttention" Color="#1FCF3F45" />
+          <SolidColorBrush x:Key="SurfaceDanger" Color="#33CF3F45" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+
+      <!-- 卡片圆角：块级卡片（图表面板、项目卡片）用大圆角，
+           列表行（任务行、提醒行）用小圆角，容器（看板列）再大一档。
+           三档就够，不要再多。 -->
+      <CornerRadius x:Key="CardCornerRadius">20</CornerRadius>
+      <CornerRadius x:Key="CardRowCornerRadius">10</CornerRadius>
+      <CornerRadius x:Key="CardContainerCornerRadius">24</CornerRadius>
+
+      <!-- 字号阶梯（8 档，从大到小）：
+           Display  34  仪表盘主数字（今日待完成）—— 全站最大，只此一处
+           Metric   24  圆环内的大百分比（完成度）
+           Title    22  页面标题（页面左上角那一行）
+           Heading  16  卡片/区块标题、弹框标题、次级大数字
+           Subhead  14  分组标题、圆环内百分比
+           Body     13  正文（任务标题、列表项）
+           Caption  12  说明文字（副标题、字段标签、元信息）
+           Micro    11  角标数字（图例、计数徽标）
+           -->
+      <x:Double x:Key="FontSizeDisplay">34</x:Double>
+      <x:Double x:Key="FontSizeMetric">24</x:Double>
+      <x:Double x:Key="FontSizeTitle">22</x:Double>
+      <x:Double x:Key="FontSizeHeading">16</x:Double>
+      <x:Double x:Key="FontSizeSubhead">14</x:Double>
+      <x:Double x:Key="FontSizeBody">13</x:Double>
+      <x:Double x:Key="FontSizeCaption">12</x:Double>
+      <x:Double x:Key="FontSizeMicro">11</x:Double>
+
+      <!-- 页面左右留白：所有页面的内容区共用同一条左基线。
+           之前各页各写（20 / 24 / 28 混用），页面标题在 x=256，
+           工具栏却在 x=264/260 —— 上下没对齐，一眼能看出错位。
+           统一成 24：左侧基线一致，右侧也不顶到窗口边。 -->
+      <Thickness x:Key="PageGutter">24,0,24,0</Thickness>
+      <Thickness x:Key="PageGutterBottom">24,0,24,24</Thickness>
+      <!-- 页面头是浮在标题栏下面的第一块，上下都要留气口：
+           上 12 让它不和标题栏贴住，下 16 和下面的工具栏分开。
+           之前页面头用的是 24,0,24,0，底边和工具栏卡严丝合缝，
+           两张同色圆角卡直接拼在一起，看起来像一张卡被切了一刀。 -->
+      <Thickness x:Key="PageHeaderMargin">24,12,24,16</Thickness>
+      <!-- 页面头下面的第一块（各页的工具栏卡）：只需要底部留 16，
+           上方那 16 已经由页面头的下边距给过了。 -->
+      <Thickness x:Key="PageGutterBelowHeader">24,0,24,16</Thickness>
+
+      <!-- 窗口级字体。设置页「选择字体」改的就是这个资源键：
+           窗口里的浮层（弹窗、ComboBox 下拉、ToolTip）不在 SukiUI 那套
+           TextBlock/Button 选择器覆盖范围内，只能靠窗口级 FontFamily 兜住。
+           SukiUI 自己的 TextBlock/Button 走 DefaultFontFamily，两者一起换才完整。 -->
+      <FontFamily x:Key="UiFontFamily">Microsoft YaHei UI, Microsoft YaHei, Segoe UI</FontFamily>
     </ResourceDictionary>
   </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <suki:SukiTheme />
+
+    <!-- 主题色自定义用的取色器。ColorPicker 的样式在自己的包里（Fluent 主题单独一份），
+         SukiUI 没带，这里显式引入。 -->
+    <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+
+    <!-- Suki 皮肤版的取色器：盖掉上面 Fluent 那份的同名 ControlTheme。
+         必须排在 Fluent 之后 —— 控件主题按「后加入的覆盖先加入的」解析。 -->
+    <StyleInclude Source="avares://WorkStation/Themes/SukiColorPicker.axaml" />
+
+    <!-- 字体：中文字形必须显式指定，否则回退字体和西文混排会显得脏。
+         Program.cs 已经把默认字体设成微软雅黑 UI，这里兜一层，
+         保证弹窗、Flyout 这类不继承主窗口视觉树的浮层也用同一套字体。
+         值放在资源键里：设置页改字体时只要换这一个资源，窗口与浮层会一起变。 -->
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="{DynamicResource UiFontFamily}" />
+    </Style>
+
+    <!-- 统一的面板材质。Border 与 GlassCard 都能挂 .card，
+         半透明底 + 发丝描边 + 大圆角，让背景的渐透上来。 -->
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource SurfaceGlass}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource CardCornerRadius}" />
+    </Style>
+    <!-- GlassCard 默认模板会把底色调到 48% 不透明度，再叠一层液态渐变描边。
+         这里把底色换成抬升面板色，只保留它那条描边 —— 两者叠加会发灰。 -->
+    <Style Selector="suki|GlassCard.card">
+      <Setter Property="Background" Value="{DynamicResource SurfaceGlass}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource CardCornerRadius}" />
+      <Setter Property="IsAnimated" Value="False" />
+    </Style>
+    <!-- 页面头：比内容卡更实、更圆，把标题和快速添加托起来 -->
+    <Style Selector="suki|GlassCard.header-card">
+      <Setter Property="Background" Value="{DynamicResource SurfaceGlassRaised}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource CardContainerCornerRadius}" />
+      <Setter Property="IsAnimated" Value="False" />
+    </Style>
+    <!-- 看板列是「容器」，比里面的卡片圆角更大一档，才看得出嵌套关系。 -->
+    <Style Selector="suki|GlassCard.column">
+      <Setter Property="CornerRadius" Value="{DynamicResource CardContainerCornerRadius}" />
+      <Setter Property="Padding" Value="12" />
+      <Setter Property="IsAnimated" Value="False" />
+    </Style>
+    <!-- 看板里的任务/项目卡：列本身已经有 12px 内距，卡内再留 20 会显得松。 -->
+    <Style Selector="suki|GlassCard.board-card">
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="CornerRadius" Value="14" />
+    </Style>
+
+    <!-- 圆形进度环直接用 SukiUI 的 CircleProgressBar，不再自绘：
+         自绘版（AppCircleProgress）的线宽、端点、起始角都和 SukiUI 自己的控件不一致，
+         和旁边的进度条、按钮放一起像两个体系的零件。 -->
+
+    <!-- 交互控件的字号：统一到正文档。
+         SukiUI 默认按钮 15px、输入框 14px，比正文大一档 —— 按钮文字比旁边的
+         说明文字还大，看着像标题。控件文字与正文同档，靠颜色和字重分主次，
+         不靠字号。 -->
+    <Style Selector="Button">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    </Style>
+    <Style Selector="ToggleButton">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    </Style>
+
+    <!-- 卡片/行内的图标操作按钮：无底无边、默认一律次要色，悬停才提亮，删除悬停才转红。
+         SukiUI 的 Basic 类给的是主色，四个按钮并排就是四块亮蓝；
+         不带 Basic 又会套上默认按钮的灰底和描边，一屏十几个灰盒子同样吵。 -->
+    <Style Selector="StackPanel.card-actions Button">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiMuteText}" />
+    </Style>
+    <Style Selector="StackPanel.card-actions Button:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+    </Style>
+    <Style Selector="Button.danger:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource SukiDangerColor}" />
+    </Style>
+
+    <!-- 列表行：任务页的每条任务、提醒页的每条提醒共用同一套。
+         不再是一张张独立小卡，也不套在大白卡里 —— 一行一个透明底，
+         靠底部 1px 发丝线分隔。一屏十几个白框会互相稀释，什么都看不出来。
+         变体规则（已完成变淡、已到点描边）必须和基础规则**放在同一个集合里**：
+         Avalonia 里更具体的选择器会整体遮蔽外层的同名规则，
+         分开放会导致基础样式整条失效（任务行一度完全没有外观）。 -->
+    <Style Selector="Border.card-row">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceDivider}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="Margin" Value="0" />
+    </Style>
+    <Style Selector="Border.card-row:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+    </Style>
+    <!-- 已完成的任务：变淡（TasksView 用 .done 标记） -->
+    <Style Selector="Border.card-row.done">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <!-- 已到点的提醒：给一层很淡的警示底，不再整框描边（描边卡是最廉价的做法） -->
+    <Style Selector="Border.card-row.alert">
+      <Setter Property="Background" Value="{DynamicResource SurfaceWarning}" />
+    </Style>
+  </Application.Styles>
 </Application>

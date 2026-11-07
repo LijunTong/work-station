@@ -67,7 +67,8 @@ public class RecoveryTests
             Database.RunMigrations(connection);
 
             Assert.Equal(0L, TestDb.Scalar(connection, "SELECT COUNT(*) FROM projects"));
-            Assert.Equal(1, Database.GetUserVersion(connection));
+            // 迁移跑完，版本号必须等于当前迁移条数（写死数字的话每加一条迁移都要改这里）
+            Assert.Equal(Migrations.All.Count, Database.GetUserVersion(connection));
         }
         finally
         {

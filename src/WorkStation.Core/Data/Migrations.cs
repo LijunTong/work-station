@@ -11,8 +11,16 @@ public static class Migrations
 {
     public static IReadOnlyList<Migration> All { get; } = new[]
     {
-        new Migration(1, "init-core-schema", InitCoreSchema)
+        new Migration(1, "init-core-schema", InitCoreSchema),
+
+        // 任务补一个「开始时间」：项目有起止，任务也需要起止，
+        // 新增任务时默认继承所属项目的区间。ALTER TABLE 是加列，老库直接升。
+        new Migration(2, "task-start-at", AddTaskStartAt)
     };
+
+    private const string AddTaskStartAt = """
+        ALTER TABLE tasks ADD COLUMN start_at TEXT;
+        """;
 
     private const string InitCoreSchema = """
         CREATE TABLE projects (

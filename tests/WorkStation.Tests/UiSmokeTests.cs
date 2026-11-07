@@ -4,12 +4,17 @@ using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Microsoft.Data.Sqlite;
+using SukiUI.Controls;
 using WorkStation.App.Controls;
 using WorkStation.App.ViewModels;
 using WorkStation.App.Views;
+using WorkStation.Core.Board;
+using WorkStation.Core.Dashboard;
 using WorkStation.Core.Models;
 using WorkStation.Core.Services;
 
@@ -65,13 +70,248 @@ public class UiSmokeTests : IDisposable
     [AvaloniaFact]
     public void SettingsView_LoadsXaml()
     {
-        var vm = new SettingsViewModel(_service, _ => { }, (_, _) => { });
+        var vm = new SettingsViewModel(_service, _ => { }, _ => { }, (_, _) => { });
 
         var view = new SettingsView { DataContext = vm };
         view.Measure(new Size(1000, 700));
         view.Arrange(new Rect(0, 0, 1000, 700));
 
         Assert.NotNull(view.Content);
+    }
+
+    [AvaloniaFact]
+    public void SettingsView_AppearanceHasThemeCardsAndColorSwatches()
+    {
+        // SettingsLayout 只实例化「选中分组」的内容，未选中分组不进可视树；
+        // 直接检查 XAML 解析后的资源对象（逻辑树），验证外观区块的结构没写错。
+        var vm = new SettingsViewModel(_service, _ => { }, _ => { }, (_, _) => { });
+        var view = new SettingsView { DataContext = vm };
+
+        var appearance = (Control)view.Resources["AppearanceContent"]!;
+        var borders = appearance.GetLogicalDescendants().OfType<Border>().ToList();
+        Assert.Equal(2, borders.Count(b => b.Classes.Contains("theme-card")));
+        // 四个内置色块 + 一个自定义色块
+        Assert.Equal(5, borders.Count(b => b.Classes.Contains("swatch")));
+    }
+
+    [AvaloniaFact]
+    public void SettingsView_RemindersUsesSwitchNotCheckbox()
+    {
+        var vm = new SettingsViewModel(_service, _ => { }, _ => { }, (_, _) => { });
+        var view = new SettingsView { DataContext = vm };
+
+        var reminders = (Control)view.Resources["RemindersContent"]!;
+        var descendants = reminders.GetLogicalDescendants().ToList();
+
+        // 「每日站会提醒」和「关窗驻留托盘」两处都用 Switch（ToggleSwitch），不再用 CheckBox
+        Assert.Equal(2, descendants.OfType<ToggleSwitch>().Count());
+        Assert.Empty(descendants.OfType<CheckBox>());
+    }
+
+    [AvaloniaFact]
+    public void ThemeColorSwitch_PersistsAndRaisesCallback()
+    {
+        SukiUI.Enums.SukiColor? applied = null;
+        var vm = new SettingsViewModel(_service, _ => { }, c => applied = c, (_, _) => { });
+        vm.MarkInitialized();
+
+        vm.SetThemeColorCommand.Execute("Red");
+
+        Assert.Equal("Red", vm.ThemeColorName);
+        Assert.Equal(SukiUI.Enums.SukiColor.Red, vm.ThemeColorValue);
+        Assert.Equal(SukiUI.Enums.SukiColor.Red, applied);
+        Assert.True(vm.ColorOptions.Single(o => o.Name == "Red").IsSelected);
+        Assert.Equal("Red", _service.SettingsGet<string>("themeColor").Data);
+    }
+
+    [AvaloniaFact]
+    public void ThemeColor_DefaultsToBlue()
+    {
+        var vm = new SettingsViewModel(_service, _ => { }, _ => { }, (_, _) => { });
+
+        Assert.Equal("Blue", vm.ThemeColorName);
+        Assert.Equal(4, vm.ColorOptions.Count);
+        Assert.Contains(vm.ColorOptions, o => o.Name == "Orange");
+        Assert.True(vm.ColorOptions.Single(o => o.Name == "Blue").IsSelected);
+    }
+
+    /// <summary>
+    /// SukiUI 的 SettingsLayout 默认在宽度 &lt; 1100 时把左侧摘要导航宽度动画到 0。
+    /// 页面一缩小「外观/提醒/数据/关于」就整块消失，这里锁死阈值并验证窄布局下仍可见。
+    /// </summary>
+    /// <summary>
+    /// 主窗口内容区早期多套了一层 Grid 且没写 Grid.Row，内层落在 Auto 行拿到无限高度，
+    /// SettingsLayout 的 ScrollViewer 永远不需要滚动，内容直接被窗口裁掉。
+    /// 这里验证内容溢出时 Viewport 小于 Extent、且 Offset 能真正滚下去。
+    /// </summary>
+    /// <summary>任务行必须有可见的行外观；样式层曾整层删除，导致行看起来只是散落的文字。</summary>
+    [AvaloniaFact]
+    public void TaskRows_HaveVisibleRowChrome()
+    {
+        _service.TasksCreate(new CreateTaskInput { Title = "行样式验证" });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        vm.ShowTasksCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var row = window.GetVisualDescendants().OfType<Border>()
+            .FirstOrDefault(b => b.Classes.Contains("card-row"));
+        Assert.NotNull(row);
+        Assert.NotNull(row!.Background);
+        // 数据行不再是一张带四边框的小卡：只有一条底部发丝线，靠它和下一行分开。
+        Assert.True(row.BorderThickness.Bottom > 0, "数据行缺少底部发丝线");
+        Assert.Equal(0, row.BorderThickness.Top);
+        Assert.True(row.Padding.Top > 0, "数据行缺少内边距");
+
+        window.Close();
+    }
+
+    /// <summary>四种状态列必须用彼此不同的颜色，颜色本身仍由 Suki 主题资源提供。</summary>
+    [AvaloniaFact]
+    public void BoardColumns_UseDistinctStatusColors()
+    {
+        var vm = new MainWindowViewModel(_service);
+        vm.ShowBoardCommand.Execute(null);   // 启动页是仪表盘
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var columns = window.GetVisualDescendants().OfType<GlassCard>()
+            .Where(c => c.Classes.Contains("column") && c.DataContext is BoardColumnViewModel)
+            .ToList();
+        Assert.Equal(4, columns.Count);
+
+        var colors = columns
+            .Select(c => ((BoardColumnViewModel)c.DataContext!).StatusBrush)
+            .OfType<Avalonia.Media.SolidColorBrush>()
+            .Select(b => b.Color)
+            .Distinct()
+            .ToList();
+        Assert.Equal(4, colors.Count);
+
+        window.Close();
+    }
+
+    /// <summary>看板项目卡的入口箭头固定在右上角，不再吊在卡片左下角占一行。</summary>
+    [AvaloniaFact]
+    public void BoardProjectCard_ArrowSitsTopRight()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "官网改版" }).Data!;
+        _service.TasksCreate(new CreateTaskInput { Title = "卡内任务", ProjectId = project.Id });
+
+        var vm = new MainWindowViewModel(_service);
+        vm.ShowBoardCommand.Execute(null);   // 启动页是仪表盘
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        vm.Board!.SwitchBoardCommand.Execute("Projects");
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var card = window.GetVisualDescendants().OfType<GlassCard>()
+            .First(c => c.Classes.Contains("board-card") && c.DataContext is BoardProjectCardViewModel);
+        var button = card.GetVisualDescendants().OfType<Button>().Single();
+
+        var topLeft = button.TranslatePoint(default, card);
+        var bottomRight = button.TranslatePoint(new Point(button.Bounds.Width, button.Bounds.Height), card);
+        Assert.NotNull(topLeft);
+        Assert.NotNull(bottomRight);
+
+        Assert.True(bottomRight!.Value.Y < card.Bounds.Height * 0.45,
+            $"箭头应落在卡片上半部，实际底边 Y={bottomRight.Value.Y} 卡高={card.Bounds.Height}");
+        Assert.True(bottomRight.Value.X > card.Bounds.Width * 0.7,
+            $"箭头应贴近右缘，实际右缘 X={bottomRight.Value.X} 卡宽={card.Bounds.Width}");
+
+        window.Close();
+    }
+
+    /// <summary>项目页卡片也要能看该项目的任务列表：操作区里有「查看任务」入口且真能带筛选跳转。</summary>
+    [AvaloniaFact]
+    public void ProjectsCard_HasViewTasksEntry()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "验收项目" }).Data!;
+        _service.TasksCreate(new CreateTaskInput { Title = "项目内任务", ProjectId = project.Id });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        vm.ShowProjectsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var button = window.GetVisualDescendants().OfType<Button>()
+            .FirstOrDefault(b => (ToolTip.GetTip(b) as string) == "查看该项目的任务列表");
+        Assert.NotNull(button);
+
+        button!.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        // 现在「查看任务」是弹窗，不再跳转到任务页
+        Assert.Equal(AppPage.Projects, vm.Page);
+        Assert.NotNull(vm.ProjectTasksDialog);
+        Assert.Equal(project.Id, vm.ProjectTasksDialog!.ProjectId);
+        Assert.NotNull(vm.ProjectTasksDialog.Card);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SettingsPage_CanScrollVertically()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1024, Height = 640 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        vm.ShowSettingsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var layout = window.GetVisualDescendants().OfType<SettingsLayout>().Single();
+        var scroll = layout.GetVisualDescendants().OfType<ScrollViewer>().First();
+
+        Assert.True(scroll.Extent.Height > scroll.Viewport.Height,
+            $"设置页内容没有超出可视区，无法验证滚动：extent={scroll.Extent.Height} viewport={scroll.Viewport.Height}");
+
+        scroll.Offset = new Vector(0, 120);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(scroll.Offset.Y > 0, "设置页滚不动");
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SettingsView_KeepsSideNavigation_WhenNarrow()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1024, Height = 700 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        vm.ShowSettingsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
+
+        var layout = window.GetVisualDescendants().OfType<SettingsLayout>().Single();
+        Assert.Equal(1, layout.MinWidthWhetherStackSummaryShow);
+        Assert.Equal(240, layout.StackSummaryWidth);
+
+        var summary = layout.GetVisualDescendants().OfType<StackPanel>()
+            .FirstOrDefault(p => p.Name == "StackSummary");
+        Assert.NotNull(summary);
+        Assert.True(summary!.Bounds.Width > 0, $"窄宽度下摘要导航被隐藏：{summary.Bounds.Width}");
+
+        window.Close();
     }
 
     [AvaloniaFact]
@@ -133,8 +373,35 @@ public class UiSmokeTests : IDisposable
         Assert.NotNull(view.Content);
     }
 
+    /// <summary>
+    /// SukiSideMenu(TreeView) 会先处理 PointerPressed 并置 Handled，冒泡监听会漏掉部分点击。
+    /// 用真实鼠标事件覆盖「点菜单项 → 切页」，保证导航改到隧道阶段后仍然有效。
+    /// </summary>
     [AvaloniaFact]
-    public void MainWindow_ShowsBoardPage_ThenNavigates()
+    public void SideMenu_MouseClick_Navigates()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var item = window.GetVisualDescendants().OfType<SukiSideMenuItem>()
+            .Single(i => i.Tag as string == "Projects");
+        var center = item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), window);
+        Assert.NotNull(center);
+
+        window.MouseDown(center!.Value, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(center.Value, MouseButton.Left, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(AppPage.Projects, vm.Page);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void MainWindow_ShowsDashboardPage_ThenNavigates()
     {
         var vm = new MainWindowViewModel(_service);
         var window = new MainWindow(vm);
@@ -143,8 +410,8 @@ public class UiSmokeTests : IDisposable
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(window.IsVisible);
-        Assert.IsType<BoardViewModel>(vm.CurrentPage);
-        Assert.Equal("看板", vm.PageTitle);
+        Assert.IsType<DashboardViewModel>(vm.CurrentPage);
+        Assert.Equal("仪表盘", vm.PageTitle);
 
         vm.ShowTasksCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
@@ -225,11 +492,50 @@ public class UiSmokeTests : IDisposable
     }
 
     /// <summary>
-    /// 设置从导航里挪到了侧边栏底部：一粒图标按钮 + 版本号。
-    /// 守三件事：导航里不再有「设置」、页脚那颗按钮点得进设置页、版本号真的渲染出来了。
+    /// 任务页渲染出来的顺序必须真的是按优先级排的 ——
+    /// 视图模型排对了但模板里顺序被改回去，这条就守不住。
     /// </summary>
     [AvaloniaFact]
-    public void Settings_SitsInSidebarFooter_WithVersionText()
+    public void TasksPage_RendersTasksInPriorityOrder()
+    {
+        var due = Core.Time.LocalTime.ToLocalDateTime(DateTime.Today.AddHours(18));
+        _service.TasksCreate(new CreateTaskInput { Title = "低优先", Priority = Priority.Low, DueAt = due });
+        _service.TasksCreate(new CreateTaskInput { Title = "高优先", Priority = Priority.High, DueAt = due });
+        _service.TasksCreate(new CreateTaskInput { Title = "中优先", Priority = Priority.Medium, DueAt = due });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.ShowTasksCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        // 按视觉树里出现的先后取标题，不依赖 ItemsControl 的内部结构
+        var rendered = window.GetVisualDescendants()
+            .OfType<TextBlock>()
+            .Select(t => t.Text)
+            .Where(t => t is "高优先" or "中优先" or "低优先")
+            .ToList();
+
+        Assert.Equal(["高优先", "中优先", "低优先"], rendered);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 设置入口在标题栏（最小化按钮旁），左边还有快速切换明暗的按钮；
+    /// 两颗按钮和窗口按钮共用 SukiUI 的 WindowControlsButton 外观（同尺寸、同悬停底），
+    /// 图标也是同一档细线条。
+    ///
+    /// 版本号不再挂在侧边栏页脚（菜单底部要保持干净），挪到了设置页的「关于」。
+    /// </summary>
+    [AvaloniaFact]
+    public void Settings_SitsInTitlebar_WithThemeToggle_AndAboutShowsAuthor()
     {
         var vm = new MainWindowViewModel(_service);
         var window = new MainWindow(vm);
@@ -238,8 +544,12 @@ public class UiSmokeTests : IDisposable
         window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Matches(@"^V \d+\.\d+\.\d+$", vm.VersionText);
-        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == vm.VersionText);
+        // 侧边栏不再显示版本号：菜单底部保持干净，版本只在设置页「关于」里
+        var sidebarVersion = window.GetVisualDescendants()
+            .OfType<SukiSideMenuItem>()
+            .SelectMany(i => i.GetVisualDescendants().OfType<TextBlock>())
+            .Any(t => t.Text is not null && t.Text.StartsWith("V ", StringComparison.Ordinal));
+        Assert.False(sidebarVersion, "侧边栏里还有版本号");
 
         var navLabels = window.GetVisualDescendants()
             .OfType<Button>()
@@ -250,14 +560,646 @@ public class UiSmokeTests : IDisposable
 
         Assert.DoesNotContain("设置", navLabels);
 
-        var settingsButton = window.GetVisualDescendants()
+        // 标题栏：两颗自定义按钮 + 最小化/最大化/关闭，都该是同一套外观
+        var titleButtons = window.GetVisualDescendants()
             .OfType<Button>()
-            .First(b => b.Classes.Contains("icon") && (ToolTip.GetTip(b) as string) == "设置");
+            .Where(b => b.Classes.Contains("WindowControlsButton"))
+            .ToList();
+        Assert.True(titleButtons.Count >= 5, $"标题栏里的窗口样式按钮不足：{titleButtons.Count}");
 
+        // 五个图标必须**等距**。SukiUI 模板只给窗口按钮那一层 StackPanel 设了 Spacing=7，
+        // 装自定义按钮的 ItemsControl 没有 Spacing：两颗自定义按钮就贴在一起（中心距 25），
+        // 再和最小化之间空出 7px（中心距 32），一排图标节奏就断了。
+        var titleCenters = titleButtons
+            .Where(b => b.IsVisible && b.Bounds.Width > 0)
+            .Select(b => b.TranslatePoint(new Point(b.Bounds.Width / 2, 0), window)!.Value.X)
+            .OrderBy(x => x)
+            .ToList();
+        Assert.Equal(5, titleCenters.Count);
+
+        var centerDeltas = titleCenters.Zip(titleCenters.Skip(1), (a, b) => b - a).ToList();
+        for (var i = 1; i < centerDeltas.Count; i++)
+        {
+            Assert.True(Math.Abs(centerDeltas[i] - centerDeltas[0]) < 1.0,
+                $"标题栏图标间距不一致：{string.Join(" / ", centerDeltas.Select(d => d.ToString("0.#")))}");
+        }
+
+        var settingsButton = titleButtons.First(b => (ToolTip.GetTip(b) as string) == "设置");
         settingsButton.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(AppPage.Settings, vm.Page);
+
+        // 关于：版本 + 作者
+        var settingsTexts = window.GetVisualDescendants()
+            .OfType<TextBlock>()
+            .Select(t => t.Text)
+            .ToList();
+        Assert.Contains(vm.Settings!.Version, settingsTexts);
+        Assert.Contains("Joont", settingsTexts);
+
+        // 快速切换明暗：一点变深色，再点回浅色
+        var themeButton = titleButtons.First(b => (ToolTip.GetTip(b) as string) == "切换深色/浅色");
+
+        vm.Settings!.SetThemeCommand.Execute("light");
+        themeButton.Command!.Execute(null);
+        Assert.Equal("dark", vm.ThemeMode);
+        themeButton.Command!.Execute(null);
+        Assert.Equal("light", vm.ThemeMode);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 仪表盘：三张时间卡（今日/本周/本月）+ 趋势 + 两个分布都渲染出来；
+    /// 任务清单**常驻**（默认今日），点别的卡只换内容、不会把它收起来。
+    ///
+    /// 清单常驻的原因：收起时左栏只剩一条提示、右栏还是整块项目卡，
+    /// 页面上直接空出一大块。这里连「两栏底边对齐」一起守住。
+    /// </summary>
+    [AvaloniaFact]
+    public void Dashboard_RendersPeriodCards_WithAlwaysVisibleTaskList()
+    {
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "今天要做的事",
+            // 用当天最后一分钟，避开「现在 + 18 点」跨到明天的情况
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Today.AddHours(23).AddMinutes(59))
+        });
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "已经逾期的",
+            // 以当天零点为基准加天数，恒为「昨天 10:00」；
+            // 若用 DateTime.Now.AddDays(-1)，每天 14:00 之后 +10h 会跨过午夜落回今天
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Today.AddDays(-1).AddHours(10))
+        });
+        // 右栏要有东西才能量「两栏同高」；顺便覆盖「有项目」的正常情况
+        _service.ProjectsCreate(new CreateProjectInput { Name = "验收项目" });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.ShowDashboardCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(AppPage.Dashboard, vm.Page);
+        Assert.NotNull(vm.Dashboard);
+
+        var labels = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
+        Assert.Contains("今日", labels);
+        Assert.Contains("本周", labels);
+        Assert.Contains("本月", labels);
+
+        // 今日卡上的待完成数：今天到期的 1 个（逾期的那个按看板口径归逾期）
+        var today = vm.Dashboard.Periods.Single(p => p.Range == DashboardRange.Today);
+        Assert.Equal(1, today.Due);
+
+        // 趋势 7 天 + 状态 4 项 + 优先级 4 项
+        Assert.Equal(7, vm.Dashboard.Trend.Count);
+        Assert.Equal(4, vm.Dashboard.StatusBreakdown.Count);
+        Assert.Equal(4, vm.Dashboard.PriorityBreakdown.Count);
+
+        // 清单常驻：一张卡被选中，清单直接跟在卡片下面，不需要先点一下
+        Assert.True(today.IsSelected);
+        Assert.Same(today, vm.Dashboard.SelectedPeriod);
+        Assert.Equal(today.Due, today.Tasks.Count);
+        Assert.True(
+            window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "今天要做的事"),
+            "清单里应出现那条任务");
+
+        // 两栏底边对齐：清单卡和项目卡同高，右栏不会短一截空出一块
+        Border? CardByText(string text) => window.GetVisualDescendants().OfType<TextBlock>()
+            .Where(t => t.Text == text)
+            .SelectMany(t => t.GetVisualAncestors().OfType<Border>())
+            .FirstOrDefault(b => b.Classes.Contains("card"));
+
+        var listCard = CardByText("今日 的任务清单");
+        var projectCard = CardByText("项目进度");
+        Assert.NotNull(listCard);
+        Assert.NotNull(projectCard);
+
+        var listBottom = listCard!.TranslatePoint(new Point(0, listCard.Bounds.Height), window);
+        var projectBottom = projectCard!.TranslatePoint(new Point(0, projectCard.Bounds.Height), window);
+        Assert.NotNull(listBottom);
+        Assert.NotNull(projectBottom);
+        Assert.True(
+            Math.Abs(listBottom!.Value.Y - projectBottom!.Value.Y) < 2,
+            $"清单卡与项目卡底部没对齐：{listBottom.Value.Y} / {projectBottom.Value.Y}");
+
+        // 点「本周」：清单内容换成本周，而且再点一次也不会收起来
+        var week = vm.Dashboard.Periods.Single(p => p.Range == DashboardRange.Week);
+        vm.Dashboard.SelectPeriodCommand.Execute(week);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(
+            window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "本周 的任务清单"),
+            "切换后清单标题应变成「本周 的任务清单」");
+
+        vm.Dashboard.SelectPeriodCommand.Execute(week);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(week.IsSelected);
+        Assert.True(
+            window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "本周 的任务清单"),
+            "再点一次当前卡片不应把清单收起来");
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 清单为空时给一句话提示 —— 固定高度的卡片里空着一大片，看着像没加载出来。
+    /// </summary>
+    [AvaloniaFact]
+    public void Dashboard_EmptyTaskList_ShowsHint()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.ShowDashboardCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.Dashboard!.SelectedPeriod.Tasks);
+        Assert.True(
+            window.GetVisualDescendants().OfType<TextBlock>()
+                .Any(t => t.Text == "这段时间没有到期的任务"),
+            "空清单应显示一句说明");
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 仪表盘最下方的左侧图表要拉到与右列一样高（底部对齐），
+    /// 而且柱子按可用高度缩放 —— 卡片拉高了、柱子还那么点，就等于没拉。
+    /// </summary>
+    [AvaloniaFact]
+    public void Dashboard_TrendChart_FillsTheBottomRow()
+    {
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "今天到期",
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Today.AddHours(23).AddMinutes(59))
+        });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        vm.ShowDashboardCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var chart = window.GetVisualDescendants().OfType<AppTrendChart>().FirstOrDefault();
+        Assert.NotNull(chart);
+        Assert.NotNull(chart!.Items);
+        Assert.Equal(7, chart.Items!.Count);
+
+        // 底部统计区现在是并排三张等高卡：趋势 / 状态分布 / 优先级分布。
+        // 它们在同一个 Grid 行里，底边必须落在同一条线上。
+        var card = chart.GetVisualAncestors().OfType<Border>().First(b => b.Classes.Contains("card"));
+        var row = card.GetVisualAncestors().OfType<Grid>().First();
+        var siblings = row.Children.OfType<Border>()
+            .Where(b => b.Classes.Contains("card"))
+            .ToList();
+        Assert.True(siblings.Count >= 2, $"底部统计区应至少并排两张卡，实际 {siblings.Count}");
+
+        var cardBottom = card.TranslatePoint(new Point(0, card.Bounds.Height), window);
+        Assert.NotNull(cardBottom);
+        foreach (var sibling in siblings)
+        {
+            var siblingBottom = sibling.TranslatePoint(new Point(0, sibling.Bounds.Height), window);
+            Assert.NotNull(siblingBottom);
+            Assert.True(
+                Math.Abs(cardBottom!.Value.Y - siblingBottom!.Value.Y) < 2,
+                $"底部卡片没有等高：card={cardBottom.Value.Y} sibling={siblingBottom.Value.Y}");
+        }
+
+        // 图表区被拉满了（旧的固定高度是 92）
+        Assert.True(chart.Bounds.Height > 120, $"图表高度没有跟着卡片拉长：{chart.Bounds.Height}");
+
+        // 柱子按可用高度画出来，不是 0
+        var bars = chart.GetVisualDescendants().OfType<Border>()
+            .Where(b => b.Bounds.Height > 1)
+            .ToList();
+        Assert.NotEmpty(bars);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 任务弹框里开始与截止各有一套「日期 + 时刻」控件：
+    /// 任务的起止默认继承项目，所以两头都得能填。
+    /// </summary>
+    [AvaloniaFact]
+    public void TaskDialog_HasStartAndDuePickers()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.NewTaskCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Loaded);
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
+        window.UpdateLayout();
+
+        Assert.Equal(2, window.GetVisualDescendants().OfType<CalendarDatePicker>().Count());
+        Assert.Equal(2, window.GetVisualDescendants().OfType<TimePicker>().Count());
+
+        window.Close();
+    }
+
+    /// <summary>项目弹框里起止日期是必填项，标签上写清楚。</summary>
+    [AvaloniaFact]
+    public void ProjectDialog_MarksDateRangeAsRequired()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.NewProjectCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Loaded);
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
+        window.UpdateLayout();
+
+        var labels = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
+        Assert.Contains("开始日期 *", labels);
+        Assert.Contains("结束日期 *", labels);
+
+        // 新建时先给一段默认区间
+        Assert.NotNull(vm.Projects!.Form!.StartDate);
+        Assert.NotNull(vm.Projects.Form.DueDate);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 全站卡片必须用**同一套**边框。
+    ///
+    /// 症状：仪表盘的块、任务页的每条任务、项目卡片、提醒页的行各写各的，
+    /// 圆角 6/8/10/12/20 混用，玻璃拟态与实心卡片混着来 —— 同一个 App 像几张不同的界面。
+    ///
+    /// 现在统一到 App.axaml 的全局样式（Classes="card" / "card-row"），
+    /// 这里守住：跨页面取到的卡片，圆角、描边粗细、底色完全一致。
+    /// </summary>
+    [AvaloniaFact]
+    public void Cards_ShareOneBorderStyleAcrossPages()
+    {
+        _service.TasksCreate(new CreateTaskInput { Title = "任务行" });
+        _service.ProjectsCreate(new CreateProjectInput { Name = "项目" }).Data!.Id.ToString();
+        _service.RemindersCreate(new CreateReminderInput
+        {
+            Title = "提醒行",
+            RemindAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Now.AddHours(2))
+        });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        // 收集各页面的卡片。Border 与 GlassCard 不是同一个类型，
+        // 但「圆角 / 描边 / 底色」这三样是相通的 —— 把它们抽成同一组比较。
+        //
+        // 分两档收：块级卡片（仪表盘的块、项目卡片）与列表行（任务行、提醒行）。
+        // 档位之间本来就该有差别（容器包内容，圆角自然更大），
+        // 要守的是**同一档之内全站一致**。
+        var blockRadii = new List<CornerRadius>();
+        var rowRadii = new List<CornerRadius>();
+        var blockThicknesses = new List<Thickness>();
+        var blockBackgrounds = new List<string?>();
+        var rowThicknesses = new List<Thickness>();
+        var rowBackgrounds = new List<string?>();
+        var count = 0;
+
+        void CollectBlock(CornerRadius radius, Thickness thickness, string? background)
+        {
+            blockRadii.Add(radius);
+            blockThicknesses.Add(thickness);
+            blockBackgrounds.Add(background);
+            count++;
+        }
+
+        void CollectRow(CornerRadius radius, Thickness thickness, string? background)
+        {
+            rowRadii.Add(radius);
+            rowThicknesses.Add(thickness);
+            rowBackgrounds.Add(background);
+            count++;
+        }
+
+        vm.ShowDashboardCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        foreach (var b in window.GetVisualDescendants().OfType<Avalonia.Controls.Border>()
+                     .Where(b => b.Classes.Contains("card"))
+                     // 两种刻意的状态变体不参与一致性比较：
+                     // .attention 是逾期警示底；.period.selected 是「当前清单属于哪段时间」的选中态
+                     .Where(b => !b.Classes.Contains("attention"))
+                     .Where(b => !b.Classes.Contains("selected")))
+        {
+            CollectBlock(b.CornerRadius, b.BorderThickness, b.Background?.ToString());
+        }
+
+        vm.ShowProjectsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        foreach (var c in window.GetVisualDescendants().OfType<GlassCard>()
+                     .Where(c => c.Classes.Contains("card")))
+        {
+            CollectBlock(c.CornerRadius, c.BorderThickness, c.Background?.ToString());
+        }
+
+        vm.ShowTasksCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        foreach (var b in window.GetVisualDescendants().OfType<Avalonia.Controls.Border>()
+                     .Where(b => b.Classes.Contains("card-row")))
+        {
+            CollectRow(b.CornerRadius, b.BorderThickness, b.Background?.ToString());
+        }
+
+        vm.ShowRemindersCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        foreach (var b in window.GetVisualDescendants().OfType<Avalonia.Controls.Border>()
+                     .Where(b => b.Classes.Contains("card-row")))
+        {
+            CollectRow(b.CornerRadius, b.BorderThickness, b.Background?.ToString());
+        }
+
+        Assert.True(count >= 4, $"应至少取到 4 张卡片，实际 {count}");
+        Assert.NotEmpty(blockRadii);
+        Assert.NotEmpty(rowRadii);
+
+        // 块级卡片：四边等宽描边、同一档圆角、同一档半透明底色
+        Assert.Single(blockThicknesses.Distinct());
+        Assert.Single(blockBackgrounds.Distinct());
+        Assert.Single(blockRadii.Distinct());
+
+        // 列表行：没有四边框（只有底部一条发丝线）、直角、透明底
+        Assert.Single(rowThicknesses.Distinct());
+        Assert.Single(rowBackgrounds.Distinct());
+        Assert.Single(rowRadii.Distinct());
+        Assert.Equal(new Thickness(0, 0, 0, 1), rowThicknesses[0]);
+
+        // 两档之间要有差别：行比块小一档，才看得出「容器包内容」
+        Assert.True(
+            rowRadii[0].TopLeft < blockRadii[0].TopLeft,
+            "列表行的圆角应小于块级卡片");
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 项目进度环用 SukiUI 原生的 <c>CircleProgressBar</c>，不再自绘。
+    ///
+    /// 自绘版（AppCircleProgress）虽然轨道更明显，但线宽、端点、起始角都和
+    /// SukiUI 自己的控件不一致，和旁边的进度条、按钮放一起像两个体系的零件。
+    /// 这里守两件事：页面上确实是原生控件；模板真的套上了（轨道 + 进度弧两层，
+    /// 线宽跟着 StrokeWidth 走），而不是一团空白。
+    /// </summary>
+    [AvaloniaFact]
+    public void ProjectProgress_UsesSukiUisNativeCircleBar()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.ShowDashboardCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var rings = window.GetVisualDescendants().OfType<CircleProgressBar>().ToList();
+        Assert.NotEmpty(rings);
+
+        foreach (var ring in rings)
+        {
+            // 尺寸被写死了（44 / 56 …）：圆必须是正圆且真的占到位置
+            Assert.True(ring.Bounds.Width > 30, $"进度环没有分到宽度：{ring.Bounds}");
+            Assert.True(
+                Math.Abs(ring.Bounds.Width - ring.Bounds.Height) < 0.5,
+                $"进度环不是正圆：{ring.Bounds}");
+
+            // 模板里是「轨道 Arc + PART_ArcFill」两层；线宽由 StrokeWidth 模板绑定
+            var arcs = ring.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Arc>().ToList();
+            Assert.True(arcs.Count >= 2, "进度环模板没套上（找不到轨道与进度弧）");
+            Assert.All(arcs, a => Assert.Equal(ring.StrokeWidth, a.StrokeThickness, 1));
+
+            Assert.InRange(ring.Value, 0d, 100d);
+        }
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 任务页的每条任务与提醒页的每条提醒共用同一套行外观（card-row）。
+    /// 两边各写一份样式定义是之前不统一的根源，现在统一到全局样式。
+    /// </summary>
+    [AvaloniaFact]
+    public void TaskRowsAndReminderRows_ShareSameStyle()
+    {
+        _service.TasksCreate(new CreateTaskInput { Title = "任务行" });
+        _service.RemindersCreate(new CreateReminderInput
+        {
+            Title = "提醒行",
+            RemindAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Now.AddHours(2))
+        });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        // 必须在各自页面上**当场**取值：切走页面后控件脱离样式宿主，
+        // 样式值会被清空，隔页再读拿到的是卸载后的旧对象，测出来的东西没意义。
+        vm.ShowTasksCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        var taskRow = window.GetVisualDescendants().OfType<Avalonia.Controls.Border>()
+            .First(b => b.Classes.Contains("card-row"));
+        var taskStyle = (
+            taskRow.CornerRadius,
+            taskRow.BorderThickness,
+            taskRow.Padding,
+            taskRow.Background?.ToString());
+
+        vm.ShowRemindersCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        var reminderRow = window.GetVisualDescendants().OfType<Avalonia.Controls.Border>()
+            .First(b => b.Classes.Contains("card-row"));
+        var reminderStyle = (
+            reminderRow.CornerRadius,
+            reminderRow.BorderThickness,
+            reminderRow.Padding,
+            reminderRow.Background?.ToString());
+
+        Assert.Equal(taskStyle, reminderStyle);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 仪表盘不能只有图表 —— 项目进度与近期任务这两块实体数据必须真的画出来。
+    ///
+    /// 症状：页面上全是图表，看不到具体是哪个项目、哪条任务。
+    /// 这里守两件事：项目区块与近期任务区块的标题都在；
+    /// 项目名、任务名、项目归属都渲染成了文字（不只是数字）。
+    /// </summary>
+    [AvaloniaFact]
+    public void Dashboard_RendersProjectAndTaskSections()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "官网改版" }).Data!;
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "重做首页",
+            ProjectId = project.Id,
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Today.AddHours(23).AddMinutes(59))
+        });
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "独立任务没项目",
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Today.AddDays(-1).AddHours(10))
+        });
+
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.ShowDashboardCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var labels = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
+
+        // 两个区块的标题
+        Assert.Contains("项目进度", labels);
+        Assert.Contains("近期任务", labels);
+
+        // 项目名 + 任务计数（该项目下只有「重做首页」这一条）
+        Assert.Contains("官网改版", labels);
+        Assert.Contains("1 个任务 · 进行中 0", labels);
+
+        // 任务名（两条都在清单里）
+        Assert.Contains("重做首页", labels);
+        Assert.Contains("独立任务没项目", labels);
+
+        // 数据模型也填上了
+        Assert.Single(vm.Dashboard!.Projects);
+        Assert.Equal(2, vm.Dashboard.UpcomingTasks.Count);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 仪表盘上的两行实体数据必须真的点得动。
+    ///
+    /// 这两行是 Border + PointerPressed（不是 Button）—— SukiUI 的 Button 模板
+    /// 把内容塞进横向 StackPanel，Grid 撑不满宽。这里用真实鼠标事件走一遍，
+    /// 守住「点项目弹任务清单」「点任务开编辑弹窗」两条链路。
+    /// </summary>
+    [AvaloniaFact]
+    public void Dashboard_RowsAreClickable()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "官网改版" }).Data!;
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "重做首页",
+            ProjectId = project.Id,
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(DateTime.Today.AddHours(23).AddMinutes(59))
+        });
+
+        var vm = new MainWindowViewModel(_service);
+        // 窗口拉高：一屏装下整页仪表盘，最后的「近期任务」不用滚动就能点到
+        var window = new MainWindow(vm) { Width = 1280, Height = 1400 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.ShowDashboardCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        // 点项目行 → 弹该项目的任务清单
+        // 用 DataContext 定位（项目名文本在「近期任务」里也会出现一次，不能只按文字找）
+        var projectRow = window.GetVisualDescendants()
+            .OfType<Border>()
+            .First(b => b.DataContext is DashboardProjectViewModel p && p.Name == "官网改版");
+        var projectPoint = projectRow.TranslatePoint(
+            new Point(projectRow.Bounds.Width / 2, projectRow.Bounds.Height / 2), window);
+        Assert.NotNull(projectPoint);
+
+        window.MouseDown(projectPoint!.Value, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(projectPoint.Value, MouseButton.Left, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.NotNull(vm.ProjectTasksDialog);
+        Assert.Equal(project.Id, vm.ProjectTasksDialog!.ProjectId);
+
+        // 关掉弹窗，再点任务行 → 打开编辑弹窗
+        vm.CloseProjectTasksDialog();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        // 「近期任务」现在排在仪表盘最下面：窗口拉高到能一屏装下整页，
+        // 就不用靠滚动去够最后那几行（滚动后的命中坐标在无头环境里算不准）
+        var taskRow = window.GetVisualDescendants()
+            .OfType<Border>()
+            .First(b => b.DataContext is DashboardTaskViewModel t && t.Title == "重做首页");
+        var taskPoint = taskRow.TranslatePoint(
+            new Point(taskRow.Bounds.Width / 2, taskRow.Bounds.Height / 2), window);
+        Assert.NotNull(taskPoint);
+
+        window.MouseDown(taskPoint!.Value, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(taskPoint.Value, MouseButton.Left, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(vm.Tasks!.IsFormOpen, "点任务行应打开任务编辑弹窗");
 
         window.Close();
     }
@@ -278,6 +1220,7 @@ public class UiSmokeTests : IDisposable
         _service.ProjectsCreate(new CreateProjectInput { Name = "P2" });
 
         var vm = new MainWindowViewModel(_service);
+        vm.ShowBoardCommand.Execute(null);   // 启动页是仪表盘，先到看板用它的项目下拉
         var window = new MainWindow(vm);
         window.Show();
         Dispatcher.UIThread.RunJobs();
@@ -335,12 +1278,20 @@ public class UiSmokeTests : IDisposable
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        // 数字键切页
+        // 数字键切页（顺序同左侧菜单：仪表盘 → 看板 → 任务 → 项目 → 提醒 → 设置）
+        Press(window, Key.D1);
+        Dispatcher.UIThread.RunJobs();
+        Assert.IsType<DashboardViewModel>(vm.CurrentPage);
+
         Press(window, Key.D2);
+        Dispatcher.UIThread.RunJobs();
+        Assert.IsType<BoardViewModel>(vm.CurrentPage);
+
+        Press(window, Key.D3);
         Dispatcher.UIThread.RunJobs();
         Assert.IsType<TasksViewModel>(vm.CurrentPage);
 
-        Press(window, Key.D3);
+        Press(window, Key.D4);
         Dispatcher.UIThread.RunJobs();
         Assert.IsType<ProjectsViewModel>(vm.CurrentPage);
 
@@ -389,9 +1340,10 @@ public class UiSmokeTests : IDisposable
 
                 // 内容可能还没被 ContentPresenter 实例化（例如抽屉还没打开），
                 // 所以同时认 Content 本身
-                if (button.Content is not Icon && !button.GetVisualDescendants().OfType<Icon>().Any())
+                // 图标一律用 SukiUI 主题下的 PathIcon（不再有自绘 Icon 控件）
+                if (button.Content is not PathIcon && !button.GetVisualDescendants().OfType<PathIcon>().Any())
                 {
-                    problems.Add($"{page}: 图标按钮里没有 Icon");
+                    problems.Add($"{page}: 图标按钮里没有 PathIcon");
                 }
             }
         }
@@ -442,16 +1394,19 @@ public class UiSmokeTests : IDisposable
         window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
 
-        var composer = window.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("composer"));
+        var composer = window.GetVisualDescendants().OfType<GlassCard>().First(b => b.Classes.Contains("composer"));
         var box = composer.GetVisualDescendants().OfType<TextBox>().First();
         var presenter = box.GetVisualDescendants().OfType<TextPresenter>().First();
-        var content = composer.GetVisualDescendants().OfType<Button>().First()
-            .GetVisualDescendants().OfType<ContentPresenter>().First();
+        // SukiUI 的 Button 模板里有多个 ContentPresenter，前两个是 0×0 的占位层，
+        // 图标尺寸变化后占位层的尺寸也会变。直接量真正画出来的 PathIcon 更稳。
+        var icon = composer.GetVisualDescendants().OfType<PathIcon>().First();
 
         double Center(Control control) =>
             control.TranslatePoint(default, composer)!.Value.Y + control.Bounds.Height / 2;
 
-        Assert.InRange(Math.Abs(Center(presenter) - Center(content)), 0, 1.0);
+        var delta = Math.Abs(Center(presenter) - Center(icon));
+        Assert.True(delta <= 1.0,
+            $"文字与图标中心线相差 {delta:F1}px：text={presenter.Bounds} icon={icon.Bounds}");
         Assert.True(
             presenter.Bounds.Height < box.Bounds.Height,
             $"文字行被撑满输入框高度（{presenter.Bounds.Height} vs {box.Bounds.Height}），文字会贴顶绘制");
@@ -476,18 +1431,98 @@ public class UiSmokeTests : IDisposable
         window.Close();
     }
 
+    /// <summary>
+    /// 看板列容器换成 Suki 的 GlassCard 之后，拖放回调里仍在判断 Border，
+    /// 落下时直接 return —— 跨列拖拽完全失效。这条用例覆盖 DragOver + Drop 两步，
+    /// 验证事件真正走到 ViewModel 并把任务状态改掉。
+    /// </summary>
+    /// <summary>
+    /// Suki 的 TimePicker 模板把时/分文本写死成 Center，且 PART_FlyoutButton 的
+    /// MinWidth 是 242 —— 弹框列宽不够时右侧日历图标会被裁掉。这里验证给足宽度、
+    /// 文本靠左两件事都真的作用在渲染出来的控件上。
+    /// </summary>
+    [AvaloniaFact]
+    public void TaskDialog_TimePicker_IsWideEnoughAndLeftAligned()
+    {
+        var vm = new MainWindowViewModel(_service);
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.NewTaskCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Loaded);
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
+        window.UpdateLayout();
+
+        var picker = window.GetVisualDescendants().OfType<TimePicker>().FirstOrDefault();
+        Assert.NotNull(picker);
+        Assert.True(picker!.Width >= 242, $"时间控件宽度不足以容纳右侧图标：{picker.Width}");
+
+        var texts = picker.GetVisualDescendants().OfType<TextBlock>().ToList();
+        Assert.NotEmpty(texts);
+        Assert.All(texts, t => Assert.Equal(HorizontalAlignment.Left, t.HorizontalAlignment));
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Board_DropOnAnotherColumn_MovesTaskStatus()
+    {
+        var task = _service.TasksCreate(new CreateTaskInput { Title = "拖我到别的进度" }).Data!;
+
+        var vm = new MainWindowViewModel(_service);
+        vm.ShowBoardCommand.Execute(null);   // 启动页是仪表盘，拖拽看板列要先切过去
+        var window = new MainWindow(vm) { Width = 1280, Height = 820 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var board = window.GetVisualDescendants().OfType<BoardView>().Single();
+        var columns = board.GetVisualDescendants().OfType<GlassCard>()
+            .Where(c => c.Classes.Contains("column") && c.DataContext is BoardColumnViewModel)
+            .ToList();
+
+        Assert.NotEmpty(columns);
+
+        var origin = columns.First(c => ((BoardColumnViewModel)c.DataContext!).Cards.Any(k => k.Task.Id == task.Id));
+        var originStatus = ((BoardColumnViewModel)origin.DataContext!).Status;
+        var target = columns.First(c => ((BoardColumnViewModel)c.DataContext!).Status != originStatus);
+        var targetStatus = ((BoardColumnViewModel)target.DataContext!).Status;
+
+        var transfer = new DataTransfer();
+        transfer.Add(DataTransferItem.Create(
+            DataFormat.CreateInProcessFormat<string>("workstation.board.task-id"), task.Id));
+
+        var over = new DragEventArgs(DragDrop.DragOverEvent, transfer, target, default, KeyModifiers.None);
+        target.RaiseEvent(over);
+        Assert.Equal(DragDropEffects.Move, over.DragEffects);
+
+        var drop = new DragEventArgs(DragDrop.DropEvent, transfer, target, default, KeyModifiers.None);
+        target.RaiseEvent(drop);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(targetStatus, _service.TasksGet(task.Id).Data!.Status);
+
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void Board_TaskCard_DoubleClick_OpensEditor()
     {
         var task = _service.TasksCreate(new CreateTaskInput { Title = "双击我" }).Data!;
 
         var vm = new MainWindowViewModel(_service);
+        // 启动页是仪表盘，这个用例要看板上的卡片，先切到看板
+        vm.ShowBoardCommand.Execute(null);
         var window = new MainWindow(vm);
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
         var card = window.GetVisualDescendants()
-            .OfType<Border>()
+            .OfType<GlassCard>()
             .First(b => b.Classes.Contains("board-card")
                         && b.DataContext is BoardTaskCardViewModel c
                         && c.Task.Id == task.Id);
@@ -504,14 +1539,15 @@ public class UiSmokeTests : IDisposable
 
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(AppPage.Tasks, vm.Page);
-        Assert.True(vm.Tasks!.IsFormOpen, "双击卡片应打开编辑抽屉");
+        // 双击卡片直接弹出编辑弹窗，不再跳转到任务页
+        Assert.Equal(AppPage.Board, vm.Page);
+        Assert.True(vm.Tasks!.IsFormOpen, "双击卡片应直接弹出编辑弹窗");
 
         window.Close();
     }
 
     [AvaloniaFact]
-    public void PaletteNewProject_RendersProjectDrawer()
+    public void PaletteNewProject_RendersProjectDialog()
     {
         var vm = new MainWindowViewModel(_service);
         var window = new MainWindow(vm);
@@ -528,21 +1564,21 @@ public class UiSmokeTests : IDisposable
         window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
 
-        // 抽屉必须真的长出来：只断言 IsFormOpen 会漏掉「表单为空 / 高度塌成 0」
-        var drawer = window.GetVisualDescendants()
-            .OfType<Border>()
-            .FirstOrDefault(b => b.Classes.Contains("drawer"));
+        // 编辑弹框必须真的长出来：只断言 IsFormOpen 会漏掉「表单为空 / 高度塌成 0」
+        var host = window.GetVisualDescendants().OfType<SukiDialogHost>().Single();
+        var card = host.GetVisualDescendants().OfType<GlassCard>().FirstOrDefault();
 
-        Assert.NotNull(drawer);
-        Assert.True(drawer!.IsVisible, "抽屉应可见");
-        Assert.True(drawer.Bounds.Width > 300, $"抽屉宽度异常：{drawer.Bounds}");
-        Assert.True(drawer.Bounds.Height > 300, $"抽屉高度异常：{drawer.Bounds}");
+        Assert.NotNull(card);
+        Assert.True(card!.IsVisible, "弹框应可见");
+        Assert.True(card.Bounds.Width > 300, $"弹框宽度异常：{card.Bounds}");
+        Assert.True(card.Bounds.Height > 300, $"弹框高度异常：{card.Bounds}");
+        Assert.True(host.GetVisualDescendants().OfType<TextBox>().Any(), "表单字段应渲染出来");
 
         window.Close();
     }
 
     [AvaloniaFact]
-    public void PaletteNewProject_ClickedByMouse_OpensDrawer()
+    public void PaletteNewProject_RowCommand_OpensDialog()
     {
         var vm = new MainWindowViewModel(_service);
         var window = new MainWindow(vm);
@@ -551,22 +1587,22 @@ public class UiSmokeTests : IDisposable
 
         vm.OpenPaletteCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
 
         var row = window.GetVisualDescendants()
             .OfType<Button>()
             .First(b => b.DataContext is PaletteItem { Title: "新建项目" });
 
-        var center = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window);
-        Assert.NotNull(center);
-
-        window.MouseDown(center!.Value, MouseButton.Left, RawInputModifiers.None);
-        window.MouseUp(center.Value, MouseButton.Left, RawInputModifiers.None);
+        // SukiDialogHost 的入场动画在无头环境里不会落地，窗口级鼠标坐标会落在过渡态
+        // 的位置上。这里执行按钮绑定的命令，仍然验证「面板项 → 打开弹框」这条链。
+        row.Command!.Execute(null);
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(AppPage.Projects, vm.Page);
-        Assert.True(vm.Projects!.IsFormOpen, "点「新建项目」应打开项目抽屉");
+        Assert.True(vm.Projects!.IsFormOpen, "点「新建项目」应打开项目弹框");
         Assert.False(vm.Palette!.IsOpen, "执行后面板应关闭");
 
         window.Close();
@@ -602,6 +1638,50 @@ public class UiSmokeTests : IDisposable
         Assert.True(
             scroller!.Offset.Y > 0,
             $"选中项移出可视区时列表应跟随滚动，实际 Offset.Y={scroller.Offset.Y}");
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// 项目任务弹窗的快速添加：输入区必须够大（多行、可写好几条），
+    /// 而且 Ctrl+Enter 能直接提交 —— 以前是 58 高的小框 + 贴在角落里的小按钮。
+    /// </summary>
+    [AvaloniaFact]
+    public void ProjectTasksDialog_QuickAdd_IsRoomyAndSubmitsWithCtrlEnter()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "验收项目" }).Data!;
+        var dialogVm = new ProjectTasksDialogViewModel(project.Id, _service, (_, _) => { });
+        var view = new ProjectTasksDialogView { DataContext = dialogVm };
+
+        var window = new Window { Width = 820, Height = 560, Content = view };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var box = view.GetVisualDescendants().OfType<TextBox>().Single();
+        Assert.True(box.MinHeight >= 90, $"快速添加框太矮：{box.MinHeight}");
+        Assert.True(box.AcceptsReturn, "快速添加框应支持多行");
+
+        // 按钮与输入框同一行，且按钮有足够宽度（不是角落里的一个小方块）
+        var addButton = view.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Content as string == "添加");
+        Assert.True(addButton.Bounds.Width >= 84, $"添加按钮太窄：{addButton.Bounds.Width}");
+        Assert.True(addButton.Bounds.Height >= 36, $"添加按钮太矮：{addButton.Bounds.Height}");
+
+        box.Focus();
+        dialogVm.QuickAddText = "第一件事\n第二件事";
+        Dispatcher.UIThread.RunJobs();
+
+        window.KeyPress(Key.Enter, RawInputModifiers.Control, PhysicalKey.Enter, null);
+        Dispatcher.UIThread.RunJobs();
+
+        var titles = _service.TasksList().Data!
+            .Where(t => t.ProjectId == project.Id)
+            .Select(t => t.Title)
+            .ToList();
+        Assert.Equal(["第一件事", "第二件事"], titles);
+        Assert.Equal(string.Empty, dialogVm.QuickAddText);
 
         window.Close();
     }

@@ -2,91 +2,187 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WorkStation.App.ViewModels"
              xmlns:controls="using:WorkStation.App.Controls"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
              x:Class="WorkStation.App.Views.TasksView"
              x:DataType="vm:TasksViewModel"
              x:CompileBindings="True">
 
-  <UserControl.KeyBindings>
-    <KeyBinding Gesture="Escape" Command="{Binding CloseFormCommand}" />
-    <KeyBinding Gesture="Ctrl+Enter" Command="{Binding SaveFormCommand}" />
-  </UserControl.KeyBindings>
+  <!--
+    任务行要有「一条数据」的边界。样式层删掉后 task-row 这个 class 一度完全没有外观，
+    行看起来只是飘在空白里的文字。
+
+    行的外观（圆角、描边、底色、内边距、以及「已完成变淡」）全部走 App.axaml 的全局
+    card-row 样式，提醒页共用同一套。这里只留任务页特有的筛选按钮样式。
+  -->
+  <UserControl.Styles>
+    <!-- 状态筛选：真正的 ToggleButton，选中态走 :checked，不再依赖 Suki 的 Outlined 类 -->
+    <Style Selector="ToggleButton.filter">
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SukiBorderBrush}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleButton.filter:checked">
+      <Setter Property="BorderBrush" Value="{DynamicResource SukiPrimaryColor}" />
+      <!-- 选中态靠主色描边 + 字重表示，文字仍用正文色：
+           文字也用主色的话，深色主题下是深蓝压深蓝，几乎看不清。 -->
+      <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Background" Value="{DynamicResource SukiControlTouchBackground}" />
+    </Style>
+    <Style Selector="ToggleButton.filter:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SukiControlTouchBackground}" />
+    </Style>
+
+    <!-- 行尾的编辑/删除按钮：默认不显示，鼠标移到这一行才浮出来。
+         一屏十几行、每行两个药丸按钮，会把阅读节奏打断。
+         用 Opacity 而不是 IsVisible：控件仍然可点，测试和键盘操作都不受影响。 -->
+    <Style Selector="Border.card-row StackPanel.actions">
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Border.card-row:pointerover StackPanel.actions">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="StackPanel.actions Button">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiMuteText}" />
+    </Style>
+    <Style Selector="StackPanel.actions Button:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+    </Style>
+    <Style Selector="Button.danger:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource SukiDangerColor}" />
+    </Style>
+
+    <!-- 分组标题行：透明底，悬停才有一层很淡的高亮。
+         用 Basic 类会带上一块实心底色，区块感太强，反而像卡片标题。 -->
+    <Style Selector="Button.group">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style Selector="Button.group:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+    </Style>
+
+    <!-- 「标记完成」的勾：默认是次要色，悬停才亮成完成色。
+         之前用 Basic 类，整列都是主色亮蓝，比任务标题还抢眼。 -->
+    <Style Selector="Button.complete">
+      <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.complete:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource SukiSuccessColor}" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+    </Style>
+  </UserControl.Styles>
+
 
   <Grid RowDefinitions="Auto,Auto,*">
 
-    <!-- 筛选：状态用胶囊（选中态一眼可见），项目用下拉（选项会增长） -->
-    <Grid Grid.Row="0"
-          Margin="28,0,28,6"
-          ColumnDefinitions="Auto,Auto,*,Auto">
-      <ItemsControl ItemsSource="{Binding StatusFilters}" VerticalAlignment="Center">
-        <ItemsControl.ItemsPanel>
-          <ItemsPanelTemplate>
-            <StackPanel Orientation="Horizontal" Spacing="6" />
-          </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:StatusFilter">
-            <Button Content="{Binding Label}"
-                    Classes="filter"
-                    Classes.active="{Binding IsSelected}"
-                    Command="{Binding SelectCommand}" />
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+    <!-- 筛选：状态用胶囊（选中态一眼可见），项目用下拉（选项会增长）。
+         整条筛选栏收进一张卡，页面头和内容之间有一层明确的工具栏。
+         下边距由 PageGutterBelowHeader 给 14：页面头已经给了上面的 14，
+         两张卡之间必须有缝，贴着会像同一张卡被切了一刀。 -->
+    <Border Grid.Row="0"
+            Classes="card"
+            Margin="{DynamicResource PageGutterBelowHeader}"
+            Padding="10,8">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+        <ItemsControl ItemsSource="{Binding StatusFilters}" VerticalAlignment="Center">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="6" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:StatusFilter">
+              <ToggleButton Content="{Binding Label}"
+                            Classes="filter"
+                            IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                            Command="{Binding SelectCommand}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
-      <ComboBox Grid.Column="1"
-                Margin="14,0,0,0"
-                Width="150"
-                ItemsSource="{Binding ProjectOptions}"
-                SelectedItem="{Binding SelectedProject, Mode=TwoWay}">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:ProjectOption">
-            <TextBlock Text="{Binding Name}" />
-          </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
+        <ComboBox Grid.Column="1"
+                  Margin="14,0,0,0"
+                  Width="150"
+                  ItemsSource="{Binding ProjectOptions}"
+                  SelectedItem="{Binding SelectedProject, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProjectOption">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
 
-      <TextBox Grid.Column="3"
-               Margin="12,0,0,0"
-               Width="180"
-               HorizontalAlignment="Right"
-               Tag="SearchBox"
-               Text="{Binding SearchText, Mode=TwoWay}"
-               PlaceholderText="搜索标题或备注…" />
-    </Grid>
-
-    <Border Grid.Row="1"
-            Classes="error-bar"
-            IsVisible="{Binding HasError}"
-            Margin="28,6,28,10">
-      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+        <TextBox Grid.Column="3"
+                 Margin="12,0,0,0"
+                 Width="180"
+                 HorizontalAlignment="Right"
+                 Tag="SearchBox"
+                 Text="{Binding SearchText, Mode=TwoWay}"
+                 PlaceholderText="搜索标题或备注…" />
+      </Grid>
     </Border>
 
+    <suki:InfoBar Grid.Row="1"
+            IsVisible="{Binding HasError}"
+            Margin="{DynamicResource PageGutter}" Message="{Binding Error}" Severity="Error" IsClosable="False" />
+
     <ScrollViewer Grid.Row="2">
-      <StackPanel Margin="{DynamicResource PagePadding}">
+      <StackPanel Margin="{DynamicResource PageGutterBottom}">
 
         <ItemsControl ItemsSource="{Binding Groups}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:TaskGroupViewModel">
-              <StackPanel Margin="0,0,0,12">
+              <!-- 分组不再是"白卡"：一屏三四个大白框会互相稀释，什么都看不到。
+                   改为页面上的区块 —— 一个标题行 + 一组带发丝分隔线的任务行。 -->
+              <Border Padding="0" Margin="0,0,0,22">
+                <StackPanel>
 
-                <!-- 与任务行用同一套列宽，分组标题才能和下面的任务标题严格对齐 -->
-                <Button Classes="group" Command="{Binding ToggleCommand}">
-                  <Grid ColumnDefinitions="3,20,*,Auto" ColumnSpacing="10">
+                <!-- 与任务行用同一套列宽，分组标题才能和下面的任务标题严格对齐。
+                     必须 Stretch：Basic 按钮默认按内容宽度排，计数徽标会贴在标题后面。 -->
+                <Button Classes="group Basic"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="10,6"
+                        Command="{Binding ToggleCommand}">
+                  <Grid ColumnDefinitions="12,20,*,Auto" ColumnSpacing="10">
                     <TextBlock Grid.Column="1"
                                Text="{Binding ArrowGlyph}"
-                               FontSize="10"
-                               Foreground="{DynamicResource TextFaintBrush}"
+                               FontSize="{DynamicResource FontSizeMicro}"
+                               Foreground="{DynamicResource SukiDisabledText}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center" />
                     <TextBlock Grid.Column="2"
                                Text="{Binding Title}"
-                               FontSize="{DynamicResource FontSm}"
+                               FontSize="{DynamicResource FontSizeSubhead}"
                                FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextSecondaryBrush}"
-                               Classes.urgent="{Binding IsUrgent}"
+                               Foreground="{Binding TitleBrush}"
                                VerticalAlignment="Center" />
-                    <Border Grid.Column="3" Classes="chip">
-                      <TextBlock Text="{Binding CountText}" />
+                    <Border Grid.Column="3"
+                            Padding="7,2"
+                            CornerRadius="4"
+                            Background="{DynamicResource SukiControlTouchBackground}"
+                            VerticalAlignment="Center">
+                      <TextBlock Text="{Binding CountText}"
+                                 FontSize="{DynamicResource FontSizeMicro}"
+                                 Foreground="{DynamicResource SukiMuteText}" />
                     </Border>
                   </Grid>
                 </Button>
@@ -94,43 +190,50 @@
                 <ItemsControl ItemsSource="{Binding Tasks}" IsVisible="{Binding IsExpanded}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:TaskRowViewModel">
-                      <Border Classes="task-row" Classes.done="{Binding IsFinished}">
-                        <Grid ColumnDefinitions="3,20,*,Auto,Auto" ColumnSpacing="10">
+                      <Border Classes="card-row" Classes.done="{Binding IsFinished}">
+                        <Grid ColumnDefinitions="12,20,*,Auto,Auto" ColumnSpacing="8">
 
-                          <!-- 优先级色条：比「高/中/低」文字胶囊更快扫 -->
-                          <Border Classes="priority-bar"
-                                  Background="{Binding PriorityBrush}"
-                                  IsVisible="{Binding HasPriority}" />
+                          <!-- 优先级用 6px 圆点表示：之前是 3px 通高色条，
+                               一段一段竖着的彩色线让整页看着像骨架屏。 -->
+                          <Ellipse Width="6" Height="6"
+                                   Fill="{Binding PriorityBrush}"
+                                   IsVisible="{Binding HasPriority}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
 
                           <Button Grid.Column="1"
-                                  Classes="check"
+                                  Classes="complete"
+                                  Width="22" Height="22" Padding="0"
+                                  CornerRadius="11"
                                   Command="{Binding CompleteCommand}"
                                   IsVisible="{Binding !IsFinished}"
-                                  ToolTip.Tip="标记完成" />
+                                  ToolTip.Tip="标记完成">
+                            <PathIcon Data="{x:Static controls:AppIcons.Check}" Width="15" Height="15" />
+                          </Button>
                           <TextBlock Grid.Column="1"
                                      Text="{Binding CheckGlyph}"
                                      IsVisible="{Binding IsFinished}"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"
-                                     FontSize="12"
-                                     Foreground="{DynamicResource SuccessBrush}" />
+                                     FontSize="{DynamicResource FontSizeCaption}"
+                                     Foreground="{DynamicResource SukiSuccessColor}" />
 
-                          <StackPanel Grid.Column="2" Spacing="1" Margin="0,0,12,0">
+                          <StackPanel Grid.Column="2" Spacing="2" Margin="0,0,8,0">
                             <TextBlock Text="{Binding Title}"
-                                       FontSize="{DynamicResource FontBody}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       Foreground="{DynamicResource SukiText}"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding MetaText}"
                                        IsVisible="{Binding HasMeta}"
-                                       FontSize="{DynamicResource FontXs}"
-                                       Foreground="{DynamicResource TextDimBrush}"
+                                       FontSize="{DynamicResource FontSizeCaption}"
+                                       Foreground="{DynamicResource SukiMuteText}"
                                        TextTrimming="CharacterEllipsis" />
                           </StackPanel>
 
                           <TextBlock Grid.Column="3"
                                      Text="{Binding DueText}"
-                                     FontSize="{DynamicResource FontXs}"
-                                     Classes.dim="{Binding ShowDueNormal}"
-                                     Classes.urgent="{Binding IsOverdue}"
+                                     FontSize="{DynamicResource FontSizeCaption}"
+                                     Foreground="{Binding DueBrush}"
                                      VerticalAlignment="Center" />
 
                           <StackPanel Grid.Column="4"
@@ -141,12 +244,12 @@
                             <Button Classes="icon sm"
                                     Command="{Binding EditCommand}"
                                     ToolTip.Tip="编辑">
-                              <controls:Icon Kind="Edit" Size="13" />
+                              <PathIcon Data="{x:Static controls:AppIcons.Edit}" Width="18" Height="18" />
                             </Button>
-                            <Button Classes="icon sm dangerish"
+                            <Button Classes="icon sm danger"
                                     Command="{Binding DeleteCommand}"
                                     ToolTip.Tip="删除">
-                              <controls:Icon Kind="Trash" Size="13" />
+                              <PathIcon Data="{x:Static controls:AppIcons.Trash}" Width="18" Height="18" />
                             </Button>
                           </StackPanel>
 
@@ -155,27 +258,24 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-
-              </StackPanel>
+                </StackPanel>
+              </Border>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
 
         <!-- 空状态 -->
-        <Border IsVisible="{Binding ShowEmpty}"
+        <Border Classes="card"
+                IsVisible="{Binding ShowEmpty}"
                 Margin="0,8,0,0"
-                Padding="48"
-                CornerRadius="{DynamicResource RadiusLg}"
-                BorderThickness="1"
-                BorderBrush="{DynamicResource LineBrush}">
+                Padding="48">
           <StackPanel Spacing="7" HorizontalAlignment="Center">
             <TextBlock Text="没有符合条件的任务"
-                       FontSize="15"
+                       FontSize="{DynamicResource FontSizeSubhead}"
                        FontWeight="SemiBold"
                        HorizontalAlignment="Center" />
             <TextBlock Text="换个筛选条件，或者在上面直接记一件新事。"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontSm}"
+                       Foreground="{DynamicResource SukiMuteText}"
                        HorizontalAlignment="Center" />
             <Button Content="清除筛选"
                     HorizontalAlignment="Center"
@@ -187,159 +287,7 @@
       </StackPanel>
     </ScrollViewer>
 
-    <!-- 表单抽屉 -->
-    <Border Grid.RowSpan="3"
-            IsVisible="{Binding IsFormOpen}"
-            Background="{DynamicResource ScrimBrush}">
-      <Border Classes="drawer"
-              Width="480"
-              HorizontalAlignment="Right">
-        <ContentControl Content="{Binding Form}">
-          <ContentControl.ContentTemplate>
-            <DataTemplate x:DataType="vm:TaskFormViewModel">
-              <Grid RowDefinitions="Auto,*,Auto">
 
-                <Border Grid.Row="0"
-                        Padding="22,18"
-                        BorderThickness="0,0,0,1"
-                        BorderBrush="{DynamicResource LineBrush}">
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="{Binding TitleText}" Classes="section-title" VerticalAlignment="Center" />
-                    <Button Grid.Column="1"
-                            Classes="icon"
-                            Command="{Binding CancelCommand}"
-                            ToolTip.Tip="关闭（Esc）">
-                      <controls:Icon Kind="Close" Size="13" />
-                    </Button>
-                  </Grid>
-                </Border>
-
-                <ScrollViewer Grid.Row="1">
-                  <StackPanel Margin="22,18,22,22" Spacing="16">
-
-                    <StackPanel Spacing="0">
-                      <TextBlock Text="标题" Classes="label" />
-                      <TextBox Text="{Binding Title, Mode=TwoWay}" PlaceholderText="要做的事" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="0">
-                      <TextBlock Text="备注" Classes="label" />
-                      <TextBox Text="{Binding Notes, Mode=TwoWay}"
-                               AcceptsReturn="True"
-                               TextWrapping="Wrap"
-                               MinHeight="68" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="0">
-                      <TextBlock Text="所属项目" Classes="label" />
-                      <ComboBox ItemsSource="{Binding ProjectChoices}"
-                                SelectedIndex="{Binding ProjectIndex, Mode=TwoWay}"
-                                HorizontalAlignment="Stretch">
-                        <ComboBox.ItemTemplate>
-                          <DataTemplate x:DataType="vm:ProjectOption">
-                            <TextBlock Text="{Binding Name}" />
-                          </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                      </ComboBox>
-                    </StackPanel>
-
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                      <StackPanel Spacing="0">
-                        <TextBlock Text="状态" Classes="label" />
-                        <ComboBox ItemsSource="{x:Static vm:TaskFormViewModel.StatusOptions}"
-                                  SelectedIndex="{Binding StatusIndex, Mode=TwoWay}"
-                                  HorizontalAlignment="Stretch" />
-                      </StackPanel>
-                      <StackPanel Grid.Column="1" Spacing="0">
-                        <TextBlock Text="优先级" Classes="label" />
-                        <ComboBox ItemsSource="{x:Static vm:TaskFormViewModel.PriorityOptions}"
-                                  SelectedIndex="{Binding PriorityIndex, Mode=TwoWay}"
-                                  HorizontalAlignment="Stretch" />
-                      </StackPanel>
-                    </Grid>
-
-                    <StackPanel Spacing="0">
-                      <TextBlock Text="截止时间" Classes="label" />
-                      <!-- 日期 + 时间合成一颗字段：清除按钮、日历、时刻都在这一个控件里 -->
-                      <controls:DueDateField SelectedDate="{Binding DueDate, Mode=TwoWay}"
-                                             SelectedTime="{Binding DueTime, Mode=TwoWay}" />
-                    </StackPanel>
-
-                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
-                      <StackPanel Spacing="0">
-                        <TextBlock Text="提前提醒" Classes="label" />
-                        <ComboBox ItemsSource="{Binding LeadOptions}"
-                                  SelectedItem="{Binding SelectedLead, Mode=TwoWay}"
-                                  IsEnabled="{Binding HasDueDate}"
-                                  ToolTip.Tip="先设截止时间，才能提前提醒"
-                                  HorizontalAlignment="Stretch">
-                          <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:ReminderLeadOption">
-                              <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                          </ComboBox.ItemTemplate>
-                        </ComboBox>
-                      </StackPanel>
-                      <StackPanel Grid.Column="1" Spacing="0">
-                        <TextBlock Text="预估工时（小时）" Classes="label" />
-                        <TextBox Text="{Binding Estimate, Mode=TwoWay}" PlaceholderText="2" />
-                      </StackPanel>
-                      <StackPanel Grid.Column="2" Spacing="0">
-                        <TextBlock Text="实际工时（小时）" Classes="label" />
-                        <TextBox Text="{Binding Spent, Mode=TwoWay}" PlaceholderText="1.5" />
-                      </StackPanel>
-                    </Grid>
-
-                    <StackPanel Spacing="0" IsVisible="{Binding IsBlocked}">
-                      <TextBlock Text="阻塞原因" Classes="label" />
-                      <TextBox Text="{Binding BlockedReason, Mode=TwoWay}" PlaceholderText="卡在什么地方" />
-                    </StackPanel>
-
-                    <Border Classes="error-bar"
-                            IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
-                      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
-                    </Border>
-
-                  </StackPanel>
-                </ScrollViewer>
-
-                <Border Grid.Row="2"
-                        Padding="22,14"
-                        BorderThickness="0,1,0,0"
-                        BorderBrush="{DynamicResource LineBrush}">
-                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                    <Button Content="取消" Command="{Binding CancelCommand}" />
-                    <Button Content="保存" Classes="primary" Command="{Binding SaveCommand}" />
-                  </StackPanel>
-                </Border>
-
-              </Grid>
-            </DataTemplate>
-          </ContentControl.ContentTemplate>
-        </ContentControl>
-      </Border>
-    </Border>
-
-    <!-- 删除确认 -->
-    <Border Grid.RowSpan="3"
-            IsVisible="{Binding IsDeleteConfirmOpen}"
-            Background="{DynamicResource ScrimBrush}">
-      <Border Classes="card" Width="430" Padding="24" VerticalAlignment="Center" HorizontalAlignment="Center">
-        <StackPanel Spacing="14">
-          <TextBlock Text="删除任务？" Classes="section-title" />
-          <StackPanel Spacing="5">
-            <TextBlock Text="{Binding PendingDelete.Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-            <TextBlock Text="删除后无法恢复。"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontSm}" />
-          </StackPanel>
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="取消" Command="{Binding CancelDeleteCommand}" />
-            <Button Content="删除" Classes="danger" Command="{Binding ConfirmDeleteCommand}" />
-          </StackPanel>
-        </StackPanel>
-      </Border>
-    </Border>
 
   </Grid>
 </UserControl>

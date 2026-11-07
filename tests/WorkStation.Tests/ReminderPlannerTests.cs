@@ -112,8 +112,13 @@ public class ReminderPlannerTests
     public void ComputeCounts_UsesTaskGroupingSemantics()
     {
         var now = LocalTime.ToLocalDateTime(DateTime.Today.AddHours(12));
-        var yesterdayInstant = DateTime.UtcNow.Date.AddDays(-1).AddHours(4)
-            .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+
+        // 必须从「本地昨天」换算成 UTC，不能拿 UtcNow.Date 直接减一天：
+        // 本地处于 UTC+8 时，本地 00:00–08:00 这段时间的 UtcNow 还是前一天，
+        // 算出来的「昨天」会比真正的本地昨天再早一天，测试于是只在白天通过。
+        var yesterdayInstant = DateTime.Today.AddDays(-1).AddHours(12)
+            .ToUniversalTime()
+            .ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
 
         var tasks = new List<TaskItem>
         {

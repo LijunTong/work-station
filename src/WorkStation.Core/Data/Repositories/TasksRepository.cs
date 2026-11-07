@@ -43,6 +43,7 @@ public sealed class TasksRepository
         Notes = reader.Str("notes"),
         Status = DbEnum.ParseTaskStatus(reader.Str("status")),
         Priority = DbEnum.ParsePriority(reader.Str("priority")),
+        StartAt = reader.StrOrNull("start_at"),
         DueAt = reader.StrOrNull("due_at"),
         RemindBefore = reader.Int("remind_before"),
         Estimate = reader.DoubleOrNull("estimate"),
@@ -175,6 +176,11 @@ public sealed class TasksRepository
 
     public TaskItem Create(CreateTaskInput input)
     {
+        if (!string.IsNullOrEmpty(input.StartAt))
+        {
+            AssertLocalDateTime(input.StartAt, nameof(CreateTaskInput.StartAt));
+        }
+
         if (!string.IsNullOrEmpty(input.DueAt))
         {
             AssertLocalDateTime(input.DueAt, nameof(CreateTaskInput.DueAt));
@@ -186,10 +192,10 @@ public sealed class TasksRepository
 
         using var command = _connection.Command("""
             INSERT INTO tasks (
-              id, project_id, title, notes, status, priority, due_at, remind_before,
+              id, project_id, title, notes, status, priority, start_at, due_at, remind_before,
               estimate, spent, blocked_reason, sort_order, created_at, updated_at, started_at, completed_at
             ) VALUES (
-              @id, @projectId, @title, @notes, @status, @priority, @dueAt, @remindBefore,
+              @id, @projectId, @title, @notes, @status, @priority, @startAt, @dueAt, @remindBefore,
               @estimate, @spent, @blockedReason, @sortOrder, @createdAt, @updatedAt, @startedAt, @completedAt
             )
             """).Bind(
@@ -199,6 +205,7 @@ public sealed class TasksRepository
             ("notes", input.Notes ?? string.Empty),
             ("status", status.ToDb()),
             ("priority", (input.Priority ?? Priority.None).ToDb()),
+            ("startAt", input.StartAt),
             ("dueAt", input.DueAt),
             ("remindBefore", input.RemindBefore ?? 0),
             ("estimate", input.Estimate),
@@ -223,6 +230,11 @@ public sealed class TasksRepository
         if (existing is null) return null;
 
         // 只校验本次传入的新值：没传保留原值，传 null 是清空截止时间，两者都无需校验
+        if (patch.StartAt.HasValue && patch.StartAt.Value is not null)
+        {
+            AssertLocalDateTime(patch.StartAt.Value, nameof(UpdateTaskInput.StartAt));
+        }
+
         if (patch.DueAt.HasValue && patch.DueAt.Value is not null)
         {
             AssertLocalDateTime(patch.DueAt.Value, nameof(UpdateTaskInput.DueAt));
@@ -238,7 +250,7 @@ public sealed class TasksRepository
         using var command = _connection.Command("""
             UPDATE tasks SET
               title = @title, project_id = @projectId, notes = @notes, status = @status, priority = @priority,
-              due_at = @dueAt, remind_before = @remindBefore, estimate = @estimate, spent = @spent,
+              start_at = @startAt, due_at = @dueAt, remind_before = @remindBefore, estimate = @estimate, spent = @spent,
               blocked_reason = @blockedReason, sort_order = @sortOrder,
               updated_at = @updatedAt, started_at = @startedAt, completed_at = @completedAt
             WHERE id = @id
@@ -248,6 +260,7 @@ public sealed class TasksRepository
             ("notes", patch.Notes.HasValue ? patch.Notes.Value : existing.Notes),
             ("status", nextStatus.ToDb()),
             ("priority", (patch.Priority.HasValue ? patch.Priority.Value : existing.Priority).ToDb()),
+            ("startAt", patch.StartAt.HasValue ? patch.StartAt.Value : existing.StartAt),
             ("dueAt", patch.DueAt.HasValue ? patch.DueAt.Value : existing.DueAt),
             ("remindBefore", patch.RemindBefore.HasValue ? patch.RemindBefore.Value : existing.RemindBefore),
             ("estimate", patch.Estimate.HasValue ? patch.Estimate.Value : existing.Estimate),

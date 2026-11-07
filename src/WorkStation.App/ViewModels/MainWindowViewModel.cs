@@ -1,10 +1,13 @@
 using System.Reflection;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using WorkStation.App.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SukiUI.Models;
+using WorkStation.Core.Board;
 using WorkStation.Core.Models;
 using WorkStation.Core.Services;
 using WorkStation.Core.Time;
@@ -17,7 +20,8 @@ public enum AppPage
     Tasks,
     Projects,
     Reminders,
-    Settings
+    Settings,
+    Dashboard
 }
 
 /// <summary>
@@ -45,6 +49,12 @@ public partial class MainWindowViewModel : ObservableObject
 
     public SettingsViewModel? Settings { get; }
 
+    /// <summary>仪表盘：只读统计页，与看板的分工见 <see cref="DashboardViewModel"/>。</summary>
+    public DashboardViewModel? Dashboard { get; }
+
+    /// <summary>从项目卡片「查看任务」点进来时挂上的弹窗内容；为 null 表示没有弹窗。</summary>
+    public ProjectTasksDialogViewModel? ProjectTasksDialog { get; private set; }
+
     public CommandPaletteViewModel? Palette { get; }
 
     /// <summary>启动失败原因；非空时界面只显示错误页。</summary>
@@ -58,14 +68,14 @@ public partial class MainWindowViewModel : ObservableObject
     private object? _currentPage;
 
     [ObservableProperty]
-    private AppPage _page = AppPage.Board;
+    private AppPage _page = AppPage.Dashboard;
 
     [ObservableProperty]
-    private string _pageTitle = "看板";
+    private string _pageTitle = "仪表盘";
 
     /// <summary>标题下的补充说明。没有它，标题栏只剩一个词，界面显得没有信息密度。</summary>
     [ObservableProperty]
-    private string _pageSubtitle = "手上所有事，按状态摊开";
+    private string _pageSubtitle = "今日、本周、本月，一眼看清";
 
     [ObservableProperty]
     private string _quickAddTitle = string.Empty;
@@ -92,6 +102,32 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _themeMode = "system";
 
+    /// <summary>
+    /// 侧边栏是否展开。折叠状态跟着用户走，存进设置，下次启动按原样恢复。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSidebarExpanded = true;
+
+    /// <summary>当前是否深色主题。标题栏快速切换按钮据此显示太阳/月亮。</summary>
+    public bool IsDarkTheme => ThemeMode == "dark";
+
+    partial void OnThemeModeChanged(string value) => OnPropertyChanged(nameof(IsDarkTheme));
+
+    partial void OnIsSidebarExpandedChanged(bool value) =>
+        _service?.SettingsSet("sidebarExpanded", value);
+
+    /// <summary>标题栏一键折叠/展开侧边栏，快捷键 Ctrl+B 也走这里。</summary>
+    [RelayCommand]
+    private void ToggleSidebar() => IsSidebarExpanded = !IsSidebarExpanded;
+
+    /// <summary>标题栏一键切换明暗：现在是深色就切浅色，否则切深色。持久化走 Settings 的唯一真源。</summary>
+    [RelayCommand]
+    private void ToggleTheme()
+    {
+        var next = ThemeMode == "dark" ? "light" : "dark";
+        if (Settings is { } settings) settings.SetThemeCommand.Execute(next);
+    }
+
     // 侧边栏选中态：Classes.active 直接绑这四个布尔值，比在 XAML 里写比较转换器清楚
     public bool IsBoardActive => Page == AppPage.Board;
 
@@ -103,6 +139,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     public bool IsSettingsActive => Page == AppPage.Settings;
 
+    public bool IsDashboardActive => Page == AppPage.Dashboard;
+
     public bool HasOverdueBadge => OverdueCount > 0;
 
     public string OverdueBadgeText => OverdueCount > 99 ? "99+" : OverdueCount.ToString();
@@ -110,12 +148,6 @@ public partial class MainWindowViewModel : ObservableObject
     public bool HasReminderBadge => ReminderCount > 0;
 
     public string ReminderBadgeText => ReminderCount > 99 ? "99+" : ReminderCount.ToString();
-
-    /// <summary>
-    /// 左下角显示的版本号（形如 <c>V 1.0.1</c>）。取程序集版本，
-    /// 不在 XAML 里写死 —— 发版只改 csproj 的 &lt;Version&gt; 一处。
-    /// </summary>
-    public string VersionText { get; } = FormatVersion();
 
     /// <summary>
     /// 关闭窗口时是否驻留托盘。窗口的 Closing 里读取：
@@ -154,16 +186,28 @@ public partial class MainWindowViewModel : ObservableObject
     {
         _service = service;
 
+        // 折叠状态恢复：直接写字段，避免初始化时又往设置里回写一次。
+        // 用 bool? 读取，缺省键返回 null 才能和「用户明确存了 false」区分开。
+        var savedSidebar = service.SettingsGet<bool?>("sidebarExpanded");
+        if (savedSidebar is { Ok: true, Data: { } expanded }) _isSidebarExpanded = expanded;
+
         Board = new BoardViewModel(service, ShowToast, null, RefreshBadge);
         Tasks = new TasksViewModel(service, ShowToast);
         Projects = new ProjectsViewModel(service, ShowToast);
         Reminders = new RemindersViewModel(service, ShowToast, null, RefreshBadge);
-        Settings = new SettingsViewModel(service, ApplyThemeVariant, ShowToast);
+        Settings = new SettingsViewModel(service, ApplyThemeVariant, ApplyThemeColor, ShowToast, ApplyCustomThemeColor, ApplyFont);
+        Dashboard = new DashboardViewModel(service, ShowToast);
 
-        Board.EditTaskRequested = OpenTaskEditor;
+        Board.EditTaskRequested = OpenTaskEditorInPlace;
         Board.OpenProjectTasksRequested = ShowTasksForProject;
-        Board.OpenRemindersRequested = ShowReminders;
-        Projects.NavigateToTasks = () => ShowTasksForProject(null);
+        Projects.NavigateToTasks = ShowTasksForProject;
+
+        // 仪表盘上的数字点一下 → 跳去看板并带上对应口径（看板是干活的地方，仪表盘只报数）
+        Dashboard.JumpToBoardRequested = ShowBoardWithScope;
+
+        // 仪表盘上的实体数据同样可以点开：项目弹任务清单，任务开编辑弹窗
+        Dashboard.OpenProjectRequested = ShowTasksForProject;
+        Dashboard.OpenTaskRequested = OpenTaskEditorInPlace;
 
         Palette = new CommandPaletteViewModel(service, BuildPaletteActions())
         {
@@ -172,10 +216,12 @@ public partial class MainWindowViewModel : ObservableObject
         };
 
         ThemeMode = Settings.InitialTheme;
-        Page = AppPage.Board;
-        CurrentPage = Board;
-        PageTitle = "看板";
-        PageSubtitle = "手上所有事，按状态摊开";
+
+        // 启动落在仪表盘：先给一张「今天/本周/本月」的总账，比直接扎进看板更适合冷启动。
+        Page = AppPage.Dashboard;
+        CurrentPage = Dashboard;
+        PageTitle = "仪表盘";
+        PageSubtitle = "今日、本周、本月，一眼看清";
 
         _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _toastTimer.Tick += (_, _) =>
@@ -186,10 +232,12 @@ public partial class MainWindowViewModel : ObservableObject
 
         // 主题必须在窗口显示前生效，否则首帧会是系统主题再闪一下
         ApplyThemeVariant(ThemeMode);
+        Settings.ApplySavedColor();
+        ApplyFont(Settings.SelectedFont);
         Settings.MarkInitialized();
 
-        // 首页就是看板，必须在这里取一次数：Navigate 会因为「已经在该页」直接返回
-        Board.Reload();
+        // 首页（仪表盘）必须在这里取一次数：Navigate 会因为「已经在该页」直接返回
+        Dashboard.Reload();
         RefreshBadge();
 
         if (recoveredFrom is { } recovered)
@@ -226,6 +274,7 @@ public partial class MainWindowViewModel : ObservableObject
         new("全部任务", "跳转", "任", ["tasks", "list", "清单"], () => Navigate(AppPage.Tasks)),
         new("全部项目", "跳转", "项", ["projects", "list"], () => Navigate(AppPage.Projects)),
         new("提醒", "跳转", "铃", ["reminder", "提醒", "alarm"], () => Navigate(AppPage.Reminders)),
+        new("仪表盘", "跳转", "表", ["dashboard", "仪表盘", "统计", "概览"], () => Navigate(AppPage.Dashboard)),
         new("设置", "跳转", "设", ["settings", "主题", "theme"], () => Navigate(AppPage.Settings)),
         new("新建任务", "动作", "＋", ["add", "new", "task", "记录"], NewTask),
         new("新建项目", "动作", "＋", ["add", "new", "project"], NewProject),
@@ -250,6 +299,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsProjectsActive));
         OnPropertyChanged(nameof(IsRemindersActive));
         OnPropertyChanged(nameof(IsSettingsActive));
+        OnPropertyChanged(nameof(IsDashboardActive));
 
         switch (target)
         {
@@ -283,6 +333,12 @@ public partial class MainWindowViewModel : ObservableObject
                 CurrentPage = Settings;
                 Settings?.Reload();
                 break;
+            case AppPage.Dashboard:
+                PageTitle = "仪表盘";
+                PageSubtitle = "今日、本周、本月，一眼看清";
+                CurrentPage = Dashboard;
+                Dashboard?.Reload();
+                break;
         }
 
         RefreshBadge();
@@ -303,6 +359,37 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ShowSettings() => Navigate(AppPage.Settings);
 
+    [RelayCommand]
+    private void ShowDashboard() => Navigate(AppPage.Dashboard);
+
+    /// <summary>
+    /// 仪表盘跳看板：切到看板页并套用对应的时间口径。
+    /// 口径由看板自己维护，仪表盘只负责把「用户想看哪一块」传过去。
+    /// </summary>
+    private void ShowBoardWithScope(DashboardJumpTarget target)
+    {
+        Navigate(AppPage.Board);
+
+        switch (target)
+        {
+            case DashboardJumpTarget.Today:
+                Board?.ShowScope(BoardTimeScope.Today);
+                break;
+            case DashboardJumpTarget.Overdue:
+                Board?.ShowScope(BoardTimeScope.Overdue);
+                break;
+            case DashboardJumpTarget.Week:
+                Board?.ShowScope(BoardTimeScope.Week);
+                break;
+            case DashboardJumpTarget.Blocked:
+                Board?.ShowBlockedOnly();
+                break;
+            default:
+                Board?.ShowScope(BoardTimeScope.All);
+                break;
+        }
+    }
+
     /// <summary>顶部常驻快速添加：任意页面都能记一条，不打断当前视图。</summary>
     [RelayCommand]
     private void QuickAdd()
@@ -310,7 +397,14 @@ public partial class MainWindowViewModel : ObservableObject
         var title = QuickAddTitle.Trim();
         if (title.Length == 0) return;
 
-        var result = _service?.TasksCreate(new CreateTaskInput { Title = title });
+        // 快速添加也要带默认截止：跟「新建任务」表单同一套（今天 18:00，过点顺延 23:59）。
+        // 不带时间的话，这些任务会掉进「无期限」，在今日/本周/本月任何口径里都看不见 ——
+        // 用户以为「记下了」，其实它不在任何清单里。
+        var result = _service?.TasksCreate(new CreateTaskInput
+        {
+            Title = title,
+            DueAt = TaskDefaults.DueAtFor(DateTime.Now)
+        });
         if (result is { Ok: false })
         {
             ShowToast(result.Error?.Message ?? "添加失败", true);
@@ -386,6 +480,9 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             case AppPage.Reminders:
                 Reminders?.Reload();
+                break;
+            case AppPage.Dashboard:
+                Dashboard?.Reload();
                 break;
         }
 
@@ -495,17 +592,37 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void OpenTaskEditor(TaskItem task)
     {
+        // 命令面板/提醒里「打开任务」：仍跳到任务页并打开编辑抽屉（提醒的既定行为是「回到任务页」）。
         Navigate(AppPage.Tasks);
+        Tasks?.OpenEditor(task);
+    }
+
+    private void OpenTaskEditorInPlace(TaskItem task)
+    {
+        // 看板里「编辑任务」：不跳转到任务页，直接在当前页（看板）弹出编辑弹窗，改完留在原地。
+        // 保存后由弹窗关闭钩子刷新当前页，让改动立刻反映在看板上（见 MainWindow.ShowEditorDialog）。
         Tasks?.OpenEditor(task);
     }
 
     private void ShowTasksForProject(string? projectId)
     {
-        Navigate(AppPage.Tasks);
-        if (projectId is not null)
+        // 从项目进任务列表：不跳页，直接弹窗展示（圆形进度 + 垂直 stepper）。
+        // projectId 为空（理论上不会）时退回原行为：去任务页。
+        if (projectId is null)
         {
-            Tasks?.FocusProject(projectId);
+            Navigate(AppPage.Tasks);
+            return;
         }
+
+        ProjectTasksDialog = new ProjectTasksDialogViewModel(projectId, _service!, ShowToast);
+        // 普通属性不会自动通知：必须显式触发，MainWindow 靠这个通知弹出弹窗
+        OnPropertyChanged(nameof(ProjectTasksDialog));
+    }
+
+    public void CloseProjectTasksDialog()
+    {
+        ProjectTasksDialog = null;
+        OnPropertyChanged(nameof(ProjectTasksDialog));
     }
 
     /// <summary>
@@ -514,6 +631,7 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public void ApplyThemeVariant(string mode)
     {
+        var previous = ThemeMode;
         ThemeMode = mode switch
         {
             "light" => "light",
@@ -530,24 +648,119 @@ public partial class MainWindowViewModel : ObservableObject
             "dark" => ThemeVariant.Dark,
             _ => ThemeVariant.Default
         };
+
+        // 统计数字、优先级色条、状态点的画刷由 VM 按「当时的主题」从 Suki 资源取，
+        // 是普通 CLR 属性，换主题不会自动重新求值。重建当前页视图让绑定重新取值。
+        if (previous == ThemeMode || !Dispatcher.UIThread.CheckAccess()) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            var page = CurrentPage;
+            if (page is null) return;
+            CurrentPage = null;
+            CurrentPage = page;
+        }, DispatcherPriority.Background);
     }
 
-    /// <summary>「V 主.次.修订」，去掉 SourceLink 加的 +commit 后缀。</summary>
-    private static string FormatVersion()
+    /// <summary>
+    /// 应用主题色（SukiUI 的主色）。主色资源键的注册依赖这个值，切到新颜色时 Suki 会按当前明暗
+    /// 重算主色阶 120/150。窗口里的 ActualThemeVariantChanged 也会重新套用当前生效的主题色，
+    /// 所以明暗切换后主题色不会丢。
+    /// </summary>
+    public void ApplyThemeColor(SukiUI.Enums.SukiColor color)
     {
-        var assembly = typeof(MainWindowViewModel).Assembly;
+        var application = Application.Current;
+        if (application is null) return;
 
-        var informational = assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion;
+        var theme = SukiUI.SukiTheme.GetInstance(application);
 
-        if (!string.IsNullOrWhiteSpace(informational))
+        // 必须走 SukiColorTheme 重载，不能走枚举重载。
+        // 枚举重载是「给 ThemeColor 属性赋值，靠属性变化触发换色」，
+        // 而自定义主题并不改 ThemeColor —— 自定义色生效后 ThemeColor 还停在原来那个内置值上，
+        // 这时再点同一个内置色，属性值没变、不会触发换色，用户点了像没反应。
+        if (SukiUI.SukiTheme.DefaultColorThemes.TryGetValue(color, out var builtIn))
         {
-            var plus = informational.IndexOf('+', StringComparison.Ordinal);
-            return $"V {(plus > 0 ? informational[..plus] : informational)}";
+            theme.ChangeColorTheme(builtIn);
+            return;
         }
 
-        var version = assembly.GetName().Version;
-        return version is null ? "V 1.0.0" : $"V {version.Major}.{version.Minor}.{version.Build}";
+        theme.ChangeColorTheme(color);
     }
+
+    /// <summary>
+    /// 应用自定义主题色：主色 + 强调色自己造一个 SukiColorTheme 套上去。
+    ///
+    /// 不用 AddColorTheme：那个方法往 Suki 的主题列表里塞一条，重复添加同一份会抛
+    /// InvalidOperationException（record 相等性比的是全部字段）。设置页只有一个自定义主题，
+    /// 不需要进那个列表，直接 ChangeColorTheme 就够了。
+    /// </summary>
+    public void ApplyCustomThemeColor(Color primary, Color accent)
+    {
+        var application = Application.Current;
+        if (application is null) return;
+
+        var theme = SukiUI.SukiTheme.GetInstance(application);
+        theme.ChangeColorTheme(new SukiColorTheme("自定义", primary, accent));
+    }
+
+    /// <summary>
+    /// 应用界面字体。
+    ///
+    /// SukiUI 给 TextBlock / Button / TextBox 等单独 Setter 了 DefaultFontFamily，
+    /// 而 ComboBox 的下拉项、ToolTip 这些浮层不在那份选择器里，只继承窗口的 FontFamily ——
+    /// 所以两处都要换，界面才会整块统一。
+    /// 选了「默认」时把 DefaultFontFamily 删掉，退回 SukiUI 自带的那套（Quicksand + 微软雅黑回退）。
+    /// </summary>
+    public void ApplyFont(string? familyName)
+    {
+        var application = Application.Current;
+        if (application is null) return;
+
+        if (string.IsNullOrWhiteSpace(familyName) || familyName == SettingsViewModel.DefaultFontName)
+        {
+            application.Resources.Remove("DefaultFontFamily");
+            application.Resources["UiFontFamily"] = DefaultWindowFont;
+            return;
+        }
+
+        // 中文回退链必须留着：用户挑的多半是西文字体，没有回退的话汉字会掉到默认字体上。
+        var font = new FontFamily($"{familyName}, Microsoft YaHei UI, Microsoft YaHei, Segoe UI");
+        application.Resources["DefaultFontFamily"] = font;
+        application.Resources["UiFontFamily"] = font;
+    }
+
+    /// <summary>窗口级字体的默认值，与 App.axaml 里最初写死的那串保持一致。</summary>
+    private static FontFamily DefaultWindowFont { get; } =
+        new("Microsoft YaHei UI, Microsoft YaHei, Segoe UI");
+
+}
+
+/// <summary>
+/// 删除确认的统一契约：ViewModel 只维护「有没有待删对象」和两个命令，
+/// 弹窗本体由 MainWindow 用 SukiDialogBuilder 呈现，页面里不再自绘遮罩。
+/// </summary>
+public interface IDeleteConfirmation
+{
+    bool IsDeleteConfirmOpen { get; }
+    string DeleteTargetName { get; }
+    System.Windows.Input.ICommand Cancel { get; }
+    System.Windows.Input.ICommand Confirm { get; }
+}
+
+/// <summary>
+/// 编辑弹框的统一契约：页面 VM 只维护「有没有表单」和表单对象，
+/// 弹框本体一律由 MainWindow 用 SukiDialogBuilder 呈现。
+/// </summary>
+public interface IEditorDialog : System.ComponentModel.INotifyPropertyChanged
+{
+    bool IsFormOpen { get; }
+    object? Form { get; }
+    string DialogTemplateKey { get; }
+    void DismissForm();
+}
+
+/// <summary>表单 VM 暴露给外壳的两个动作，用来接 Ctrl+Enter / Esc。</summary>
+public interface IEditorForm
+{
+    System.Windows.Input.ICommand Save { get; }
+    System.Windows.Input.ICommand Cancel { get; }
 }

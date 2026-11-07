@@ -34,4 +34,13 @@ public static class ProjectSummary
 
         return (counts, progress);
     }
+
+    /// <summary>项目状态的中文名。仪表盘与项目页共用，避免两处各写一份后走样。</summary>
+    public static string StatusTitle(ProjectStatus status) => status switch
+    {
+        ProjectStatus.Planning => "规划中",
+        ProjectStatus.Active => "进行中",
+        ProjectStatus.Paused => "已暂停",
+        _ => "已完成"
+    };
 }

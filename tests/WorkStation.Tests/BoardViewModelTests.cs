@@ -114,16 +114,41 @@ public class BoardViewModelTests : IDisposable
     }
 
     [Fact]
-    public void BlockedChip_IsIndependentFromTimeScope()
+    public void BlockedFilter_ThroughDashboardEntry_KeepsWorking()
     {
         _service.TasksCreate(new CreateTaskInput { Title = "阻塞的", Status = TaskStatus.Blocked, DueAt = "2026-11-04T09:00" });
         _service.TasksCreate(new CreateTaskInput { Title = "待办" });
 
         var vm = CreateVm();
-        vm.OverviewChips.Single(c => c.Key == "blocked").SelectCommand.Execute(null);
+        // 概览条上不再有「已阻塞」胶囊，但仪表盘仍可以跳到这个口径
+        Assert.DoesNotContain(vm.OverviewChips, c => c.Key == "blocked");
+        vm.ShowBlockedOnly();
 
         Assert.True(vm.OnlyBlocked);
         Assert.Equal(["阻塞的"], vm.Columns.SelectMany(c => c.Cards).Select(c => c.Title).ToArray());
+    }
+
+    [Fact]
+    public void PriorityChip_ToggleButton_KeepsSingleSelection()
+    {
+        var vm = CreateVm();
+        var all = vm.PriorityChips.Single(c => c.Key == "all");
+        var high = vm.PriorityChips.Single(c => c.Key == "high");
+
+        // ToggleButton 点选：先翻转 IsSelected，再走命令
+        high.IsSelected = true;
+        high.SelectCommand.Execute(null);
+
+        Assert.Same(high, vm.SelectedPriority);
+        Assert.True(high.IsSelected);
+        Assert.False(all.IsSelected);
+
+        // 取消勾选唯一选中项会被复位（模拟 ToggleButton 先置 false 再发命令）
+        high.IsSelected = false;
+        high.SelectCommand.Execute(null);
+
+        Assert.Same(high, vm.SelectedPriority);
+        Assert.True(high.IsSelected);
     }
 
     [Fact]
@@ -279,27 +304,113 @@ public class BoardViewModelTests : IDisposable
         Assert.DoesNotContain(vm.Columns.SelectMany(c => c.Cards), c => c.Title == "下周到期");
     }
 
+    /// <summary>
+    /// 看板列内按优先级排序：同一列里高优先级的卡片排在最前面。
+    /// </summary>
     [Fact]
-    public void ReminderChip_ShowsUnhandledCountAndRaisesNavigation()
+    public void Columns_SortCardsByPriority()
     {
-        var reminder = _service.RemindersCreate(new CreateReminderInput
-        {
-            Title = "提醒我",
-            RemindAt = Core.Time.LocalTime.ToLocalDateTime(Now.AddHours(-1))
-        }).Data!;
-        _service.RemindersSetStatus(reminder.Id, ReminderStatus.Fired);
+        // 全部同一天到期、都是待办 → 都在「待办」列，只差优先级
+        var due = Core.Time.LocalTime.ToLocalDateTime(Now.Date.AddHours(18));
+        _service.TasksCreate(new CreateTaskInput { Title = "低的", Priority = Priority.Low, DueAt = due });
+        _service.TasksCreate(new CreateTaskInput { Title = "高的", Priority = Priority.High, DueAt = due });
+        _service.TasksCreate(new CreateTaskInput { Title = "中的", Priority = Priority.Medium, DueAt = due });
+        _service.TasksCreate(new CreateTaskInput { Title = "无优先级的", Priority = Priority.None, DueAt = due });
 
-        var opened = false;
         var vm = CreateVm();
-        vm.OpenRemindersRequested = () => opened = true;
+        var todo = vm.Columns.Single(c => c.Title == "待办");
 
-        var chip = vm.OverviewChips.Single(c => c.Key == "reminders");
-        Assert.Equal(1, chip.Count);
+        Assert.Equal(["高的", "中的", "低的", "无优先级的"], Titles(todo));
+    }
 
-        chip.SelectCommand.Execute(null);
+    /// <summary>看板的项目卡也按优先级排：高的项目在前面。</summary>
+    [Fact]
+    public void ProjectColumns_SortByPriority()
+    {
+        var low = _service.ProjectsCreate(new CreateProjectInput { Name = "低的项目", Priority = Priority.Low }).Data!;
+        var high = _service.ProjectsCreate(new CreateProjectInput { Name = "高的项目", Priority = Priority.High }).Data!;
+        var none = _service.ProjectsCreate(new CreateProjectInput { Name = "无优先级的", Priority = Priority.None }).Data!;
 
-        Assert.True(opened);
-        // 「提醒」不是筛选：点它不能改变看板的时间口径
-        Assert.Equal(BoardTimeScope.All, vm.TimeScope);
+        var vm = CreateVm();
+
+        // 切到项目看板（不是任务看板）
+        vm.IsTaskBoard = false;
+        vm.Reload();
+
+        var names = vm.ProjectColumns.SelectMany(c => c.Cards).Select(c => c.Name).ToArray();
+        Assert.Equal(["高的项目", "低的项目", "无优先级的"], names);
+        Assert.Contains(high.Id, vm.ProjectColumns.SelectMany(c => c.Cards).Select(c => c.Project.Id));
+        Assert.Contains(low.Id, vm.ProjectColumns.SelectMany(c => c.Cards).Select(c => c.Project.Id));
+        Assert.Contains(none.Id, vm.ProjectColumns.SelectMany(c => c.Cards).Select(c => c.Project.Id));
+    }
+
+    [Fact]
+    public void ReminderChip_RemovedFromOverview()
+    {
+        var vm = CreateVm();
+
+        // 「提醒」不是看板上的筛选，概览条上不再有它（跳提醒页走左侧菜单）
+        Assert.DoesNotContain(vm.OverviewChips, c => c.Key == "reminders");
+
+        // 顺序也钉死：今日 / 本周 / 本月 是三个时间口径，逾期是异常集合，排最后
+        Assert.Equal(
+            ["today", "week", "month", "overdue"],
+            vm.OverviewChips.Select(c => c.Key).ToArray());
+    }
+
+    /// <summary>
+    /// 逾期在看板顶部有一条提示：写清有几条、最早哪天，点一下切到逾期口径。
+    /// 已经在看逾期口径时不再提示（别在同一件事上反复催）。
+    /// </summary>
+    [Fact]
+    public void OverdueHint_CountsAndSwitchesScope()
+    {
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "早该做了",
+            // 注意用 Now.Date 起步：Now 是 10 点，直接 AddHours(18) 会滚到第二天
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(Now.Date.AddDays(-3).AddHours(18))
+        });
+
+        var vm = CreateVm();
+
+        Assert.Equal(1, vm.OverdueCount);
+        Assert.True(vm.ShowOverdueHint);
+        Assert.Equal("11-02", vm.EarliestOverdueText);
+        Assert.Contains("已逾期", vm.OverdueHintText);
+
+        vm.ShowOverdueOnlyCommand.Execute(null);
+
+        Assert.Equal(BoardTimeScope.Overdue, vm.TimeScope);
+        Assert.False(vm.ShowOverdueHint);
+    }
+
+    /// <summary>概览条新增「本月」：数字与筛选口径一致。</summary>
+    [Fact]
+    public void MonthChip_FiltersTasksDueThisMonth()
+    {
+        var now = new DateTime(2026, 11, 5, 10, 0, 0, DateTimeKind.Local);
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "本月到期",
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(now.Date.AddDays(10).AddHours(18))
+        });
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "下月到期",
+            DueAt = Core.Time.LocalTime.ToLocalDateTime(now.Date.AddDays(40).AddHours(18))
+        });
+
+        var vm = CreateVm();
+        var month = vm.OverviewChips.Single(c => c.Key == "month");
+        Assert.Equal(1, month.Count);
+
+        month.SelectCommand.Execute(null);
+
+        Assert.Equal(BoardTimeScope.Month, vm.TimeScope);
+        Assert.True(month.IsSelected);
+        Assert.Equal(
+            ["本月到期"],
+            vm.Columns.SelectMany(c => c.Cards).Select(c => c.Title).ToArray());
     }
 }

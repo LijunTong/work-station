@@ -16,7 +16,7 @@ namespace WorkStation.App.ViewModels;
 /// 分组口径全部来自 Core 的 TaskGrouping，页面不自己算 —— Electron 版把 groupOf
 /// 塞在组件里，周日边界算错过一次，且没有任何测试能发现。
 /// </summary>
-public partial class TasksViewModel : ObservableObject
+public partial class TasksViewModel : ObservableObject, IDeleteConfirmation, IEditorDialog
 {
     private readonly WorkStationService _service;
     private readonly Action<string, bool> _toast;
@@ -37,15 +37,15 @@ public partial class TasksViewModel : ObservableObject
 
         StatusFilters =
         [
-            new StatusFilter("all", "全部", null, f => SelectedStatusFilter = f),
-            new StatusFilter("todo", "待办", TaskStatus.Todo, f => SelectedStatusFilter = f),
-            new StatusFilter("doing", "进行中", TaskStatus.Doing, f => SelectedStatusFilter = f),
-            new StatusFilter("blocked", "已阻塞", TaskStatus.Blocked, f => SelectedStatusFilter = f),
-            new StatusFilter("done", "已完成", TaskStatus.Done, f => SelectedStatusFilter = f),
-            new StatusFilter("canceled", "已取消", TaskStatus.Canceled, f => SelectedStatusFilter = f)
+            new StatusFilter("all", "全部", null, this),
+            new StatusFilter("todo", "待办", TaskStatus.Todo, this),
+            new StatusFilter("doing", "进行中", TaskStatus.Doing, this),
+            new StatusFilter("blocked", "已阻塞", TaskStatus.Blocked, this),
+            new StatusFilter("done", "已完成", TaskStatus.Done, this),
+            new StatusFilter("canceled", "已取消", TaskStatus.Canceled, this)
         ];
-        _selectedStatusFilter = StatusFilters[0];
-        StatusFilters[0].IsSelected = true;
+        // 初始选中「待办」：进任务页先看手头要做的。走属性 setter 触发 OnSelectedStatusFilterChanged 同步 IsSelected，避免直接碰生成字段
+        SelectedStatusFilter = StatusFilters.Single(f => f.Key == "todo");
     }
 
     public ObservableCollection<TaskGroupViewModel> Groups { get; } = [];
@@ -79,6 +79,12 @@ public partial class TasksViewModel : ObservableObject
     private TaskRowViewModel? _pendingDelete;
 
     public bool IsDeleteConfirmOpen => PendingDelete is not null;
+    string IDeleteConfirmation.DeleteTargetName => PendingDelete?.Title ?? string.Empty;
+    System.Windows.Input.ICommand IDeleteConfirmation.Cancel => CancelDeleteCommand;
+    System.Windows.Input.ICommand IDeleteConfirmation.Confirm => ConfirmDeleteCommand;
+    object? IEditorDialog.Form => Form;
+    string IEditorDialog.DialogTemplateKey => "TaskFormTemplate";
+    void IEditorDialog.DismissForm() => CloseForm();
 
     public bool HasTasks => Groups.Count > 0;
 
@@ -95,6 +101,19 @@ public partial class TasksViewModel : ObservableObject
 
         Reload();
     }
+
+    /// <summary>
+    /// 由 StatusFilter 的 IsChecked 双向绑定触发：统一协调「单选 + 重新取数」。
+    /// 通过属性直接置位（_selectedStatusFilter）以避开 OnSelectedStatusFilterChanged 的重复刷新。
+    /// </summary>
+    /// <summary>
+    /// 由 StatusFilter 的 IsChecked 双向绑定触发：统一协调「单选 + 重新取数」。
+    /// 走 SelectedStatusFilter 属性，复用 OnSelectedStatusFilterChanged 里的单选同步与刷新。
+    /// </summary>
+    internal void SelectStatusFilter(StatusFilter filter) => SelectedStatusFilter = filter;
+
+    /// <summary>该筛选项是否为当前选中的那一个。</summary>
+    internal bool IsCurrentFilter(StatusFilter filter) => ReferenceEquals(SelectedStatusFilter, filter);
 
     partial void OnSelectedProjectChanged(ProjectOption? value)
     {
@@ -199,7 +218,9 @@ public partial class TasksViewModel : ObservableObject
             desired.Add(new ProjectOption(
                 project.Id,
                 archived ? $"{project.Name}（已归档）" : project.Name,
-                archived));
+                archived,
+                project.StartDate,
+                project.DueDate));
         }
 
         // 原地同步而不是 Clear()+重建：清空会让 ComboBox 把 SelectedItem 先置空，
@@ -237,18 +258,18 @@ public partial class TasksViewModel : ObservableObject
             .OrderByDescending(r => r.Task.CompletedAt ?? r.Task.UpdatedAt)
             .ToList();
 
+        // 组内统一口径：优先级在前，同优先级再按逾期、截止时间。
+        // 「无期限」组没有截止时间，排序自动落到创建时间上。
+        var comparer = TaskOrdering.OpenTaskComparer(now);
+        var ordered = open.OrderBy(r => r.Task, comparer).ToList();
+
         Groups.Clear();
 
-        AddGroup("today", "今日", open.Where(r => r.Group == Core.TaskGroup.Today)
-            .OrderBy(r => r.Task.DueAt, StringComparer.Ordinal));
-        AddGroup("overdue", "逾期", open.Where(r => r.Group == Core.TaskGroup.Overdue)
-            .OrderBy(r => r.Task.DueAt, StringComparer.Ordinal));
-        AddGroup("week", "本周", open.Where(r => r.Group == Core.TaskGroup.Week)
-            .OrderBy(r => r.Task.DueAt, StringComparer.Ordinal));
-        AddGroup("later", "以后", open.Where(r => r.Group == Core.TaskGroup.Later)
-            .OrderBy(r => r.Task.DueAt, StringComparer.Ordinal));
-        AddGroup("someday", "无期限", open.Where(r => r.Group == Core.TaskGroup.Someday)
-            .OrderBy(r => r.Task.CreatedAt, StringComparer.Ordinal));
+        AddGroup("today", "今日", ordered.Where(r => r.Group == Core.TaskGroup.Today));
+        AddGroup("overdue", "逾期", ordered.Where(r => r.Group == Core.TaskGroup.Overdue));
+        AddGroup("week", "本周", ordered.Where(r => r.Group == Core.TaskGroup.Week));
+        AddGroup("later", "以后", ordered.Where(r => r.Group == Core.TaskGroup.Later));
+        AddGroup("someday", "无期限", ordered.Where(r => r.Group == Core.TaskGroup.Someday));
         AddGroup("finished", "已完结", finished);
     }
 
@@ -392,15 +413,21 @@ public partial class TasksViewModel : ObservableObject
 /// <summary>
 /// 状态筛选项。做成对象而不是 record：胶囊要直接绑「选中态」和「点击命令」，
 /// 否则得在 XAML 里塞比较转换器，还得再绕回父 DataContext 才能发命令。
+///
+/// 选中态交给真正的 ToggleButton 控件表达：IsChecked 双向绑 IsSelected，
+/// 单选由 ViewModel 协调（保持恰好一个选中，且不能把唯一选中的那个取消掉）。
 /// </summary>
 public sealed partial class StatusFilter : ObservableObject
 {
-    public StatusFilter(string key, string label, TaskStatus? status, Action<StatusFilter> select)
+    private readonly TasksViewModel _owner;
+
+    public StatusFilter(string key, string label, TaskStatus? status, TasksViewModel owner)
     {
         Key = key;
         Label = label;
         Status = status;
-        SelectCommand = new RelayCommand(() => select(this));
+        _owner = owner;
+        SelectCommand = new RelayCommand(() => _owner.SelectStatusFilter(this));
     }
 
     public string Key { get; }
@@ -413,6 +440,20 @@ public sealed partial class StatusFilter : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
+
+    partial void OnIsSelectedChanged(bool value)
+    {
+        // 点中某一项：由 ViewModel 统一协调单选 + 重新取数
+        if (value)
+        {
+            _owner.SelectStatusFilter(this);
+        }
+        else if (_owner.IsCurrentFilter(this))
+        {
+            // 试图取消「当前唯一选中的项」：ToggleButton 不允许，复位回去
+            IsSelected = true;
+        }
+    }
 }
 
 public partial class TaskGroupViewModel : ObservableObject
@@ -448,6 +489,11 @@ public partial class TaskGroupViewModel : ObservableObject
 
     /// <summary>逾期组用告警色标题；其余组保持中性，避免整页都在喊。</summary>
     public bool IsUrgent => Key == "overdue";
+
+    /// <summary>组标题色。样式层已删，颜色由视图直接绑这里（逾期红、其余低对比文本）。</summary>
+    public IBrush TitleBrush => IsUrgent
+        ? ThemeBrushes.Get("SukiDangerColor")
+        : ThemeBrushes.Get("SukiLowText");
 
     partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ArrowGlyph));
 
@@ -501,8 +547,20 @@ public sealed partial class TaskRowViewModel : ObservableObject
 
     public bool HasDue => !string.IsNullOrEmpty(Task.DueAt);
 
+    /// <summary>有没有开始时间（任务有起止两头的项目任务会带上）。</summary>
+    public bool HasStart => !string.IsNullOrEmpty(Task.StartAt);
+
+    /// <summary>开始日期（只到日，完整时刻在编辑弹窗里看）。</summary>
+    public string StartDateText =>
+        Task.StartAt is { Length: >= 10 } value ? value[..10] : string.Empty;
+
     /// <summary>逾期时只显示红色那一份，避免同一行出现两个相同时间。</summary>
     public bool ShowDueNormal => HasDue && !IsOverdue;
+
+    /// <summary>截止时间文字色：逾期拉红，平时用弱化文本。</summary>
+    public IBrush DueBrush => IsOverdue
+        ? ThemeBrushes.Get("SukiDangerColor")
+        : ThemeBrushes.Get("SukiMuteText");
 
     public string StatusText => Task.Status switch
     {
@@ -523,9 +581,9 @@ public sealed partial class TaskRowViewModel : ObservableObject
     /// <summary>优先级色条。中间调，浅/深两套主题下都能分辨。</summary>
     public IBrush PriorityBrush => Task.Priority switch
     {
-        Priority.High => Brush.Parse("#D9534F"),
-        Priority.Medium => Brush.Parse("#D9932B"),
-        Priority.Low => Brush.Parse("#8A94A6"),
+        Priority.High => ThemeBrushes.Get("SukiDangerColor"),
+        Priority.Medium => ThemeBrushes.Get("SukiWarningColor"),
+        Priority.Low => ThemeBrushes.Get("SukiMuteText"),
         _ => Brushes.Transparent
     };
 
@@ -565,6 +623,8 @@ public sealed partial class TaskRowViewModel : ObservableObject
             };
             if (priority is not null) parts.Add(priority);
 
+            if (HasStart) parts.Add($"始于 {StartDateText}");
+
             if (IsFinished) parts.Add(StatusText);
 
             return string.Join(" · ", parts);
@@ -584,7 +644,7 @@ public sealed partial class TaskRowViewModel : ObservableObject
 }
 
 /// <summary>新建/编辑任务表单。</summary>
-public partial class TaskFormViewModel : ObservableObject
+public partial class TaskFormViewModel : ObservableObject, IEditorForm
 {
     private readonly Action _save;
     private readonly Action _cancel;
@@ -608,6 +668,14 @@ public partial class TaskFormViewModel : ObservableObject
     [ObservableProperty]
     private int _priorityIndex;
 
+    /// <summary>开始日期。控件是 CalendarDatePicker，null 表示不设开始时间。</summary>
+    [ObservableProperty]
+    private DateTime? _startDate;
+
+    /// <summary>开始时刻。控件是 TimePicker；只选日期时默认落到 00:00。</summary>
+    [ObservableProperty]
+    private TimeSpan? _startTime;
+
     /// <summary>截止日期。控件是 CalendarDatePicker，null 表示不设截止时间。</summary>
     [ObservableProperty]
     private DateTime? _dueDate;
@@ -617,6 +685,23 @@ public partial class TaskFormViewModel : ObservableObject
     private TimeSpan? _dueTime;
 
     public bool HasDueDate => DueDate is not null;
+
+    public bool HasStartDate => StartDate is not null;
+
+    /// <summary>
+    /// 用户是否手动动过时间。动过之后就不再被项目的默认起止覆盖 ——
+    /// 静默改掉用户刚填的值，比不给默认值更糟。
+    /// </summary>
+    private bool _datesTouched;
+
+    /// <summary>正在套用项目默认起止：此时的赋值不算「用户手动改」。</summary>
+    private bool _applyingDefaults;
+
+    /// <summary>
+    /// 表单还在初始化（工厂方法正在赋初值）。初始化期间的赋值一律不算用户操作，
+    /// 否则「回填任务自己的时间」会被误判成「用户改过」，默认值就再也套不上。
+    /// </summary>
+    private bool _initializing = true;
 
     /// <summary>提前提醒的预设项。0 表示不提醒（与库里 remind_before = 0 语义一致）。</summary>
     public static IReadOnlyList<ReminderLeadOption> LeadPresets { get; } =
@@ -658,8 +743,42 @@ public partial class TaskFormViewModel : ObservableObject
 
     partial void OnStatusIndexChanged(int value) => OnPropertyChanged(nameof(IsBlocked));
 
+    partial void OnStartDateChanged(DateTime? value)
+    {
+        if (_initializing || _applyingDefaults)
+        {
+            OnPropertyChanged(nameof(HasStartDate));
+            return;
+        }
+
+        _datesTouched = true;
+
+        // 只挑日期时补一个当天开始的默认时刻，并直接写进时间选择器，
+        // 让默认值可见可改，而不是藏在保存逻辑里。
+        if (value is not null && StartTime is null)
+        {
+            StartTime = DefaultStartTime;
+        }
+
+        OnPropertyChanged(nameof(HasStartDate));
+    }
+
+    partial void OnStartTimeChanged(TimeSpan? value)
+    {
+        if (_initializing || _applyingDefaults) return;
+        _datesTouched = true;
+    }
+
     partial void OnDueDateChanged(DateTime? value)
     {
+        if (_initializing || _applyingDefaults)
+        {
+            OnPropertyChanged(nameof(HasDueDate));
+            return;
+        }
+
+        _datesTouched = true;
+
         // 只挑日期时补一个下班前的默认时刻，并直接写进时间选择器，
         // 让默认值可见可改，而不是藏在保存逻辑里。
         if (value is not null && DueTime is null)
@@ -670,7 +789,22 @@ public partial class TaskFormViewModel : ObservableObject
         OnPropertyChanged(nameof(HasDueDate));
     }
 
+    partial void OnDueTimeChanged(TimeSpan? value)
+    {
+        if (_initializing || _applyingDefaults) return;
+        _datesTouched = true;
+    }
+
+    /// <summary>换项目时，任务的起止默认跟着项目走。</summary>
+    partial void OnProjectIndexChanged(int value)
+    {
+        if (_initializing || _applyingDefaults) return;
+        ApplyProjectDateDefaults();
+    }
+
     private static readonly TimeSpan DefaultDueTime = new(18, 0, 0);
+
+    private static readonly TimeSpan DefaultStartTime = TimeSpan.Zero;
 
     [RelayCommand]
     private void ClearDue()
@@ -679,14 +813,27 @@ public partial class TaskFormViewModel : ObservableObject
         DueTime = null;
     }
 
+    /// <summary>清掉开始时间（与「清除截止时间」对称）。</summary>
+    [RelayCommand]
+    private void ClearStart()
+    {
+        StartDate = null;
+        StartTime = null;
+    }
+
     private TaskFormViewModel(Action save, Action cancel)
     {
         _save = save;
         _cancel = cancel;
 
         foreach (var preset in LeadPresets) LeadOptions.Add(preset);
-        _selectedLead = LeadOptions[0];
+        // 默认「结束前一小时」提醒：与服务层的默认值一致（提前量 0 是显式选择，不受影响）
+        _selectedLead = LeadOptions.FirstOrDefault(o => o.Minutes == Core.Services.WorkStationService.DefaultRemindBeforeMinutes)
+                       ?? LeadOptions[0];
     }
+
+    System.Windows.Input.ICommand IEditorForm.Save => SaveCommand;
+    System.Windows.Input.ICommand IEditorForm.Cancel => CancelCommand;
 
     [RelayCommand]
     private void Save() => _save();
@@ -697,12 +844,24 @@ public partial class TaskFormViewModel : ObservableObject
     public static TaskFormViewModel ForCreate(
         IReadOnlyList<ProjectOption> choices,
         Action save,
-        Action cancel) =>
-        new(save, cancel)
+        Action cancel)
+    {
+        // 新建任务默认落在「今天」：截止今天 18:00（过了 18 点顺延 23:59）。
+        // 口径与顶部快速添加共用 <see cref="TaskDefaults"/>，两条入口不会给出不同默认值。
+        var now = DateTime.Now;
+        var defaultDue = TaskDefaults.DueTimeFor(now);
+
+        var form = new TaskFormViewModel(save, cancel)
         {
             ProjectChoices = FormChoices(choices),
-            ProjectIndex = 0
+            ProjectIndex = 0,
+            DueDate = now.Date,
+            DueTime = defaultDue
         };
+
+        form._initializing = false;
+        return form;
+    }
 
     public static TaskFormViewModel ForEdit(
         TaskItem task,
@@ -720,6 +879,7 @@ public partial class TaskFormViewModel : ObservableObject
         }
 
         var hasDue = TryParseStoredDueAt(task.DueAt, out var due);
+        var hasStart = TryParseStoredDueAt(task.StartAt, out var start);
 
         var form = new TaskFormViewModel(save, cancel)
         {
@@ -743,6 +903,8 @@ public partial class TaskFormViewModel : ObservableObject
                 Priority.Medium => 2,
                 _ => 3
             },
+            StartDate = hasStart ? start.Date : null,
+            StartTime = hasStart ? start.TimeOfDay : null,
             DueDate = hasDue ? due.Date : null,
             DueTime = hasDue ? due.TimeOfDay : null,
             Estimate = task.Estimate?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty,
@@ -750,10 +912,60 @@ public partial class TaskFormViewModel : ObservableObject
             BlockedReason = task.BlockedReason ?? string.Empty
         };
 
+        // 老任务没有开始时间：按所属项目的区间补上，用户不用自己再填一遍
+        form._initializing = false;
+        if (hasStart)
+        {
+            // 任务自己已经有起止，别让换项目时把它冲掉
+            form._datesTouched = true;
+        }
+        else
+        {
+            form.ApplyProjectDateDefaults();
+        }
+
         // 下拉项依赖实例上的集合，只能在对象建好之后再认领（历史值不在预设里会补一条）
         form.SelectedLead = form.FindLeadOption(task.RemindBefore);
         return form;
     }
+
+    /// <summary>
+    /// 把所选项目的起止日期套到任务上：项目内的任务默认落在项目区间里。
+    ///
+    /// 用户手动改过时间就不再覆盖 —— 静默改掉用户刚填的值比不给默认值更糟。
+    /// </summary>
+    private void ApplyProjectDateDefaults()
+    {
+        if (_datesTouched) return;
+
+        var option = SelectedProjectOption;
+        if (option is null) return;
+
+        if (!TryParseProjectDate(option.StartDate, out var start)) return;
+        if (!TryParseProjectDate(option.DueDate, out var due)) return;
+
+        _applyingDefaults = true;
+        try
+        {
+            StartDate = start;
+            StartTime = DefaultStartTime;
+            DueDate = due;
+            DueTime = DefaultDueTime;
+        }
+        finally
+        {
+            _applyingDefaults = false;
+        }
+    }
+
+    /// <summary>项目日期存的是本地日历日 yyyy-MM-dd，解析不了就当没设。</summary>
+    private static bool TryParseProjectDate(string? value, out DateTime parsed) =>
+        DateTime.TryParseExact(
+            value?.Trim(),
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out parsed);
 
     public bool Validate()
     {
@@ -766,6 +978,18 @@ public partial class TaskFormViewModel : ObservableObject
         if (DueDate is null && DueTime is not null)
         {
             Error = "选了时刻还要选日期，或者用「清除」去掉截止时间";
+            return false;
+        }
+
+        if (StartDate is null && StartTime is not null)
+        {
+            Error = "选了开始时刻还要选开始日期，或者用「清除」去掉开始时间";
+            return false;
+        }
+
+        if (StartDate is { } start && DueDate is { } due && start.Date > due.Date)
+        {
+            Error = "截止时间不能早于开始时间";
             return false;
         }
 
@@ -788,6 +1012,7 @@ public partial class TaskFormViewModel : ObservableObject
             ProjectId = SelectedProjectId,
             Status = ToStatus(StatusIndex),
             Priority = ToPriority(PriorityIndex),
+            StartAt = BuildStartAt(),
             DueAt = BuildDueAt(),
             RemindBefore = SelectedLead?.Minutes ?? 0,
             Estimate = ParseNullableDouble(Estimate),
@@ -805,6 +1030,7 @@ public partial class TaskFormViewModel : ObservableObject
             ProjectId = Optional<string?>.Some(SelectedProjectId),
             Status = Optional<TaskStatus>.Some(ToStatus(StatusIndex)),
             Priority = Optional<Priority>.Some(ToPriority(PriorityIndex)),
+            StartAt = Optional<string?>.Some(BuildStartAt()),
             DueAt = Optional<string?>.Some(BuildDueAt()),
             RemindBefore = Optional<int?>.Some(SelectedLead?.Minutes ?? 0),
             Estimate = Optional<double?>.Some(ParseNullableDouble(Estimate)),
@@ -815,6 +1041,10 @@ public partial class TaskFormViewModel : ObservableObject
 
     private string? SelectedProjectId =>
         ProjectIndex >= 0 && ProjectIndex < ProjectChoices.Count ? ProjectChoices[ProjectIndex].Id : null;
+
+    /// <summary>当前选中的项目选项（独立任务时是 null Id 的那一项）。</summary>
+    private ProjectOption? SelectedProjectOption =>
+        ProjectIndex >= 0 && ProjectIndex < ProjectChoices.Count ? ProjectChoices[ProjectIndex] : null;
 
     /// <summary>
     /// 表单里的项目选项 = 「独立任务」+ 未归档的真实项目。
@@ -849,6 +1079,15 @@ public partial class TaskFormViewModel : ObservableObject
         if (DueDate is not { } date) return null;
 
         var time = DueTime ?? DefaultDueTime;
+        return LocalTime.ToLocalDateTime(date.Date.Add(time));
+    }
+
+    /// <summary>开始时间同样合成 "yyyy-MM-ddTHH:mm"；没选日期就是没设开始时间。</summary>
+    private string? BuildStartAt()
+    {
+        if (StartDate is not { } date) return null;
+
+        var time = StartTime ?? DefaultStartTime;
         return LocalTime.ToLocalDateTime(date.Date.Add(time));
     }
 

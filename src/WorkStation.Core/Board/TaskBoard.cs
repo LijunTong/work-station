@@ -10,7 +10,8 @@ public enum BoardTimeScope
     All,
     Today,
     Overdue,
-    Week
+    Week,
+    Month
 }
 
 /// <summary>概览条上的四个数字。</summary>
@@ -23,6 +24,9 @@ public sealed record BoardOverview
     public int Blocked { get; init; }
 
     public int Week { get; init; }
+
+    /// <summary>本月内到期、且尚未到点的任务数。</summary>
+    public int Month { get; init; }
 }
 
 /// <summary>
@@ -88,6 +92,10 @@ public static class TaskBoard
         if (task.Status == TaskStatus.Done) return true;
         if (!IsOpen(task)) return false;
 
+        // 「本月」不是 TaskGrouping 里的分组（任务页的分组是「以后」，不是「本月」），
+        // 这里单独判定，口径与概览条的计数一致。
+        if (scope == BoardTimeScope.Month) return IsDueWithinMonth(task, now);
+
         var target = scope switch
         {
             BoardTimeScope.Today => Core.TaskGroup.Today,
@@ -96,6 +104,25 @@ public static class TaskBoard
         };
 
         return TaskGrouping.Group(task, now) == target;
+    }
+
+    /// <summary>
+    /// 到期日在本月内、且尚未到点。
+    ///
+    /// 与「本周」同一套口径：只算还没到点的那些 —— 逾期的事已经在「逾期」里，
+    /// 再在「本月」里数一遍会让两个数字互相打架。
+    /// </summary>
+    public static bool IsDueWithinMonth(TaskItem task, DateTime now)
+    {
+        var due = task.DueAt;
+        if (string.IsNullOrEmpty(due)) return false;
+
+        var local = LocalTime.AsLocal(now);
+        // 已到点的不算「本月还没到期」
+        if (string.CompareOrdinal(due, LocalTime.ToLocalDateTime(local)) < 0) return false;
+
+        var month = LocalTime.ToLocalDate(local).Substring(0, 7);
+        return due.Length >= 10 && due.Substring(0, 10).StartsWith(month, StringComparison.Ordinal);
     }
 
     /// <summary>概览条计数。口径与 <see cref="MatchesTimeScope"/> 一致，否则「点进去数量对不上」。</summary>
@@ -108,7 +135,8 @@ public static class TaskBoard
             Today = open.Count(t => TaskGrouping.Group(t, now) == Core.TaskGroup.Today),
             Overdue = open.Count(t => TaskGrouping.Group(t, now) == Core.TaskGroup.Overdue),
             Blocked = tasks.Count(t => t.Status == TaskStatus.Blocked),
-            Week = open.Count(t => TaskGrouping.Group(t, now) == Core.TaskGroup.Week)
+            Week = open.Count(t => TaskGrouping.Group(t, now) == Core.TaskGroup.Week),
+            Month = open.Count(t => IsDueWithinMonth(t, now))
         };
     }
 

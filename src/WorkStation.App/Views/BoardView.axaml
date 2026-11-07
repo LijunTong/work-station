@@ -2,116 +2,184 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WorkStation.App.ViewModels"
              xmlns:controls="using:WorkStation.App.Controls"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
              x:Class="WorkStation.App.Views.BoardView"
              x:DataType="vm:BoardViewModel"
              x:CompileBindings="True">
 
+  <!-- 概览条 / 优先级筛选：真正的 ToggleButton。
+       卡片外观（圆角、描边、底色）统一走 App.axaml 的全局样式。 -->
+  <UserControl.Styles>
+    <Style Selector="ToggleButton.chip">
+      <Setter Property="Padding" Value="10,5" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SukiBorderBrush}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleButton.chip:checked">
+      <Setter Property="BorderBrush" Value="{DynamicResource SukiPrimaryColor}" />
+      <!-- 选中态靠主色描边 + 字重表示，文字仍用正文色。
+           之前文字也是主色，深色主题下就是深蓝压深蓝，几乎看不清。 -->
+      <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Background" Value="{DynamicResource SukiControlTouchBackground}" />
+    </Style>
+    <Style Selector="ToggleButton.chip:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SukiControlTouchBackground}" />
+    </Style>
+  </UserControl.Styles>
+
   <Grid RowDefinitions="Auto,Auto,Auto,*">
 
-    <!-- 概览条：数字本身就是筛选入口，右侧切任务/项目看板 -->
-    <Grid Grid.Row="0" Margin="28,0,28,14" ColumnDefinitions="Auto,*,Auto">
-      <ItemsControl ItemsSource="{Binding OverviewChips}" VerticalAlignment="Center">
-        <ItemsControl.ItemsPanel>
-          <ItemsPanelTemplate>
-            <StackPanel Orientation="Horizontal" Spacing="8" />
-          </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:BoardChip">
-            <Button Classes="stat"
-                    Classes.active="{Binding IsSelected}"
-                    Command="{Binding SelectCommand}">
-              <StackPanel Orientation="Horizontal" Spacing="7">
-                <TextBlock Text="{Binding CountText}"
-                           FontSize="15"
-                           FontWeight="SemiBold"
-                           Foreground="{Binding CountBrush}"
-                           VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Label}"
-                           FontSize="{DynamicResource FontXs}"
-                           Foreground="{DynamicResource TextDimBrush}"
-                           VerticalAlignment="Center" />
-              </StackPanel>
-            </Button>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+    <!-- 概览 + 筛选收进一张工具栏卡：原来的两行控件直接浮在背景上，
+         页面头、概览、筛选三层高度叠在一起，看板本身反而被压到下面。
+         下边距 14：和页面头、和下面的看板列都要留出缝。 -->
+    <Border Grid.Row="0"
+            Classes="card"
+            Margin="{DynamicResource PageGutterBelowHeader}"
+            Padding="10,8">
+      <StackPanel Spacing="8">
 
-      <Border Grid.Column="2" Classes="segment" VerticalAlignment="Center">
-        <StackPanel Orientation="Horizontal">
-          <Button Content="任务看板"
-                  Classes="seg"
-                  Classes.active="{Binding IsTaskBoard}"
-                  Command="{Binding SwitchBoardCommand}"
-                  CommandParameter="Tasks" />
-          <Button Content="项目看板"
-                  Classes="seg"
-                  Classes.active="{Binding IsProjectBoard}"
-                  Command="{Binding SwitchBoardCommand}"
-                  CommandParameter="Projects" />
-        </StackPanel>
-      </Border>
-    </Grid>
+        <!-- 概览条：数字本身就是筛选入口，右侧切任务/项目看板 -->
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <ItemsControl ItemsSource="{Binding OverviewChips}" VerticalAlignment="Center">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="8" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:BoardChip">
+                <ToggleButton Classes="chip"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                              Command="{Binding SelectCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <TextBlock Text="{Binding CountText}"
+                               FontSize="{DynamicResource FontSizeSubhead}"
+                               FontWeight="SemiBold"
+                               Foreground="{Binding CountBrush}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Label}"
+                               Foreground="{DynamicResource SukiMuteText}"
+                               VerticalAlignment="Center" />
+                  </StackPanel>
+                </ToggleButton>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
 
-    <!-- 筛选行 -->
-    <Grid Grid.Row="1"
-          Margin="28,0,28,12"
-          ColumnDefinitions="Auto,Auto,Auto,*,Auto"
-          ColumnSpacing="10">
-      <ComboBox Width="150"
-                ItemsSource="{Binding ProjectOptions}"
-                SelectedItem="{Binding SelectedProject, Mode=TwoWay}">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:ProjectOption">
-            <TextBlock Text="{Binding Name}" />
-          </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
+          <Border Grid.Column="2" Classes="segment" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal">
+              <Button Content="任务看板"
+                      Classes="seg Basic"
+                      Classes.Outlined="{Binding IsTaskBoard}"
+                      Command="{Binding SwitchBoardCommand}"
+                      CommandParameter="Tasks" />
+              <Button Content="项目看板"
+                      Classes="seg Basic"
+                      Classes.Outlined="{Binding IsProjectBoard}"
+                      Command="{Binding SwitchBoardCommand}"
+                      CommandParameter="Projects" />
+            </StackPanel>
+          </Border>
+        </Grid>
 
-      <ItemsControl Grid.Column="1" ItemsSource="{Binding PriorityChips}" VerticalAlignment="Center">
-        <ItemsControl.ItemsPanel>
-          <ItemsPanelTemplate>
-            <StackPanel Orientation="Horizontal" Spacing="6" />
-          </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:BoardChip">
-            <Button Content="{Binding Label}"
-                    Classes="filter"
-                    Classes.active="{Binding IsSelected}"
-                    Command="{Binding SelectCommand}" />
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+        <!-- 筛选行 -->
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto"
+              ColumnSpacing="10">
+          <ComboBox Width="150"
+                    ItemsSource="{Binding ProjectOptions}"
+                    SelectedItem="{Binding SelectedProject, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ProjectOption">
+                <TextBlock Text="{Binding Name}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
 
-      <Button Grid.Column="4"
-              Classes="icon sm"
-              IsVisible="{Binding HasFilter}"
-              Command="{Binding ClearFiltersCommand}"
-              ToolTip.Tip="清除筛选">
-        <controls:Icon Kind="Close" Size="13" />
-      </Button>
+          <ItemsControl Grid.Column="1" ItemsSource="{Binding PriorityChips}" VerticalAlignment="Center">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:BoardChip">
+                <ToggleButton Content="{Binding Label}"
+                              Classes="chip"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                              Command="{Binding SelectCommand}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
 
-      <TextBox Grid.Column="3"
-               Width="200"
-               HorizontalAlignment="Right"
-               Tag="SearchBox"
-               Text="{Binding SearchText, Mode=TwoWay}"
-               PlaceholderText="搜索标题或备注…" />
-    </Grid>
+          <Button Grid.Column="4"
+                  Classes="icon sm Basic"
+                  IsVisible="{Binding HasFilter}"
+                  Command="{Binding ClearFiltersCommand}"
+                  ToolTip.Tip="清除筛选">
+            <PathIcon Data="{x:Static controls:AppIcons.Close}" Width="18" Height="18" />
+          </Button>
 
-    <Border Grid.Row="2"
-            Classes="error-bar"
-            IsVisible="{Binding HasError}"
-            Margin="28,0,28,10">
-      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+          <TextBox Grid.Column="3"
+                   Width="200"
+                   HorizontalAlignment="Right"
+                   Tag="SearchBox"
+                   Text="{Binding SearchText, Mode=TwoWay}"
+                   PlaceholderText="搜索标题或备注…" />
+        </Grid>
+      </StackPanel>
     </Border>
 
-    <!-- 任务看板 -->
-    <ItemsControl Grid.Row="3"
+    <!--
+      逾期提示条：看板常驻一条「有几条逾期」，点一下切到逾期口径。
+
+      为什么不给逾期单开一列：看板的列是**工作流状态**（待办/进行中/已阻塞/已完成），
+      拖进列里 = 把任务改成那个状态。逾期是时间属性，不是状态：
+      同一张卡会同时出现在「待办」和「已逾期」里（数字对不上），
+      而且「把任务拖成逾期」根本定义不出动作。所以逾期做成一个**视图**，不做一个列。
+    -->
+    <Border Grid.Row="1"
+            Classes="card"
+            Margin="{DynamicResource PageGutterBelowHeader}"
+            Padding="14,10"
+            Background="{DynamicResource SurfaceAttention}"
+            IsVisible="{Binding ShowOverdueHint}">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+        <PathIcon Data="{x:Static controls:AppIcons.Alert}"
+                  Width="16" Height="16"
+                  Foreground="{DynamicResource SukiDangerColor}"
+                  VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1"
+                   Text="{Binding OverdueHintText}"
+                   FontSize="{DynamicResource FontSizeCaption}"
+                   Foreground="{DynamicResource SukiText}"
+                   VerticalAlignment="Center" />
+        <Button Grid.Column="2"
+                Content="只看逾期"
+                Classes="Basic"
+                Command="{Binding ShowOverdueOnlyCommand}"
+                VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <suki:InfoBar Grid.Row="2"
+            IsVisible="{Binding HasError}"
+            Margin="{DynamicResource PageGutter}" Message="{Binding Error}" Severity="Error" IsClosable="False" />
+
+    <!-- 任务看板：列设最小宽度，窗体变窄时横向滚动，避免列被挤窄导致卡片内容看不全 -->
+    <ScrollViewer Grid.Row="3"
                   IsVisible="{Binding IsTaskBoard}"
-                  Margin="{DynamicResource BoardPadding}"
-                  ItemsSource="{Binding Columns}">
+                  Margin="{DynamicResource PageGutter}"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Disabled">
+      <ItemsControl Width="{Binding $parent[ScrollViewer].Bounds.Width}"
+                    MinWidth="1000"
+                    ItemsSource="{Binding Columns}">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
             <UniformGrid Columns="4" />
@@ -119,61 +187,95 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:BoardColumnViewModel">
-            <Border Classes="column"
+            <!-- 列不再各自铺一层状态底色：四块粉/红/绿的半透明底叠在渐变背景上
+                 会互相染成一团，整页看着脏。改用统一的玻璃列 + 一条 3px 状态色带，
+                 颜色只出现在"标识"上，不占面积。 -->
+            <suki:GlassCard Classes="card column"
                     Classes.droptarget="{Binding IsDragOver}"
                     Margin="0,0,12,0"
                     DragDrop.AllowDrop="True"
                     DragDrop.DragOver="OnColumnDragOver"
                     DragDrop.DragLeave="OnColumnDragLeave"
                     DragDrop.Drop="OnColumnDrop">
-              <Grid RowDefinitions="Auto,*" RowSpacing="8">
+              <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
 
-                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="2,2,2,0">
+                <!-- 状态色带：四种进度列一眼区分，颜色来自 Suki 语义资源 -->
+                <Border Grid.Row="0" Height="3" CornerRadius="2"
+                        HorizontalAlignment="Left" Width="28"
+                        Background="{Binding StatusBrush}" />
+
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="2,2,2,0">
                   <TextBlock Text="{Binding Title}"
-                             FontSize="{DynamicResource FontSm}"
                              FontWeight="SemiBold"
-                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             Foreground="{DynamicResource SukiText}"
                              VerticalAlignment="Center" />
-                  <Border Grid.Column="1" Classes="chip" Margin="7,0,0,0" HorizontalAlignment="Left">
-                    <TextBlock Text="{Binding CountText}" />
+                  <Border Grid.Column="1"
+                          Margin="7,0,0,0"
+                          Padding="7,2"
+                          CornerRadius="4"
+                          Background="{DynamicResource SukiCardBackground}"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding CountText}"
+                               FontSize="{DynamicResource FontSizeMicro}"
+                               Foreground="{DynamicResource SukiMuteText}" />
                   </Border>
                   <Button Grid.Column="2"
-                          Classes="icon sm"
+                          Classes="icon sm Basic"
                           Width="20"
                           Height="20"
+                          Padding="0"
                           IsVisible="{Binding IsDone}"
                           Command="{Binding ToggleDoneWindowCommand}"
                           ToolTip.Tip="{Binding DoneWindowLabel}">
-                    <controls:Icon Kind="Clock" Size="12" />
+                    <PathIcon Data="{x:Static controls:AppIcons.Clock}" Width="16" Height="16" />
                   </Button>
                 </Grid>
 
-                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
                   <StackPanel>
                     <ItemsControl ItemsSource="{Binding Cards}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:BoardTaskCardViewModel">
-                          <Border Classes="board-card"
+                          <suki:GlassCard Classes="card board-card"
                                   Margin="0,0,0,8"
                                   Cursor="Hand"
                                   DoubleTapped="OnTaskCardDoubleTapped"
                                   PointerPressed="OnTaskCardPressed">
                             <!-- 双击之外再给一个右键入口：拖拽会话有可能吞掉双击手势 -->
-                            <Border.ContextMenu>
+                            <suki:GlassCard.ContextMenu>
                               <ContextMenu DataContext="{Binding}">
                                 <MenuItem Header="编辑任务" Click="OnTaskCardEditMenu" />
                               </ContextMenu>
-                            </Border.ContextMenu>
-                            <Grid ColumnDefinitions="3,*" ColumnSpacing="9">
-                              <Border Classes="priority-bar"
-                                      Background="{Binding PriorityBrush}"
-                                      IsVisible="{Binding HasPriority}" />
+                            </suki:GlassCard.ContextMenu>
+                            <Grid ColumnDefinitions="10,*" ColumnSpacing="6">
+                              <Ellipse Width="6" Height="6"
+                                       Fill="{Binding PriorityBrush}"
+                                       IsVisible="{Binding HasPriority}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Top"
+                                       Margin="0,6,0,0" />
                               <StackPanel Grid.Column="1" Spacing="5">
-                                <TextBlock Text="{Binding Title}"
-                                           FontSize="{DynamicResource FontBody}"
-                                           TextWrapping="Wrap"
-                                           MaxLines="2"
-                                           TextTrimming="CharacterEllipsis" />
+                                <!-- 标题行右侧挂一枚「逾期」标记：散在四列里的逾期任务
+                                     靠底部那行红字很难扫到，标题边上才看得见。 -->
+                                <Grid ColumnDefinitions="*,Auto">
+                                  <TextBlock Text="{Binding Title}"
+                                             TextWrapping="Wrap"
+                                             MaxLines="2"
+                                             TextTrimming="CharacterEllipsis" />
+                                  <Border Grid.Column="1"
+                                          Margin="6,0,0,0"
+                                          Padding="5,1"
+                                          CornerRadius="4"
+                                          VerticalAlignment="Top"
+                                          IsVisible="{Binding IsOverdue}"
+                                          Background="{DynamicResource SurfaceDanger}">
+                                    <TextBlock Text="逾期"
+                                               FontSize="{DynamicResource FontSizeMicro}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SukiDangerColor}" />
+                                  </Border>
+                                </Grid>
                                 <StackPanel Orientation="Horizontal"
                                             Spacing="5"
                                             IsVisible="{Binding HasProject}">
@@ -182,47 +284,51 @@
                                            Fill="{Binding ProjectBrush}"
                                            VerticalAlignment="Center" />
                                   <TextBlock Text="{Binding ProjectName}"
-                                             FontSize="{DynamicResource FontMicro}"
-                                             Foreground="{DynamicResource TextDimBrush}"
+                                             FontSize="{DynamicResource FontSizeCaption}"
+                                             Foreground="{DynamicResource SukiMuteText}"
                                              TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding BlockedText}"
                                            IsVisible="{Binding HasBlockedReason}"
-                                           FontSize="{DynamicResource FontMicro}"
-                                           Foreground="{DynamicResource WarningBrush}"
+                                           FontSize="{DynamicResource FontSizeCaption}"
+                                           Foreground="{DynamicResource SukiWarningColor}"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding FooterText}"
                                            IsVisible="{Binding HasFooter}"
-                                           FontSize="{DynamicResource FontMicro}"
-                                           Classes.dim="{Binding !IsOverdue}"
-                                           Classes.urgent="{Binding IsOverdue}" />
+                                           FontSize="{DynamicResource FontSizeCaption}"
+                                           Foreground="{Binding FooterBrush}"
+                                           TextWrapping="Wrap" />
                               </StackPanel>
                             </Grid>
-                          </Border>
+                          </suki:GlassCard>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
                     <TextBlock Text="拖到这里"
                                IsVisible="{Binding IsEmpty}"
-                               Classes="dim"
-                               FontSize="{DynamicResource FontXs}"
+                               Foreground="{DynamicResource SukiMuteText}"
                                HorizontalAlignment="Center"
                                Margin="0,10,0,0" />
                   </StackPanel>
                 </ScrollViewer>
 
               </Grid>
-            </Border>
+            </suki:GlassCard>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
-    </ItemsControl>
+      </ItemsControl>
+    </ScrollViewer>
 
-    <!-- 项目看板 -->
-    <ItemsControl Grid.Row="3"
+    <!-- 项目看板：同上，列设最小宽度 + 横向滚动 -->
+    <ScrollViewer Grid.Row="3"
                   IsVisible="{Binding IsProjectBoard}"
-                  Margin="{DynamicResource BoardPadding}"
-                  ItemsSource="{Binding ProjectColumns}">
+                  Margin="{DynamicResource PageGutter}"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Disabled">
+      <ItemsControl Width="{Binding $parent[ScrollViewer].Bounds.Width}"
+                    MinWidth="1000"
+                    ItemsSource="{Binding ProjectColumns}">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
             <UniformGrid Columns="4" />
@@ -230,117 +336,145 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:BoardProjectColumnViewModel">
-            <Border Classes="column"
+            <suki:GlassCard Classes="card column"
                     Classes.droptarget="{Binding IsDragOver}"
                     Margin="0,0,12,0"
                     DragDrop.AllowDrop="True"
                     DragDrop.DragOver="OnColumnDragOver"
                     DragDrop.DragLeave="OnColumnDragLeave"
                     DragDrop.Drop="OnColumnDrop">
-              <Grid RowDefinitions="Auto,*" RowSpacing="8">
+              <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
 
-                <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="2,2,2,0">
+                <!-- 状态色带：四种进度列一眼区分，颜色来自 Suki 语义资源 -->
+                <Border Grid.Row="0" Height="3" CornerRadius="2"
+                        HorizontalAlignment="Left" Width="28"
+                        Background="{Binding StatusBrush}" />
+
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="2,2,2,0">
                   <TextBlock Text="{Binding Title}"
-                             FontSize="{DynamicResource FontSm}"
                              FontWeight="SemiBold"
-                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             Foreground="{DynamicResource SukiText}"
                              VerticalAlignment="Center" />
-                  <Border Grid.Column="1" Classes="chip" Margin="7,0,0,0" HorizontalAlignment="Left">
-                    <TextBlock Text="{Binding CountText}" />
+                  <Border Grid.Column="1"
+                          Margin="7,0,0,0"
+                          Padding="7,2"
+                          CornerRadius="4"
+                          Background="{DynamicResource SukiCardBackground}"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding CountText}"
+                               FontSize="{DynamicResource FontSizeMicro}"
+                               Foreground="{DynamicResource SukiMuteText}" />
                   </Border>
                 </Grid>
 
-                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
                   <StackPanel>
                     <ItemsControl ItemsSource="{Binding Cards}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:BoardProjectCardViewModel">
-                          <Border Classes="board-card"
+                          <suki:GlassCard Classes="card board-card"
                                   Margin="0,0,0,8"
                                   Cursor="Hand"
                                   PointerPressed="OnProjectCardPressed">
-                            <StackPanel Spacing="8">
+                            <Grid>
 
-                              <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Text="{Binding Name}"
-                                           FontSize="{DynamicResource FontBody}"
-                                           FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis"
-                                           VerticalAlignment="Center" />
-                                <Ellipse Grid.Column="1"
-                                         Width="7"
+                              <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+
+                              <!--
+                                标题行：色点 + 名称 + 优先级胶囊，入口箭头固定右上角。
+                                优先级原来是左边一条 3px 竖条（不贴边、无圆角，像画歪的线），
+                                现在收成一枚淡底小胶囊，和项目页保持一致。
+                              -->
+                              <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                <Ellipse Width="7"
                                          Height="7"
                                          Fill="{Binding AccentBrush}"
                                          IsVisible="{Binding HasColor}"
-                                         VerticalAlignment="Center"
-                                         Margin="6,0,0,0" />
+                                         VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding Name}"
+                                           Margin="7,0,0,0"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                                <Panel Grid.Column="2"
+                                       Margin="8,0,0,0"
+                                       IsVisible="{Binding HasPriority}"
+                                       VerticalAlignment="Center">
+                                  <Border Background="{Binding PriorityBrush}" Opacity="0.16" CornerRadius="4" />
+                                  <TextBlock Text="{Binding PriorityText, StringFormat={}{0}优先}"
+                                             Margin="6,1"
+                                             FontSize="{DynamicResource FontSizeMicro}"
+                                             FontWeight="SemiBold"
+                                             Foreground="{Binding PriorityBrush}" />
+                                </Panel>
+                                <Button Grid.Column="3"
+                                        Classes="icon Basic"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding OpenTasksCommand}"
+                                        ToolTip.Tip="查看该项目的任务列表">
+                                  <PathIcon Data="{x:Static controls:AppIcons.ArrowRight}" Width="18" Height="18" />
+                                </Button>
                               </Grid>
 
-                              <TextBlock Text="{Binding Description}"
-                                         IsVisible="{Binding HasDescription}"
-                                         FontSize="{DynamicResource FontMicro}"
-                                         Classes="dim"
-                                         MaxLines="2"
-                                         TextWrapping="Wrap"
-                                         TextTrimming="CharacterEllipsis" />
+                              <!-- 描述是辅助信息：弱化颜色、固定两行高度，同列卡片节奏才一致 -->
+                              <Border Grid.Row="1" Height="32" IsVisible="{Binding HasDescription}">
+                                <TextBlock Text="{Binding Description}"
+                                           Foreground="{DynamicResource SukiMuteText}"
+                                           MaxLines="2"
+                                           TextWrapping="Wrap"
+                                           TextTrimming="CharacterEllipsis" />
+                              </Border>
 
-                              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
-                                <Grid Width="38" Height="38">
-                                  <controls:ProgressRing Value="{Binding Progress}"
-                                                         Thickness="3.5"
-                                                         RingBrush="{Binding RingBrush}"
-                                                         TrackBrush="{DynamicResource BgSunkenBrush}" />
+                              <!-- 进度 + 统计：圆形进度条在左，统计在右（紧凑尺寸，留足宽度让统计文字读得清） -->
+                              <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <suki:CircleProgressBar Grid.Column="0"
+                                                        Width="48" Height="48"
+                                                        StrokeWidth="4"
+                                                        Value="{Binding Progress}"
+                                                        VerticalAlignment="Center">
                                   <TextBlock Text="{Binding ProgressText}"
-                                             FontSize="10"
-                                             FontWeight="SemiBold"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                                </Grid>
+                                             FontSize="{DynamicResource FontSizeCaption}"
+                                             FontWeight="Bold"
+                                             Foreground="{DynamicResource SukiLowText}" />
+                                </suki:CircleProgressBar>
                                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                                   <TextBlock Text="{Binding MetaText}"
-                                             FontSize="{DynamicResource FontMicro}"
-                                             Foreground="{DynamicResource TextSecondaryBrush}" />
-                                  <StackPanel Orientation="Horizontal" Spacing="7">
-                                    <TextBlock Text="{Binding OverdueText}"
-                                               IsVisible="{Binding HasOverdue}"
-                                               FontSize="{DynamicResource FontMicro}"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource DangerBrush}" />
-                                    <TextBlock Text="{Binding DueText}"
-                                               FontSize="{DynamicResource FontMicro}"
-                                               TextTrimming="CharacterEllipsis"
-                                               Classes="dim" />
-                                  </StackPanel>
+                                             Foreground="{DynamicResource SukiLowText}"
+                                             TextWrapping="Wrap" />
+                                  <TextBlock Text="{Binding OverdueText}"
+                                             IsVisible="{Binding HasOverdue}"
+                                             FontWeight="SemiBold"
+                                             Foreground="{DynamicResource SukiDangerColor}"
+                                             TextWrapping="Wrap" />
+                                  <TextBlock Text="{Binding DateRangeText}"
+                                             Foreground="{DynamicResource SukiMuteText}"
+                                             TextWrapping="Wrap" />
                                 </StackPanel>
                               </Grid>
 
-                              <Button Classes="icon sm tinted"
-                                      HorizontalAlignment="Left"
-                                      Command="{Binding OpenTasksCommand}"
-                                      ToolTip.Tip="进入该项目的任务看板">
-                                <controls:Icon Kind="ArrowRight" Size="13" />
-                              </Button>
-
-                            </StackPanel>
-                          </Border>
+                              </Grid>
+                            </Grid>
+                          </suki:GlassCard>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
                     <TextBlock Text="拖到这里"
                                IsVisible="{Binding IsEmpty}"
-                               Classes="dim"
-                               FontSize="{DynamicResource FontXs}"
+                               Foreground="{DynamicResource SukiMuteText}"
                                HorizontalAlignment="Center"
                                Margin="0,10,0,0" />
                   </StackPanel>
                 </ScrollViewer>
 
               </Grid>
-            </Border>
+            </suki:GlassCard>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
-    </ItemsControl>
+      </ItemsControl>
+    </ScrollViewer>
 
   </Grid>
 </UserControl>

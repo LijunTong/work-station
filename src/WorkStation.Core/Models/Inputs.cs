@@ -60,6 +60,9 @@ public sealed record CreateTaskInput
     public Priority? Priority { get; init; }
 
     /// <summary>本地墙钟 YYYY-MM-DDTHH:mm，写入前会校验格式。</summary>
+    public string? StartAt { get; init; }
+
+    /// <summary>本地墙钟 YYYY-MM-DDTHH:mm，写入前会校验格式。</summary>
     public string? DueAt { get; init; }
 
     public int? RemindBefore { get; init; }
@@ -83,6 +86,9 @@ public sealed record UpdateTaskInput
     public Optional<TaskStatus> Status { get; init; } = Optional<TaskStatus>.None;
 
     public Optional<Priority> Priority { get; init; } = Optional<Priority>.None;
+
+    /// <summary>本地墙钟 YYYY-MM-DDTHH:mm，写入前会校验格式。</summary>
+    public Optional<string?> StartAt { get; init; } = Optional<string?>.None;
 
     /// <summary>本地墙钟 YYYY-MM-DDTHH:mm，写入前会校验格式。</summary>
     public Optional<string?> DueAt { get; init; } = Optional<string?>.None;

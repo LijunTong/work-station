@@ -21,6 +21,7 @@ public sealed record AppInfo(string Version, string DatabasePath, string UserDat
 /// </summary>
 public sealed class WorkStationService
 {
+    private readonly SqliteConnection _connection;
     private readonly ProjectsRepository _projects;
     private readonly TasksRepository _tasks;
     private readonly TagsRepository _tags;
@@ -32,6 +33,7 @@ public sealed class WorkStationService
 
     public WorkStationService(SqliteConnection connection, string databasePath, string version = "0.1.0")
     {
+        _connection = connection;
         _projects = new ProjectsRepository(connection);
         _tasks = new TasksRepository(connection);
         _tags = new TagsRepository(connection);
@@ -82,6 +84,13 @@ public sealed class WorkStationService
 
     // ---------- 任务 ----------
 
+    /// <summary>
+    /// 新任务的默认提前提醒量（分钟）：结束前一小时。
+    /// 表单里的「提前提醒」默认也选这一档，两边必须一致 ——
+    /// 表单显示「提前 1 小时」而库里是 0，提醒就不会响。
+    /// </summary>
+    public const int DefaultRemindBeforeMinutes = 60;
+
     public Result<IReadOnlyList<TaskItem>> TasksList(TaskFilter? filter = null) =>
         Guard("读取任务列表", () => _tasks.List(filter));
 
@@ -95,7 +104,14 @@ public sealed class WorkStationService
                 throw new ArgumentException("任务标题不能为空");
             }
 
-            var task = _tasks.Create(input);
+            // 默认提醒：结束前一小时。没给截止时间就没有提醒可排，remind_before 只是备着。
+            // 显式传 0 表示「不提醒」，那个值原样保留。
+            var effective = input with
+            {
+                RemindBefore = input.RemindBefore ?? DefaultRemindBeforeMinutes
+            };
+
+            var task = _tasks.Create(effective);
             // 截止时间与提前量一起落库后，立刻把提醒排上 —— 提醒的排期只由这一个入口产生
             _reminders.SyncTaskDue(task);
             return task;
@@ -277,6 +293,29 @@ public sealed class WorkStationService
     // ---------- 应用 ----------
 
     public AppInfo Info() => new(_version, _databasePath, _userDataPath);
+
+    /// <summary>
+    /// 更改数据保存目录：把当前数据库整体复制到新目录（先 checkpoint，WAL 里的提交不会丢），
+    /// 并把新目录写进引导配置（app-config.json）。重启后应用从新目录打开数据。
+    /// 旧目录的库文件保留不动 —— 用户想回退还有原件。
+    /// </summary>
+    public Result<string> ChangeDataDirectory(string directory, string? configPath = null) =>
+        Guard("更改数据目录", () =>
+        {
+            if (string.IsNullOrWhiteSpace(directory)) throw new ArgumentException("目录不能为空");
+
+            var full = Path.GetFullPath(directory);
+            Directory.CreateDirectory(full);
+
+            var target = Path.Combine(full, AppPaths.DatabaseFileName);
+            if (!string.Equals(Path.GetFullPath(_databasePath), target, StringComparison.OrdinalIgnoreCase))
+            {
+                Database.BackupDatabase(_connection, target);
+            }
+
+            AppPaths.WriteDataDirectoryOverride(full, configPath);
+            return full;
+        });
 
     // ---------- 错误包装 ----------
 

@@ -25,16 +25,128 @@ public class MainWindowViewModelTests : IDisposable
 
     public void Dispose() => _connection.Dispose();
 
+    /// <summary>冷启动落在仪表盘：先给总账，再去看板干活。</summary>
     [AvaloniaFact]
-    public void StartsOnBoardPage()
+    public void StartsOnDashboardPage()
     {
         var vm = new MainWindowViewModel(_service);
 
-        Assert.Equal(AppPage.Board, vm.Page);
-        Assert.IsType<BoardViewModel>(vm.CurrentPage);
-        Assert.Equal("看板", vm.PageTitle);
-        Assert.True(vm.IsBoardActive);
+        Assert.Equal(AppPage.Dashboard, vm.Page);
+        Assert.IsType<DashboardViewModel>(vm.CurrentPage);
+        Assert.Equal("仪表盘", vm.PageTitle);
+        Assert.True(vm.IsDashboardActive);
+        Assert.False(vm.IsBoardActive);
         Assert.False(vm.IsTasksActive);
+    }
+
+    /// <summary>项目任务对话框：加载项目与任务，进度卡与步骤清单都就绪。</summary>
+    [AvaloniaFact]
+    public void ProjectTasksDialog_LoadsProjectAndSteps()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput
+        {
+            Name = "验收项目",
+            Status = ProjectStatus.Active
+        }).Data!;
+        _service.TasksCreate(new CreateTaskInput { Title = "已做完", ProjectId = project.Id, Status = TaskStatus.Done });
+        _service.TasksCreate(new CreateTaskInput { Title = "进行中", ProjectId = project.Id, Status = TaskStatus.Doing });
+        _service.TasksCreate(new CreateTaskInput { Title = "独立任务" });
+
+        var dlg = new ProjectTasksDialogViewModel(project.Id, _service, (_, _) => { });
+
+        Assert.True(dlg.HasCard);
+        Assert.NotNull(dlg.Card);
+        Assert.Equal(project.Id, dlg.ProjectId);
+        // 只装入该项目下的任务，独立任务不混进来
+        Assert.Equal(2, dlg.Steps.Count);
+        // 已完成的排最前（stepper 的竖线才连得起来），未完成的在后
+        Assert.Equal("已做完", dlg.Steps[0].Title);
+        Assert.True(dlg.Steps[0].IsCompleted);
+        Assert.Equal("进行中", dlg.Steps[1].Title);
+        Assert.True(dlg.Steps[1].IsActive);
+    }
+
+    [AvaloniaFact]
+    public void ProjectTasksDialog_QuickAdd_CreatesOneTaskPerLine()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput
+        {
+            Name = "快速添加",
+            Status = ProjectStatus.Active
+        }).Data!;
+
+        var dlg = new ProjectTasksDialogViewModel(project.Id, _service, (_, _) => { });
+        dlg.QuickAddText = "第一行任务\n第二行任务\n\n第三行任务  ";
+
+        dlg.AddTasksCommand.Execute(null);
+
+        // 每行一个任务，空行忽略；全部建为「待办」并归属本项目
+        Assert.Equal(3, dlg.Steps.Count);
+        Assert.Contains(dlg.Steps, s => s.Title == "第一行任务");
+        Assert.Contains(dlg.Steps, s => s.Title == "第二行任务");
+        Assert.Contains(dlg.Steps, s => s.Title == "第三行任务");
+        Assert.All(dlg.Steps, s => Assert.True(s.IsPending));
+
+        // 输入框清空
+        Assert.Equal(string.Empty, dlg.QuickAddText);
+    }
+
+    [AvaloniaFact]
+    public void ProjectTasksDialog_MissingProject_SetsError()
+    {
+        var dlg = new ProjectTasksDialogViewModel("不存在", _service, (_, _) => { });
+
+        Assert.True(dlg.HasError);
+        Assert.False(dlg.HasCard);
+        Assert.Empty(dlg.Steps);
+    }
+
+    /// <summary>项目里快速加的任务，起止默认继承项目的起止区间。</summary>
+    [AvaloniaFact]
+    public void ProjectTasksDialog_QuickAdd_InheritsProjectDateRange()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput
+        {
+            Name = "带区间的项目",
+            Status = ProjectStatus.Active,
+            StartDate = "2026-12-01",
+            DueDate = "2026-12-20"
+        }).Data!;
+
+        var dlg = new ProjectTasksDialogViewModel(project.Id, _service, (_, _) => { });
+        dlg.QuickAddText = "第一条\n第二条";
+
+        dlg.AddTasksCommand.Execute(null);
+
+        var tasks = _service.TasksList().Data!.Where(t => t.ProjectId == project.Id).ToList();
+        Assert.Equal(2, tasks.Count);
+        Assert.All(tasks, t => Assert.Equal("2026-12-01T00:00", t.StartAt));
+        Assert.All(tasks, t => Assert.Equal("2026-12-20T18:00", t.DueAt));
+    }
+
+    /// <summary>
+    /// 任务清单按「已完成在前」排序：1、2、3 里完成了 1 和 3，
+    /// 清单就应该是 1、3、2 —— 已完成的挨在一起，stepper 的竖线才连得起来。
+    /// </summary>
+    [AvaloniaFact]
+    public void ProjectTasksDialog_CompletedTasksComeFirst_InOriginalOrder()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput
+        {
+            Name = "排序项目",
+            Status = ProjectStatus.Active
+        }).Data!;
+
+        var first = _service.TasksCreate(new CreateTaskInput { Title = "1", ProjectId = project.Id }).Data!;
+        _service.TasksCreate(new CreateTaskInput { Title = "2", ProjectId = project.Id });
+        var third = _service.TasksCreate(new CreateTaskInput { Title = "3", ProjectId = project.Id }).Data!;
+
+        _service.TasksSetStatus(first.Id, TaskStatus.Done);
+        _service.TasksSetStatus(third.Id, TaskStatus.Done);
+
+        var dlg = new ProjectTasksDialogViewModel(project.Id, _service, (_, _) => { });
+
+        Assert.Equal(["1", "3", "2"], dlg.Steps.Select(s => s.Title).ToArray());
     }
 
     [AvaloniaFact]
@@ -63,6 +175,9 @@ public class MainWindowViewModelTests : IDisposable
     public void QuickAdd_CreatesTaskAndClearsInput()
     {
         var vm = new MainWindowViewModel(_service);
+
+        // 快速添加是常驻的：在看板上记一条，列表要立刻出现
+        vm.ShowBoardCommand.Execute(null);
         vm.QuickAddTitle = "记一件事";
 
         vm.QuickAddCommand.Execute(null);
@@ -71,10 +186,25 @@ public class MainWindowViewModelTests : IDisposable
         Assert.Single(_service.TasksList().Data!);
         Assert.Contains("已记下", vm.ToastMessage);
 
-        // 看板是当前页，添加后要立刻出现在「无期限」所在的待办列
         Assert.Contains(
             vm.Board!.Columns.SelectMany(c => c.Cards),
             card => card.Title == "记一件事");
+    }
+
+    /// <summary>
+    /// 顶部快速添加也要带今天的截止时间。
+    /// 不带的话这条任务会掉进「无期限」，今日/本周/本月任何口径里都看不到 ——
+    /// 用户以为「记下了」，其实它不在任何清单里。
+    /// </summary>
+    [AvaloniaFact]
+    public void QuickAdd_SetsDueToday()
+    {
+        var vm = new MainWindowViewModel(_service);
+        vm.QuickAddTitle = "随手记一笔";
+        vm.QuickAddCommand.Execute(null);
+
+        var task = _service.TasksList().Data!.Single(t => t.Title == "随手记一笔");
+        Assert.StartsWith(DateTime.Today.ToString("yyyy-MM-dd"), task.DueAt);
     }
 
     [AvaloniaFact]
@@ -123,33 +253,101 @@ public class MainWindowViewModelTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void BoardCardEdit_OpensTaskPageWithForm()
+    public void BoardCardEdit_OpensEditorInPlace_WithoutNavigating()
     {
         var task = _service.TasksCreate(new CreateTaskInput { Title = "从看板点开" }).Data!;
         var vm = new MainWindowViewModel(_service);
+        vm.ShowBoardCommand.Execute(null);
 
         var card = vm.Board!.Columns.SelectMany(c => c.Cards).Single(c => c.Task.Id == task.Id);
         vm.Board.OpenTask(card.Task);
 
-        Assert.Equal(AppPage.Tasks, vm.Page);
+        // 看板编辑任务：不跳转到任务页，直接在看板上弹出编辑弹窗
+        Assert.Equal(AppPage.Board, vm.Page);
         Assert.True(vm.Tasks!.IsFormOpen);
         Assert.Equal(task.Id, vm.Tasks.Form!.TaskId);
     }
 
     [AvaloniaFact]
-    public void ProjectBoardLink_FiltersTaskPage()
+    public void ProjectBoardLink_OpensTaskDialog()
     {
         var project = _service.ProjectsCreate(new CreateProjectInput { Name = "工作台" }).Data!;
         _service.TasksCreate(new CreateTaskInput { Title = "项目内", ProjectId = project.Id });
         _service.TasksCreate(new CreateTaskInput { Title = "独立" });
 
         var vm = new MainWindowViewModel(_service);
+        vm.ShowBoardCommand.Execute(null);
         var card = vm.Board!.ProjectColumns.SelectMany(c => c.Cards).Single();
 
         card.OpenTasksCommand.Execute(null);
 
-        Assert.Equal(AppPage.Tasks, vm.Page);
-        Assert.Equal(project.Id, vm.Tasks!.SelectedProject!.Id);
+        // 不再跳转到任务页，而是弹出项目任务浮层
+        Assert.Equal(AppPage.Board, vm.Page);
+        Assert.NotNull(vm.ProjectTasksDialog);
+        Assert.Equal(project.Id, vm.ProjectTasksDialog!.ProjectId);
+        Assert.NotNull(vm.ProjectTasksDialog.Card);
+    }
+
+    /// <summary>项目页卡片上的「查看任务」应弹出该项目的任务浮层，而不是跳页。</summary>
+    [AvaloniaFact]
+    public void ProjectsCardOpenTasks_OpensTaskDialog()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "工作台" }).Data!;
+        _service.TasksCreate(new CreateTaskInput { Title = "项目内", ProjectId = project.Id });
+
+        var vm = new MainWindowViewModel(_service);
+        vm.ShowProjectsCommand.Execute(null);
+        var card = vm.Projects!.Projects.Single();
+
+        card.OpenTasksCommand.Execute(null);
+
+        Assert.Equal(AppPage.Projects, vm.Page);
+        Assert.NotNull(vm.ProjectTasksDialog);
+        Assert.Equal(project.Id, vm.ProjectTasksDialog!.ProjectId);
+        Assert.NotNull(vm.ProjectTasksDialog.Card);
+    }
+
+    /// <summary>
+    /// 回归「点项目任务没反应」：ProjectTasksDialog 是普通属性，赋值必须显式触发
+    /// PropertyChanged，MainWindow 才会弹窗。属性变了但不通知 = 点了什么都不发生。
+    /// </summary>
+    [AvaloniaFact]
+    public void ProjectTasksDialog_RaisesPropertyChanged_SoWindowCanShowIt()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput { Name = "通知" }).Data!;
+        var vm = new MainWindowViewModel(_service);
+
+        string? raised = null;
+        vm.PropertyChanged += (_, e) => raised = e.PropertyName;
+
+        vm.ShowProjectsCommand.Execute(null);
+        var card = vm.Projects!.Projects.Single();
+        card.OpenTasksCommand.Execute(null);
+
+        Assert.Equal(nameof(MainWindowViewModel.ProjectTasksDialog), raised);
+
+        // 关闭也要通知，否则弹窗消失不掉
+        raised = null;
+        vm.CloseProjectTasksDialog();
+        Assert.Equal(nameof(MainWindowViewModel.ProjectTasksDialog), raised);
+        Assert.Null(vm.ProjectTasksDialog);
+    }
+
+    /// <summary>标题栏一键切换明暗：light↔dark 往返，且同步 IsDarkTheme 给图标按钮。</summary>
+    [AvaloniaFact]
+    public void ToggleTheme_FlipsLightAndDark()
+    {
+        var vm = new MainWindowViewModel(_service);
+        vm.Settings!.SetThemeCommand.Execute("light");
+        Assert.False(vm.IsDarkTheme);
+
+        vm.ToggleThemeCommand.Execute(null);
+        Assert.Equal("dark", vm.ThemeMode);
+        Assert.True(vm.IsDarkTheme);
+
+        vm.ToggleThemeCommand.Execute(null);
+        Assert.Equal("light", vm.ThemeMode);
+        Assert.False(vm.IsDarkTheme);
     }
 
     [AvaloniaFact]
@@ -275,12 +473,18 @@ public class MainWindowViewModelTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void BoardReminderChip_NavigatesToRemindersPage()
+    public void BoardReminderChip_Removed_ButPaletteStillNavigates()
     {
         var vm = new MainWindowViewModel(_service);
 
-        var chip = vm.Board!.OverviewChips.Single(c => c.Key == "reminders");
-        chip.SelectCommand.Execute(null);
+        // 概览条上的「提醒」胶囊已删除（跳提醒页走左侧菜单）
+        Assert.DoesNotContain(vm.Board!.OverviewChips, c => c.Key == "reminders");
+
+        // 命令面板里的「提醒」入口仍在
+        vm.Palette!.Open();
+        vm.Palette.Query = "提醒";
+        var item = vm.Palette.Results.First(r => r.Title.Contains("提醒"));
+        item.Invoke();
 
         Assert.Equal(AppPage.Reminders, vm.Page);
     }

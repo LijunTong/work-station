@@ -1,19 +1,501 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:WorkStation.App.ViewModels"
-        xmlns:views="using:WorkStation.App.Views"
-        xmlns:controls="using:WorkStation.App.Controls"
-        x:Class="WorkStation.App.Views.MainWindow"
-        x:DataType="vm:MainWindowViewModel"
-        x:CompileBindings="True"
-        Title="工作台 Work Station"
-        Width="1280"
-        Height="820"
-        MinWidth="1024"
-        MinHeight="640"
-        Background="{DynamicResource BgBrush}">
+<suki:SukiWindow xmlns="https://github.com/avaloniaui"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:suki="https://github.com/kikipoulet/SukiUI"
+                 xmlns:vm="using:WorkStation.App.ViewModels"
+                 xmlns:views="using:WorkStation.App.Views"
+                 xmlns:controls="using:WorkStation.App.Controls"
+                 x:Class="WorkStation.App.Views.MainWindow"
+                 x:DataType="vm:MainWindowViewModel"
+                 x:CompileBindings="True"
+                 Title="工作台 Work Station"
+                 Width="1280"
+                 Height="820"
+                 MinWidth="1024"
+                 MinHeight="640"
+                 BackgroundStyle="Flat"
+                 BackgroundAnimationEnabled="False"
+                 ShowTitlebarBackground="True"
+                 Background="{DynamicResource SukiStrongBackground}">
 
-  <Window.DataTemplates>
+  <!--
+    Background 必须是不透明的主题底色，不能用默认的 Transparent。
+
+    SukiUI 的背景画在 SukiBackground 这个 composition 视觉里：它带 -150 的 Margin、
+    尺寸按 Bounds 算，左/上边缘那几像素不一定被画到。窗口 Background 是透明时，
+    缝里保留的是上一帧的像素 —— 换过主题色之后就变成一条旧颜色的边。
+
+    底色用 SukiStrongBackground（浅色 #fcfcfc / 深色 #353535），
+    它就是主题自己的不透明基底，和 shader 的 iBase 同一档，缝里露出来也不突兀。
+    再加 shader 把边缘 10px 的取样点夹到内侧（见 BackdropShader），
+    整窗四周就不会出现「颜色不一样的一条边」。
+  -->
+
+  <!-- 左侧菜单项。
+       SukiUI 7.0.1 的模板把 Header 文字塞进一个 Viewbox，槽位高度由
+       PART_NormalDisplay 决定；该 DockPanel 的 Height 是 Auto，实测只量到 8px，
+       Viewbox 于是把 15px 的文字按 0.4 倍缩放 —— 设了 FontSize 也没用，
+       屏幕上只有 6px 高（这就是之前「菜单文字太小」的真正原因）。
+       给 PART_NormalDisplay 一个明确高度，文字才按原尺寸显示。 -->
+  <suki:SukiWindow.Styles>
+    <Style Selector="suki|SukiSideMenuItem">
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="42" />
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="suki|SukiSideMenuItem /template/ Border#PART_Border">
+      <Setter Property="Transitions" Value="{x:Null}" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="suki|SukiSideMenuItem /template/ DockPanel#PART_NormalDisplay">
+      <Setter Property="Height" Value="26" />
+    </Style>
+
+    <!-- 标题栏图标：统一成细线条，线宽 1.3 与 SukiUI 窗口按钮同一档；颜色跟 SukiText，
+         不再继承按钮主色（原来三个实心蓝块挨着三个细黑线，重量差一倍）。
+
+         尺寸 12：SukiUI 窗口按钮的 PathIcon 是 TitleBarControlSize=10，
+         图标墨水宽度正好 10px；自定义的 24 视框图形按 14 渲染时墨水约 15px，
+         摆一起明显大一号，收到 12 后墨水约 13px，视觉重量才接近。 -->
+    <Style Selector="Button.WindowControlsButton Path">
+      <Setter Property="Stroke" Value="{DynamicResource SukiText}" />
+      <Setter Property="StrokeThickness" Value="1.3" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="Stretch" Value="Uniform" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 当前正在设置页时，给这颗按钮一个和悬停一致的底色，替代原来的 Outlined 边框 -->
+    <Style Selector="Button.WindowControlsButton.active">
+      <Setter Property="Background" Value="{DynamicResource SukiPrimaryColor25}" />
+    </Style>
+
+    <!--
+      侧边栏要顶到窗口左边，不能留那条 10px 的缝。
+
+      SukiUI 的 SukiSideMenu 模板里有这么一行：
+        <Border Margin="{Binding ShowTitlebarBackground, Converter=WindowBackgroundToMarginConverter}">
+      而那个转换器在 ShowTitlebarBackground=False 时返回 Thickness(10,5,0,10) ——
+      于是侧栏卡整体被往右推 10px、上下各留 5/10，左边那条缝露的是**没盖玻璃的裸背景**。
+      浅色蓝主题下几乎看不出来；换成橙/绿这类有色主题，窗口左缘就多出一条
+      明显更饱和的竖边，像窗口外框颜色不对。
+
+      模板里那个 Border 没有名字，用「PART_Pane 的直接子 Border」定位它。
+    -->
+  </suki:SukiWindow.Styles>
+
+  <!-- 标题栏左侧品牌位：直接放用户给的应用图标（蓝色圆角文档 + 对勾），不再用文字猜品牌 -->
+  <suki:SukiWindow.LogoContent>
+    <Image Source="avares://WorkStation/Assets/app.png"
+           Width="22" Height="22"
+           Margin="0,0,8,0"
+           VerticalAlignment="Center" />
+  </suki:SukiWindow.LogoContent>
+
+  <!--
+    标题栏右侧的图标按钮：外观完全交给 SukiUI 的 WindowControlsButton
+    （和最小化/最大化/关闭同一套 25×25 圆角悬停底），图标本身改用**描边 Path**
+    而不是实心 PathIcon —— 窗口按钮是细线条，实心图标放在一起又蓝又重，对不上。
+
+    间距：SukiUI 模板里承载自定义按钮的是一个 ItemsControl，它的 ItemsPanel
+    是个**没有 Spacing** 的 StackPanel，而外层放窗口按钮的 PART_WindowControls
+    是 Spacing=7。于是两颗自定义按钮贴在一起（中心距 25），再和最小化之间空
+    7px（中心距 32）—— 就是「间距不一样」。
+
+    把两颗按钮包进一个 Spacing=7 的 StackPanel（作为 ItemsControl 的单个项）：
+    组内 7px 来自这层 StackPanel，组外的 7px 由模板 PART_WindowControls 的
+    Spacing 提供，五个图标中心距全部变成 32。
+
+    显式写 FlowDirection：ItemsPanel 是 RTL（FlowDirectionOpposite），
+    继承下来会变成「先声明的在右边」，这里固定成 LTR、按阅读顺序声明。
+  -->
+  <suki:SukiWindow.RightWindowTitleBarControls>
+    <StackPanel Orientation="Horizontal" Spacing="7" FlowDirection="LeftToRight">
+      <Button Classes="WindowControlsButton"
+              Command="{Binding ShowSettingsCommand}"
+              Classes.active="{Binding IsSettingsActive}"
+              ToolTip.Tip="设置">
+        <Path Data="{x:Static controls:AppIcons.SettingsLine}" />
+      </Button>
+      <Button Classes="WindowControlsButton"
+              Command="{Binding ToggleThemeCommand}"
+              ToolTip.Tip="切换深色/浅色">
+        <Panel>
+          <Path Data="{x:Static controls:AppIcons.MoonLine}"
+                IsVisible="{Binding !IsDarkTheme}" />
+          <Path Data="{x:Static controls:AppIcons.SunLine}"
+                IsVisible="{Binding IsDarkTheme}" />
+        </Panel>
+      </Button>
+    </StackPanel>
+  </suki:SukiWindow.RightWindowTitleBarControls>
+
+  <!-- 轻提示走 Suki 的宿主层。对话框宿主放在主视觉树顶层（见文件末尾），
+       让所有弹框与页面处在同一棵输入/渲染树里，不依赖 SukiWindow.Hosts 的宿主层。 -->
+  <suki:SukiWindow.Hosts>
+    <suki:SukiToastHost Name="ToastHost" MaxToasts="3" Position="BottomRight" />
+  </suki:SukiWindow.Hosts>
+
+  <suki:SukiWindow.Resources>
+    <DataTemplate x:Key="TaskFormTemplate" x:DataType="vm:TaskFormViewModel">
+                  <Grid RowDefinitions="Auto,*,Auto">
+
+                    <Border Grid.Row="0"
+                            Padding="22,18"
+                            BorderThickness="0,0,0,1"
+                            BorderBrush="{DynamicResource SukiBorderBrush}">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding TitleText}" FontSize="{DynamicResource FontSizeHeading}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Classes="icon Basic"
+                                Command="{Binding CancelCommand}"
+                                ToolTip.Tip="关闭（Esc）">
+                          <PathIcon Data="{x:Static controls:AppIcons.Close}" Width="18" Height="18" />
+                        </Button>
+                      </Grid>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1">
+                      <StackPanel Margin="22,18,22,22" Spacing="16">
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="标题" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <TextBox Text="{Binding Title, Mode=TwoWay}" PlaceholderText="要做的事" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="备注" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <TextBox Text="{Binding Notes, Mode=TwoWay}"
+                                   AcceptsReturn="True"
+                                   TextWrapping="Wrap"
+                                   MinHeight="68" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="所属项目" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <ComboBox ItemsSource="{Binding ProjectChoices}"
+                                    SelectedIndex="{Binding ProjectIndex, Mode=TwoWay}"
+                                    HorizontalAlignment="Stretch">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate x:DataType="vm:ProjectOption">
+                                <TextBlock Text="{Binding Name}" />
+                              </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
+                          <TextBlock Text="选了项目，任务的起止时间默认跟着项目走"
+                                     FontSize="{DynamicResource FontSizeMicro}"
+                                     Foreground="{DynamicResource SukiMuteText}"
+                                     Margin="0,4,0,0"
+                                     TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                          <StackPanel Spacing="0">
+                            <TextBlock Text="状态" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <ComboBox ItemsSource="{x:Static vm:TaskFormViewModel.StatusOptions}"
+                                      SelectedIndex="{Binding StatusIndex, Mode=TwoWay}"
+                                      HorizontalAlignment="Stretch" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Spacing="0">
+                            <TextBlock Text="优先级" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <ComboBox ItemsSource="{x:Static vm:TaskFormViewModel.PriorityOptions}"
+                                      SelectedIndex="{Binding PriorityIndex, Mode=TwoWay}"
+                                      HorizontalAlignment="Stretch" />
+                          </StackPanel>
+                        </Grid>
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="开始时间" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <!-- 日期 + 时间合成一颗字段；Suki 的 TimePicker 模板里 PART_FlyoutButton
+                                 的 MinWidth 是 242，列宽不够会把右侧图标挤掉，这里给足宽度 -->
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <CalendarDatePicker SelectedDate="{Binding StartDate, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                            <TimePicker Grid.Column="1" Width="250" MinWidth="250" HorizontalAlignment="Left"
+                                        SelectedTime="{Binding StartTime, Mode=TwoWay}" ClockIdentifier="24HourClock" />
+                          </Grid>
+                        </StackPanel>
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="截止时间" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <!-- 日期 + 时间合成一颗字段：清除按钮、日历、时刻都在这一个控件里 -->
+                          <!-- Suki 的 TimePicker 模板里 PART_FlyoutButton 的 MinWidth 是 242,
+                                 列宽不够会把右侧图标挤掉。给足宽度并靠左，时间文本不再被拉成居中铺满。 -->
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <CalendarDatePicker SelectedDate="{Binding DueDate, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                            <TimePicker Grid.Column="1" Width="250" MinWidth="250" HorizontalAlignment="Left"
+                                        SelectedTime="{Binding DueTime, Mode=TwoWay}" ClockIdentifier="24HourClock" />
+                          </Grid>
+                        </StackPanel>
+
+                        <!--
+                          这一行把「下拉」和「输入框」并排放，必须看上去是三个一样的框。
+
+                          SukiUI 的 ComboBox 模板外层是 `<Border Padding="5">`：可见的那块玻璃卡
+                          比控件本体小一圈（宽少 10、高少 10），而 TextBox 的玻璃卡是铺满的。
+                          于是同一个 Grid 单元里，下拉框看着比旁边的输入框窄一截、底边也高一截。
+                          模板里的 Padding 是字面量，Style 改不动（Template 优先级高于 Style），
+                          只能从控件这一侧补：给输入框同样留 5px 边距，并把高度设成 35，
+                          三块可见框就都是「宽 = 列宽 - 10，高 = 35」，底边齐平。
+                        -->
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                          <StackPanel Spacing="0">
+                            <TextBlock Text="提前提醒" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <ComboBox ItemsSource="{Binding LeadOptions}"
+                                      SelectedItem="{Binding SelectedLead, Mode=TwoWay}"
+                                      IsEnabled="{Binding HasDueDate}"
+                                      ToolTip.Tip="先设截止时间，才能提前提醒"
+                                      HorizontalAlignment="Stretch">
+                              <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ReminderLeadOption">
+                                  <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                              </ComboBox.ItemTemplate>
+                            </ComboBox>
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Spacing="0">
+                            <TextBlock Text="预估工时（小时）" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <TextBox Text="{Binding Estimate, Mode=TwoWay}"
+                                     PlaceholderText="2"
+                                     MinHeight="35" Height="35"
+                                     Margin="5" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="2" Spacing="0">
+                            <TextBlock Text="实际工时（小时）" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <TextBox Text="{Binding Spent, Mode=TwoWay}"
+                                     PlaceholderText="1.5"
+                                     MinHeight="35" Height="35"
+                                     Margin="5" />
+                          </StackPanel>
+                        </Grid>
+
+                        <StackPanel Spacing="0" IsVisible="{Binding IsBlocked}">
+                          <TextBlock Text="阻塞原因" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <TextBox Text="{Binding BlockedReason, Mode=TwoWay}" PlaceholderText="卡在什么地方" />
+                        </StackPanel>
+
+                        <suki:InfoBar IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" Message="{Binding Error}" Severity="Error" IsClosable="False" />
+
+                      </StackPanel>
+                    </ScrollViewer>
+
+                    <Border Grid.Row="2"
+                            Padding="22,14"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{DynamicResource SukiBorderBrush}">
+                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button Content="取消" Command="{Binding CancelCommand}" />
+                        <Button Content="保存" Classes="Flat" Command="{Binding SaveCommand}" />
+                      </StackPanel>
+                    </Border>
+
+                  </Grid>
+                </DataTemplate>
+    <DataTemplate x:Key="ProjectFormTemplate" x:DataType="vm:ProjectFormViewModel">
+                  <Grid RowDefinitions="Auto,*,Auto">
+
+                    <Border Grid.Row="0"
+                            Padding="22,18"
+                            BorderThickness="0,0,0,1"
+                            BorderBrush="{DynamicResource SukiBorderBrush}">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Title}" FontSize="{DynamicResource FontSizeHeading}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Classes="icon Basic"
+                                Command="{Binding CancelCommand}"
+                                ToolTip.Tip="关闭（Esc）">
+                          <PathIcon Data="{x:Static controls:AppIcons.Close}" Width="18" Height="18" />
+                        </Button>
+                      </Grid>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1">
+                      <StackPanel Margin="22,18,22,22" Spacing="16">
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="名称" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="例如：重构工作台" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="描述" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <TextBox Text="{Binding Description, Mode=TwoWay}"
+                                   AcceptsReturn="True"
+                                   TextWrapping="Wrap"
+                                   MinHeight="74"
+                                   PlaceholderText="这个项目要达成什么" />
+                        </StackPanel>
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                          <StackPanel Spacing="0">
+                            <TextBlock Text="状态" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <ComboBox ItemsSource="{x:Static vm:ProjectFormViewModel.StatusOptions}"
+                                      SelectedIndex="{Binding StatusIndex, Mode=TwoWay}"
+                                      HorizontalAlignment="Stretch" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Spacing="0">
+                            <TextBlock Text="优先级" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <ComboBox ItemsSource="{x:Static vm:ProjectFormViewModel.PriorityOptions}"
+                                      SelectedIndex="{Binding PriorityIndex, Mode=TwoWay}"
+                                      HorizontalAlignment="Stretch" />
+                          </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                          <StackPanel Spacing="0">
+                            <TextBlock Text="开始日期 *" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <CalendarDatePicker SelectedDate="{Binding StartDate, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Spacing="0">
+                            <TextBlock Text="结束日期 *" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                            <CalendarDatePicker SelectedDate="{Binding DueDate, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                          </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="项目的起止时间是必填项：项目内的任务默认落在这个区间里。"
+                                   FontSize="{DynamicResource FontSizeMicro}"
+                                   Foreground="{DynamicResource SukiMuteText}"
+                                   TextWrapping="Wrap" />
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="进度" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <ComboBox ItemsSource="{x:Static vm:ProjectFormViewModel.ProgressModeOptions}"
+                                    SelectedIndex="{Binding ProgressModeIndex, Mode=TwoWay}"
+                                    HorizontalAlignment="Stretch" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="0" IsVisible="{Binding IsManualProgress}">
+                          <TextBlock Text="手动进度（0–100）" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <TextBox Text="{Binding ProgressManual, Mode=TwoWay}" PlaceholderText="0" />
+                        </StackPanel>
+
+                        <suki:InfoBar IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" Message="{Binding Error}" Severity="Error" IsClosable="False" />
+
+                      </StackPanel>
+                    </ScrollViewer>
+
+                    <Border Grid.Row="2"
+                            Padding="22,14"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{DynamicResource SukiBorderBrush}">
+                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button Content="取消" Command="{Binding CancelCommand}" />
+                        <Button Content="保存" Classes="Flat" Command="{Binding SaveCommand}" />
+                      </StackPanel>
+                    </Border>
+
+                  </Grid>
+                </DataTemplate>
+    <DataTemplate x:Key="ReminderFormTemplate" x:DataType="vm:ReminderFormViewModel">
+                  <Grid RowDefinitions="Auto,*,Auto">
+
+                    <Border Grid.Row="0"
+                            Padding="22,18"
+                            BorderThickness="0,0,0,1"
+                            BorderBrush="{DynamicResource SukiBorderBrush}">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding TitleText}" FontSize="{DynamicResource FontSizeHeading}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Classes="icon Basic"
+                                Command="{Binding CancelCommand}"
+                                ToolTip.Tip="关闭（Esc）">
+                          <PathIcon Data="{x:Static controls:AppIcons.Close}" Width="18" Height="18" />
+                        </Button>
+                      </Grid>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1">
+                      <StackPanel Margin="22,18,22,22" Spacing="16">
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="提醒什么" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <TextBox Text="{Binding Title, Mode=TwoWay}" PlaceholderText="交电费 / 站起来活动一下…" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="什么时候" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <!-- Suki 的 TimePicker 模板里 PART_FlyoutButton 的 MinWidth 是 242，
+                                 列宽不够会把右侧图标挤掉。给足宽度并靠左，时间文本不再被拉成居中铺满。 -->
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <CalendarDatePicker SelectedDate="{Binding Date, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                            <TimePicker Grid.Column="1" Width="250" MinWidth="250" HorizontalAlignment="Left"
+                                        SelectedTime="{Binding Time, Mode=TwoWay}" ClockIdentifier="24HourClock" />
+                          </Grid>
+                        </StackPanel>
+
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="重复" FontSize="{DynamicResource FontSizeCaption}" Foreground="{DynamicResource SukiMuteText}" Margin="0,0,0,5" />
+                          <ComboBox ItemsSource="{x:Static vm:ReminderFormViewModel.RepeatOptions}"
+                                    SelectedIndex="{Binding RepeatIndex, Mode=TwoWay}"
+                                    HorizontalAlignment="Stretch" />
+                        </StackPanel>
+
+                        <TextBlock Text="重复的提醒到点后会自动排下一次；「稍后提醒」会把它推后 10 分钟。"
+                                   Foreground="{DynamicResource SukiMuteText}"
+                                   TextWrapping="Wrap" />
+
+                        <suki:InfoBar IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" Message="{Binding Error}" Severity="Error" IsClosable="False" />
+
+                      </StackPanel>
+                    </ScrollViewer>
+
+                    <Border Grid.Row="2"
+                            Padding="22,14"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{DynamicResource SukiBorderBrush}">
+                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                        <Button Content="取消" Command="{Binding CancelCommand}" />
+                        <Button Content="保存" Classes="Flat" Command="{Binding SaveCommand}" />
+                      </StackPanel>
+                    </Border>
+
+                  </Grid>
+                </DataTemplate>
+    <DataTemplate x:Key="ShortcutHelpTemplate" x:DataType="vm:MainWindowViewModel">
+    <StackPanel Spacing="16">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="快捷键" FontSize="{DynamicResource FontSizeHeading}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Button Grid.Column="1"
+                        Classes="icon Basic"
+                        Command="{Binding CloseShortcutHelpCommand}"
+                        ToolTip.Tip="关闭（Esc）">
+                  <PathIcon Data="{x:Static controls:AppIcons.Close}" Width="18" Height="18" />
+                </Button>
+              </Grid>
+
+              <Grid ColumnDefinitions="96,*"
+                    RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                    RowSpacing="10">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="n" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="快速记录一件事" Foreground="{DynamicResource SukiMuteText}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="/" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="聚焦当前页的搜索框" Foreground="{DynamicResource SukiMuteText}" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Ctrl + K" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="命令面板：跳转、新建、找任务" Foreground="{DynamicResource SukiMuteText}" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="1 – 6 / Ctrl + 1 – 6" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="切换到对应页面（顺序同左侧菜单）" Foreground="{DynamicResource SukiMuteText}" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Ctrl + B" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="4" Grid.Column="1" Text="折叠或展开左侧菜单" Foreground="{DynamicResource SukiMuteText}" />
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="↑ / ↓ + Enter" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="5" Grid.Column="1" Text="在菜单里选择并打开页面" Foreground="{DynamicResource SukiMuteText}" />
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Ctrl + Enter" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="6" Grid.Column="1" Text="保存当前弹框" Foreground="{DynamicResource SukiMuteText}" />
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Esc" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="7" Grid.Column="1" Text="关闭弹框 / 浮层" Foreground="{DynamicResource SukiMuteText}" />
+                <TextBlock Grid.Row="8" Grid.Column="0" Text="?" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="8" Grid.Column="1" Text="显示或隐藏这份帮助" Foreground="{DynamicResource SukiMuteText}" />
+              </Grid>
+
+              <TextBlock Text="看板里拖动卡片到另一列，就是改状态。"
+                         Foreground="{DynamicResource SukiMuteText}" />
+            </StackPanel>
+        </DataTemplate>
+  </suki:SukiWindow.Resources>
+
+  <suki:SukiWindow.DataTemplates>
     <DataTemplate DataType="vm:BoardViewModel">
       <views:BoardView />
     </DataTemplate>
@@ -29,267 +511,163 @@
     <DataTemplate DataType="vm:SettingsViewModel">
       <views:SettingsView />
     </DataTemplate>
-  </Window.DataTemplates>
+    <DataTemplate DataType="vm:DashboardViewModel">
+      <views:DashboardView />
+    </DataTemplate>
+  </suki:SukiWindow.DataTemplates>
 
-  <Grid ColumnDefinitions="236,*">
+  <!--
+    侧边栏由 SukiSideMenu 负责；内容区单独放在第二列。
+    原因：SukiSideMenu 的内容槽是 SukiTransitioningContentControl，7.0.1 的模板把
+    两个缓冲层都设成 IsHitTestVisible=False，放进去的页面会整个点不动。
 
-    <!-- 侧边栏 -->
-    <Border Grid.Column="0" Background="{DynamicResource BgPanelBrush}">
-      <Grid RowDefinitions="Auto,*,Auto">
+    第一列不能用 Auto：SukiSideMenu 的 Pane 宽度由动画驱动，Auto 测量会得到 0，
+    菜单文字会被 Viewbox 压成 0px。折叠时由 code-behind 把列宽同步到 48。
+  -->
+  <Grid Name="ShellGrid" ColumnDefinitions="236,*">
 
-        <StackPanel Margin="18,20,18,22" Spacing="10" Orientation="Horizontal">
-          <Border Width="28"
-                  Height="28"
-                  CornerRadius="{DynamicResource RadiusMd}"
-                  Background="{DynamicResource AccentBrush}"
-                  VerticalAlignment="Center">
-            <TextBlock Text="工"
-                       FontSize="14"
-                       FontWeight="Bold"
-                       Foreground="{DynamicResource AccentTextBrush}"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center" />
-          </Border>
-          <StackPanel Spacing="1" VerticalAlignment="Center">
-            <TextBlock Text="工作台" FontSize="14" FontWeight="SemiBold" />
-            <TextBlock Text="Work Station"
-                       FontSize="10.5"
-                       Foreground="{DynamicResource TextFaintBrush}" />
-          </StackPanel>
-        </StackPanel>
+    <!--
+      背景不在这一层画。
 
-        <StackPanel Grid.Row="1" Margin="12,0" Spacing="3">
-          <Button Classes="nav"
-                  Classes.active="{Binding IsBoardActive}"
-                  Command="{Binding ShowBoardCommand}">
-            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
-              <!-- 看板列图标：三根竖条 -->
-              <Canvas Width="16" Height="16" VerticalAlignment="Center">
-                <Rectangle Canvas.Left="0" Canvas.Top="2" Width="4" Height="12" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="6" Canvas.Top="5" Width="4" Height="9" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="12" Canvas.Top="3" Width="4" Height="11" RadiusX="1.5" RadiusY="1.5" />
-              </Canvas>
-              <TextBlock Grid.Column="1" Text="看板" VerticalAlignment="Center" />
-              <Border Grid.Column="2"
-                      Classes="badge"
-                      IsVisible="{Binding HasOverdueBadge}">
-                <TextBlock Text="{Binding OverdueBadgeText}" />
-              </Border>
-            </Grid>
-          </Button>
+      SukiUI 把标题栏和内容区一起放进 SukiMainHost，shader 画在它们底下 ——
+      也就是说标题栏看到的是 shader，内容区看到的是这里铺的东西。
+      之前在这里铺自己的渐变，结果标题栏是 shader 的纯白、下面是一块蓝，
+      中间横着一道明显的接缝，「最上面的标题栏和下面不一致」就是这么来的。
 
-          <Button Classes="nav"
-                  Classes.active="{Binding IsTasksActive}"
-                  Command="{Binding ShowTasksCommand}">
-            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
-              <!-- 清单图标：三个圆点 + 三条横线 -->
-              <Canvas Width="16" Height="16" VerticalAlignment="Center">
-                <Rectangle Canvas.Left="0" Canvas.Top="2" Width="3" Height="3" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="6" Canvas.Top="2.5" Width="10" Height="2" RadiusX="1" RadiusY="1" />
-                <Rectangle Canvas.Left="0" Canvas.Top="6.5" Width="3" Height="3" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="6" Canvas.Top="7" Width="10" Height="2" RadiusX="1" RadiusY="1" />
-                <Rectangle Canvas.Left="0" Canvas.Top="11" Width="3" Height="3" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="6" Canvas.Top="11.5" Width="6" Height="2" RadiusX="1" RadiusY="1" />
-              </Canvas>
-              <TextBlock Grid.Column="1" Text="任务" VerticalAlignment="Center" />
-            </Grid>
-          </Button>
+      现在整窗共用同一个 BackgroundShaderCode（见 MainWindow.axaml.cs），
+      标题栏和内容区是同一条渐变，没有接缝。
+    -->
 
-          <Button Classes="nav"
-                  Classes.active="{Binding IsProjectsActive}"
-                  Command="{Binding ShowProjectsCommand}">
-            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
-              <!-- 项目图标：一张大卡 + 两张小卡 -->
-              <Canvas Width="16" Height="16" VerticalAlignment="Center">
-                <Rectangle Canvas.Left="0" Canvas.Top="2" Width="16" Height="4" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="0" Canvas.Top="8" Width="7" Height="6" RadiusX="1.5" RadiusY="1.5" />
-                <Rectangle Canvas.Left="9" Canvas.Top="8" Width="7" Height="6" RadiusX="1.5" RadiusY="1.5" />
-              </Canvas>
-              <TextBlock Grid.Column="1" Text="项目" VerticalAlignment="Center" />
-            </Grid>
-          </Button>
 
-          <Button Classes="nav"
-                  Classes.active="{Binding IsRemindersActive}"
-                  Command="{Binding ShowRemindersCommand}">
-            <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="10">
-              <!-- 提醒用矢量图标：铃铛的轮廓用矩形拼不出来，
-                   颜色仍然靠按钮的 Foreground 继承，选中态一样会变蓝 -->
-              <controls:Icon Kind="Bell" Size="16" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="提醒" VerticalAlignment="Center" />
-              <Border Grid.Column="2"
-                      Classes="badge"
-                      IsVisible="{Binding HasReminderBadge}">
-                <TextBlock Text="{Binding ReminderBadgeText}" />
-              </Border>
-            </Grid>
-          </Button>
+    <suki:SukiSideMenu Name="SideMenu"
+                       IsContentVisible="False"
+                       SidebarToggleEnabled="True"
+                       IsSearchEnabled="False"
+                       IsMenuExpanded="{Binding IsSidebarExpanded, Mode=OneWay}"
+                       OpenPaneLength="236"
+                       HeaderMinHeight="0">
 
-        </StackPanel>
+      <!-- 顶部不再放「工作台」文字：菜单图标自己就够认，多一行标题反而占高度。
+           页脚也不再放版本号 —— 版本属于「关于」，放设置页里，菜单底部保持干净。 -->
 
-        <!-- 底部：设置从导航里拿掉，收进这里。版本号跟着一起放，
-             让「这是哪个版本」不用翻设置页；值来自程序集，不在 XAML 里写死 -->
-        <StackPanel Grid.Row="2" Margin="18,0,18,14" Spacing="9">
-          <StackPanel Spacing="4">
-            <TextBlock Text="Ctrl + K 命令面板"
-                       FontSize="{DynamicResource FontMicro}"
-                       Foreground="{DynamicResource TextDimBrush}" />
-            <TextBlock Text="本地数据 · 不联网"
-                       FontSize="{DynamicResource FontMicro}"
-                       Foreground="{DynamicResource TextDimBrush}" />
-          </StackPanel>
+      <suki:SukiSideMenu.Items>
+        <suki:SukiSideMenuItem Header="仪表盘" IsContentMovable="False" Tag="Dashboard">
+          <suki:SukiSideMenuItem.Icon>
+            <PathIcon Data="{x:Static controls:AppIcons.Dashboard}" Width="20" Height="20" />
+          </suki:SukiSideMenuItem.Icon>
+        </suki:SukiSideMenuItem>
+        <suki:SukiSideMenuItem Header="看板" IsContentMovable="False" Tag="Board">
+          <suki:SukiSideMenuItem.Icon>
+            <PathIcon Data="{x:Static controls:AppIcons.Board}" Width="20" Height="20" />
+          </suki:SukiSideMenuItem.Icon>
+        </suki:SukiSideMenuItem>
+        <suki:SukiSideMenuItem Header="任务" IsContentMovable="False" Tag="Tasks">
+          <suki:SukiSideMenuItem.Icon>
+            <PathIcon Data="{x:Static controls:AppIcons.Tasks}" Width="20" Height="20" />
+          </suki:SukiSideMenuItem.Icon>
+        </suki:SukiSideMenuItem>
+        <suki:SukiSideMenuItem Header="项目" IsContentMovable="False" Tag="Projects">
+          <suki:SukiSideMenuItem.Icon>
+            <PathIcon Data="{x:Static controls:AppIcons.Projects}" Width="20" Height="20" />
+          </suki:SukiSideMenuItem.Icon>
+        </suki:SukiSideMenuItem>
+        <suki:SukiSideMenuItem Header="提醒" IsContentMovable="False" Tag="Reminders">
+          <suki:SukiSideMenuItem.Icon>
+            <PathIcon Data="{x:Static controls:AppIcons.Bell}" Width="20" Height="20" />
+          </suki:SukiSideMenuItem.Icon>
+          <suki:SukiSideMenuItem.SideDisplayTemplate>
+            <DataTemplate x:DataType="vm:MainWindowViewModel">
+              <suki:InfoBadge Header="{Binding ReminderBadgeText}"
+                              IsVisible="{Binding HasReminderBadge}"
+                              Appearance="Error" />
+            </DataTemplate>
+          </suki:SukiSideMenuItem.SideDisplayTemplate>
+        </suki:SukiSideMenuItem>
+      </suki:SukiSideMenu.Items>
 
-          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
-            <Button Classes="icon"
-                    Classes.tinted="{Binding IsSettingsActive}"
-                    Command="{Binding ShowSettingsCommand}"
-                    ToolTip.Tip="设置">
-              <controls:Icon Kind="Settings" Size="15" />
-            </Button>
-            <TextBlock Grid.Column="1"
-                       Text="{Binding VersionText}"
-                       FontSize="{DynamicResource FontMicro}"
-                       Foreground="{DynamicResource TextDimBrush}"
-                       VerticalAlignment="Center" />
+    </suki:SukiSideMenu>
+
+    <!--
+      标题区 Auto、内容区 *：内容区必须有受限高度，页面里的 ScrollViewer 才会滚动。
+      早期这里多套了一层 Grid 且没写 Grid.Row，内层落到 Auto 行拿到无限高度，
+      设置页内容一长就直接被窗口裁掉、滚不动。
+    -->
+    <Grid Grid.Column="1" RowDefinitions="Auto,*" Background="{DynamicResource SukiBackground}">
+
+        <!-- 标题 + 常驻快速添加：记录一件事不该先想「我现在在哪个页面」。
+             页面头单独做成轻玻璃卡（Demo 风格），内部快速添加仍是一张实体小卡，
+             这样输入框在玻璃底上仍有清楚的边界。 -->
+        <suki:GlassCard Grid.Row="0"
+                        Classes="header-card"
+                        Margin="{DynamicResource PageHeaderMargin}"
+                        Padding="16,12"
+                        IsAnimated="False">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+            <StackPanel Spacing="3" VerticalAlignment="Center">
+              <TextBlock Text="{Binding PageTitle}"
+                         FontSize="{DynamicResource FontSizeTitle}"
+                         FontWeight="SemiBold" />
+              <TextBlock Text="{Binding PageSubtitle}"
+                         FontSize="{DynamicResource FontSizeCaption}"
+                         Foreground="{DynamicResource SukiMuteText}"
+                         TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+
+            <suki:GlassCard Classes="card composer"
+                    Grid.Column="1"
+                    Width="352"
+                    Padding="8,4"
+                    IsVisible="{Binding !IsSettingsActive}"
+                    VerticalAlignment="Center">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                <TextBox Name="QuickAddBox"
+                         Grid.Column="0"
+                         Classes="NoShadow"
+                         Text="{Binding QuickAddTitle, Mode=TwoWay}"
+                         PlaceholderText="记一件事，回车添加…"
+                         Height="32"
+                         MinHeight="0"
+                         VerticalAlignment="Center">
+                  <TextBox.KeyBindings>
+                    <KeyBinding Gesture="Enter" Command="{Binding QuickAddCommand}" />
+                  </TextBox.KeyBindings>
+                </TextBox>
+                <Button Grid.Column="1"
+                        Classes="icon Basic"
+                        Command="{Binding NewTaskCommand}"
+                        ToolTip.Tip="详细新建（填截止时间、项目等）">
+                  <PathIcon Data="{x:Static controls:AppIcons.Plus}" Width="18" Height="18" />
+                </Button>
+              </Grid>
+            </suki:GlassCard>
           </Grid>
-        </StackPanel>
-      </Grid>
-    </Border>
+        </suki:GlassCard>
 
-    <!-- 内容区 -->
-    <Border Grid.Column="1"
-            BorderBrush="{DynamicResource LineBrush}"
-            BorderThickness="1,0,0,0">
-      <Grid RowDefinitions="Auto,*">
-
-        <!-- 标题 + 常驻快速添加：记录一件事不该先想「我现在在哪个页面」 -->
-        <Grid Grid.Row="0"
-              Margin="{DynamicResource PageHeaderPadding}"
-              ColumnDefinitions="*,Auto"
-              ColumnSpacing="20">
-          <StackPanel Spacing="3" VerticalAlignment="Center">
-            <TextBlock Text="{Binding PageTitle}" Classes="page-title" />
-            <TextBlock Text="{Binding PageSubtitle}"
-                       Classes="page-subtitle"
-                       TextTrimming="CharacterEllipsis" />
-          </StackPanel>
-
-          <Border Grid.Column="1"
-                  Classes="composer"
-                  Width="352"
-                  VerticalAlignment="Center">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-              <TextBox Name="QuickAddBox"
-                       Grid.Column="0"
-                       Classes="bare"
-                       Text="{Binding QuickAddTitle, Mode=TwoWay}"
-                       PlaceholderText="记一件事，回车添加…"
-                       VerticalAlignment="Center">
-                <TextBox.KeyBindings>
-                  <KeyBinding Gesture="Enter" Command="{Binding QuickAddCommand}" />
-                </TextBox.KeyBindings>
-              </TextBox>
-              <Button Grid.Column="1"
-                      Classes="icon tinted"
-                      Command="{Binding NewTaskCommand}"
-                      ToolTip.Tip="详细新建（填截止时间、项目等）">
-                <controls:Icon Kind="Plus" Size="13" />
-              </Button>
-            </Grid>
-          </Border>
-        </Grid>
-
-        <ContentControl Grid.Row="1" Content="{Binding CurrentPage}" />
-      </Grid>
-    </Border>
-
-    <!-- 命令面板 -->
-    <views:CommandPaletteView Grid.ColumnSpan="2"
-                              DataContext="{Binding Palette}"
-                              IsVisible="{Binding IsOpen}" />
-
-    <!-- 快捷键帮助 -->
-    <Border Grid.ColumnSpan="2"
-            IsVisible="{Binding IsShortcutHelpOpen}"
-            Background="{DynamicResource ScrimBrush}">
-      <Border Classes="card" Width="430" Padding="26" VerticalAlignment="Center" HorizontalAlignment="Center">
-        <StackPanel Spacing="16">
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Text="快捷键" Classes="section-title" VerticalAlignment="Center" />
-            <Button Grid.Column="1"
-                    Classes="icon"
-                    Command="{Binding CloseShortcutHelpCommand}"
-                    ToolTip.Tip="关闭（Esc）">
-              <controls:Icon Kind="Close" Size="13" />
-            </Button>
-          </Grid>
-
-          <Grid ColumnDefinitions="96,*"
-                RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-                RowSpacing="10">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="n" Classes="key" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="快速记录一件事" Classes="secondary" FontSize="{DynamicResource FontSm}" />
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="/" Classes="key" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="聚焦当前页的搜索框" Classes="secondary" FontSize="{DynamicResource FontSm}" />
-            <TextBlock Grid.Row="2" Grid.Column="0" Text="Ctrl + K" Classes="key" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="命令面板：跳转、新建、找任务" Classes="secondary" FontSize="{DynamicResource FontSm}" />
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="1 – 5" Classes="key" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Text="切换到对应页面" Classes="secondary" FontSize="{DynamicResource FontSm}" />
-            <TextBlock Grid.Row="4" Grid.Column="0" Text="Ctrl + Enter" Classes="key" />
-            <TextBlock Grid.Row="4" Grid.Column="1" Text="保存当前抽屉" Classes="secondary" FontSize="{DynamicResource FontSm}" />
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="Esc" Classes="key" />
-            <TextBlock Grid.Row="5" Grid.Column="1" Text="关闭抽屉 / 浮层" Classes="secondary" FontSize="{DynamicResource FontSm}" />
-            <TextBlock Grid.Row="6" Grid.Column="0" Text="?" Classes="key" />
-            <TextBlock Grid.Row="6" Grid.Column="1" Text="显示或隐藏这份帮助" Classes="secondary" FontSize="{DynamicResource FontSm}" />
-          </Grid>
-
-          <TextBlock Text="看板里拖动卡片到另一列，就是改状态。"
-                     Classes="dim"
-                     FontSize="{DynamicResource FontXs}" />
-        </StackPanel>
-      </Border>
-    </Border>
-
-    <!-- Toast：黑底白字在浅色主题里太扎眼，改用面板色 + 细边框 -->
-    <Border Grid.ColumnSpan="2"
-            IsVisible="{Binding IsToastVisible}"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Bottom"
-            Margin="0,0,0,32"
-            Padding="16,11"
-            CornerRadius="{DynamicResource RadiusMd}"
-            BorderThickness="1"
-            BorderBrush="{DynamicResource LineStrongBrush}"
-            Background="{DynamicResource BgPanelBrush}"
-            BoxShadow="0 8 26 0 #26000000">
-      <TextBlock Text="{Binding ToastMessage}"
-                 TextWrapping="Wrap"
-                 MaxWidth="560"
-                 FontSize="{DynamicResource FontSm}" />
-    </Border>
+      <ContentControl Name="PageHost" Grid.Row="1" Content="{Binding CurrentPage}" />
+    </Grid>
 
     <!-- 启动失败：整个界面替换为错误页，避免用户对着空窗口猜 -->
-    <Border Grid.ColumnSpan="2"
-            IsVisible="{Binding HasStartupError}"
-            Background="{DynamicResource BgBrush}">
-      <Border Classes="card"
+    <Border Grid.ColumnSpan="2" IsVisible="{Binding HasStartupError}"
+            Background="{DynamicResource SukiBackground}">
+      <suki:GlassCard Classes="card"
               Width="480"
               Padding="28"
               VerticalAlignment="Center"
               HorizontalAlignment="Center">
         <StackPanel Spacing="10">
-          <TextBlock Text="无法启动工作台" Classes="section-title" />
+          <TextBlock Text="无法启动工作台" FontSize="{DynamicResource FontSizeHeading}" FontWeight="SemiBold" />
           <TextBlock Text="{Binding StartupError}"
-                     Foreground="{DynamicResource TextSecondaryBrush}"
-                     FontSize="{DynamicResource FontSm}"
+                     Foreground="{DynamicResource SukiLowText}"
                      TextWrapping="Wrap" />
           <TextBlock Text="数据库文件可能被占用或权限不足。检查数据目录后重新打开应用。"
-                     Classes="dim"
-                     FontSize="{DynamicResource FontXs}"
+                     Foreground="{DynamicResource SukiMuteText}"
                      TextWrapping="Wrap" />
         </StackPanel>
-      </Border>
+      </suki:GlassCard>
     </Border>
 
+    <!-- 对话框宿主：放在主视觉树的最后一层，盖住所有内容且能正常接收鼠标输入 -->
+    <suki:SukiDialogHost Name="DialogHost" Grid.ColumnSpan="2" />
+
   </Grid>
-</Window>
+</suki:SukiWindow>

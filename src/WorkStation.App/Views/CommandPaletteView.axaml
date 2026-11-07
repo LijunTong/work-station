@@ -1,97 +1,156 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WorkStation.App.ViewModels"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
              x:Class="WorkStation.App.Views.CommandPaletteView"
              x:DataType="vm:CommandPaletteViewModel"
              x:CompileBindings="True">
 
-  <Border Background="{DynamicResource ScrimBrush}">
-    <Border Classes="palette"
-            Width="580"
-            VerticalAlignment="Top"
-            HorizontalAlignment="Center"
-            Margin="0,88,0,0">
-      <Grid RowDefinitions="Auto,Auto,*,Auto">
+  <!--
+    命令面板。行样式自己做，不复用 Suki 的 Basic / Outlined 按钮：
 
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="16,13,14,11">
-          <TextBox Name="SearchBox"
-                   Classes="bare"
-                   FontSize="15"
-                   Text="{Binding Query, Mode=TwoWay}"
-                   PlaceholderText="搜索任务、项目，或执行命令…"
-                   VerticalAlignment="Center" />
-          <Border Grid.Column="1" Classes="chip" VerticalAlignment="Center">
-            <TextBlock Text="Esc" />
-          </Border>
-        </Grid>
+    · Basic 把 HorizontalContentAlignment 定成 Center，标题被挤到行中间；
+    · Outlined 的悬停态是「整行填成主色 + 白字」，一进面板鼠标正好压在第一条上，
+      那条就从列表里跳出来，像被高亮块盖住了一半。
 
-        <Border Grid.Row="1"
-                Height="1"
-                Background="{DynamicResource LineBrush}" />
+    现在：行是透明底 + 左侧对齐，悬停给一层极淡的悬停色，选中给主色 25% 的淡底
+    + 主色文字。文字靠左、右端留 hint，左侧字形块加描边，"这是什么类型"才看得出来。
+  -->
+  <UserControl.Styles>
+    <Style Selector="Button.palette-row">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="10,7" />
+      <Setter Property="Margin" Value="0,1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="Transitions" Value="{x:Null}" />
+    </Style>
+    <Style Selector="Button.palette-row:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+    </Style>
+    <Style Selector="Button.palette-row:pressed:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+    </Style>
+    <!-- 选中规则放在悬停之后：键盘选中 + 鼠标压在同一行时，选中态说话 -->
+    <Style Selector="Button.palette-row.selected">
+      <Setter Property="Background" Value="{DynamicResource SukiPrimaryColor25}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiPrimaryColor120}" />
+    </Style>
 
-        <ScrollViewer Name="ResultScroller" Grid.Row="2" MaxHeight="368" VerticalScrollBarVisibility="Auto">
-          <StackPanel Margin="8,7,8,9">
-            <ItemsControl Name="ResultList" ItemsSource="{Binding Results}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:PaletteItem">
-                  <Button Classes="palette-row"
-                          Classes.active="{Binding IsSelected}"
-                          Command="{Binding ActivateCommand}">
-                    <Grid ColumnDefinitions="26,*,Auto" ColumnSpacing="10">
-                      <Border Width="26"
-                              Height="26"
-                              CornerRadius="{DynamicResource RadiusSm}"
-                              Background="{DynamicResource BgSunkenBrush}"
-                              VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Glyph}"
-                                   FontSize="11.5"
-                                   Foreground="{DynamicResource TextDimBrush}"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center" />
-                      </Border>
-                      <TextBlock Grid.Column="1"
-                                 Text="{Binding Title}"
-                                 FontSize="{DynamicResource FontBody}"
-                                 TextTrimming="CharacterEllipsis"
-                                 VerticalAlignment="Center" />
-                      <TextBlock Grid.Column="2"
-                                 Text="{Binding Hint}"
-                                 FontSize="{DynamicResource FontMicro}"
-                                 Foreground="{DynamicResource TextFaintBrush}"
-                                 VerticalAlignment="Center" />
-                    </Grid>
-                  </Button>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+    <Style Selector="Border.keycap">
+      <Setter Property="Background" Value="{DynamicResource SurfaceGlassRaised}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="6,1" />
+      <Setter Property="MinWidth" Value="20" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.keycap TextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeMicro}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiMuteText}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.keycap-label">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiDisabledText}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
 
-            <TextBlock Text="没有匹配的结果"
-                       IsVisible="{Binding ShowEmpty}"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontSm}"
-                       HorizontalAlignment="Center"
-                       Margin="0,18" />
-          </StackPanel>
-        </ScrollViewer>
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
 
-        <Border Grid.Row="3"
-                Padding="16,8"
-                BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource LineBrush}">
-          <StackPanel Orientation="Horizontal" Spacing="14">
-            <TextBlock Text="↑↓ 选择"
-                       FontSize="{DynamicResource FontMicro}"
-                       Foreground="{DynamicResource TextFaintBrush}" />
-            <TextBlock Text="Enter 执行"
-                       FontSize="{DynamicResource FontMicro}"
-                       Foreground="{DynamicResource TextFaintBrush}" />
-            <TextBlock Text="Esc 关闭"
-                       FontSize="{DynamicResource FontMicro}"
-                       Foreground="{DynamicResource TextFaintBrush}" />
-          </StackPanel>
-        </Border>
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="16,13,14,11">
+      <TextBox Name="SearchBox"
+               Classes="NoShadow"
+               FontSize="{DynamicResource FontSizeBody}"
+               Text="{Binding Query, Mode=TwoWay}"
+               PlaceholderText="搜索任务、项目，或执行命令…"
+               VerticalAlignment="Center" />
+      <Border Grid.Column="1"
+              Classes="keycap"
+              VerticalAlignment="Center">
+        <TextBlock Text="Esc" />
+      </Border>
+    </Grid>
 
-      </Grid>
+    <Border Grid.Row="1"
+            Height="1"
+            Background="{DynamicResource SukiBorderBrush}" />
+
+    <ScrollViewer Name="ResultScroller" Grid.Row="2" MaxHeight="368" VerticalScrollBarVisibility="Auto">
+      <StackPanel Margin="8,6,8,8">
+        <ItemsControl Name="ResultList" ItemsSource="{Binding Results}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:PaletteItem">
+              <Button Classes="palette-row"
+                      Classes.selected="{Binding IsSelected}"
+                      Command="{Binding ActivateCommand}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                  <!-- 类型字形：给个描边块，"项 / 任 / 看" 才立得住 -->
+                  <Border Width="28" Height="28"
+                          CornerRadius="8"
+                          Background="{DynamicResource SurfaceGlassRaised}"
+                          BorderBrush="{DynamicResource SurfaceStroke}"
+                          BorderThickness="1"
+                          VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Glyph}"
+                               FontSize="{DynamicResource FontSizeCaption}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource SukiLowText}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1"
+                             Text="{Binding Title}"
+                             FontSize="{DynamicResource FontSizeBody}"
+                             TextTrimming="CharacterEllipsis"
+                             VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2"
+                             Text="{Binding Hint}"
+                             FontSize="{DynamicResource FontSizeCaption}"
+                             Foreground="{DynamicResource SukiDisabledText}"
+                             VerticalAlignment="Center" />
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Text="没有匹配的结果"
+                   IsVisible="{Binding ShowEmpty}"
+                   FontSize="{DynamicResource FontSizeCaption}"
+                   Foreground="{DynamicResource SukiMuteText}"
+                   HorizontalAlignment="Center"
+                   Margin="0,18" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <Border Grid.Row="3"
+            Padding="16,8"
+            BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource SukiBorderBrush}">
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <StackPanel Orientation="Horizontal" Spacing="5">
+          <Border Classes="keycap"><TextBlock Text="↑" /></Border>
+          <Border Classes="keycap"><TextBlock Text="↓" /></Border>
+          <TextBlock Classes="keycap-label" Text="选择" Margin="2,0,0,0" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="5">
+          <Border Classes="keycap"><TextBlock Text="Enter" /></Border>
+          <TextBlock Classes="keycap-label" Text="执行" Margin="2,0,0,0" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="5">
+          <Border Classes="keycap"><TextBlock Text="Esc" /></Border>
+          <TextBlock Classes="keycap-label" Text="关闭" Margin="2,0,0,0" />
+        </StackPanel>
+      </StackPanel>
     </Border>
-  </Border>
+
+  </Grid>
 </UserControl>

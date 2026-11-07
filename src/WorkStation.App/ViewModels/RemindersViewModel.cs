@@ -17,7 +17,7 @@ namespace WorkStation.App.ViewModels;
 /// 对提醒这件事，真正有意义的只有「还欠着」和「已经过去」两种。已到点的那几条仍然排在最前面、
 /// 带暖底，但不再占一个独立分组。已完成的默认收起 —— 它是存档，不是待办。
 /// </summary>
-public partial class RemindersViewModel : ObservableObject
+public partial class RemindersViewModel : ObservableObject, IDeleteConfirmation, IEditorDialog
 {
     private readonly WorkStationService _service;
     private readonly Action<string, bool> _toast;
@@ -64,6 +64,12 @@ public partial class RemindersViewModel : ObservableObject
     private bool _isHandledExpanded;
 
     public bool IsDeleteConfirmOpen => PendingDelete is not null;
+    string IDeleteConfirmation.DeleteTargetName => PendingDelete?.Title ?? string.Empty;
+    System.Windows.Input.ICommand IDeleteConfirmation.Cancel => CancelDeleteCommand;
+    System.Windows.Input.ICommand IDeleteConfirmation.Confirm => ConfirmDeleteCommand;
+    object? IEditorDialog.Form => Form;
+    string IEditorDialog.DialogTemplateKey => "ReminderFormTemplate";
+    void IEditorDialog.DismissForm() => CancelForm();
 
     public bool HasError => Error is not null;
 
@@ -293,6 +299,11 @@ public sealed partial class ReminderRowViewModel : ObservableObject
     /// <summary>已经过了提醒时间但还没处理：时间文字转琥珀色，行也带暖底。</summary>
     public bool IsOverdue { get; }
 
+    /// <summary>时间文字色：到点未处理转琥珀，其余用弱化文本。</summary>
+    public Avalonia.Media.IBrush TimeBrush => IsOverdue
+        ? ThemeBrushes.Get("SukiWarningColor")
+        : ThemeBrushes.Get("SukiMuteText");
+
     public bool IsTaskReminder => Item.Kind == ReminderKind.TaskDue;
 
     public string SourceText => IsTaskReminder ? "任务截止" : "自定义";
@@ -362,7 +373,7 @@ public sealed partial class ReminderRowViewModel : ObservableObject
 }
 
 /// <summary>新建自定义提醒的表单。</summary>
-public partial class ReminderFormViewModel : ObservableObject
+public partial class ReminderFormViewModel : ObservableObject, IEditorForm
 {
     private readonly Action _save;
     private readonly Action _cancel;
@@ -405,6 +416,9 @@ public partial class ReminderFormViewModel : ObservableObject
             Time = rounded.TimeOfDay
         };
     }
+
+    System.Windows.Input.ICommand IEditorForm.Save => SaveCommand;
+    System.Windows.Input.ICommand IEditorForm.Cancel => CancelCommand;
 
     [RelayCommand]
     private void Save() => _save();

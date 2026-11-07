@@ -23,6 +23,9 @@ public sealed record TaskItem
 
     public Priority Priority { get; init; } = Priority.None;
 
+    /// <summary>开始时间（本地墙钟 YYYY-MM-DDTHH:mm），没有就空。</summary>
+    public string? StartAt { get; init; }
+
     /// <summary>本地墙钟 YYYY-MM-DDTHH:mm，不是日期串也不是 ISO UTC 串。</summary>
     public string? DueAt { get; init; }
 

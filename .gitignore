@@ -17,3 +17,7 @@ dist/
 
 # 临时截图产物（复查视觉用，不要提交）
 .shots/
+
+# Visual Studio / Rider 的本地工程缓存
+.vs/
+.idea/

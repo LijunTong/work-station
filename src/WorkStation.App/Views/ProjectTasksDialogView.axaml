@@ -1,0 +1,244 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WorkStation.App.ViewModels"
+             xmlns:controls="using:WorkStation.App.Controls"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
+             x:Class="WorkStation.App.Views.ProjectTasksDialogView"
+             x:DataType="vm:ProjectTasksDialogViewModel"
+             x:CompileBindings="True">
+
+  <!--
+    项目任务弹窗：左边是项目档案，右边是清单 + 快速添加。
+
+    布局要点（这一版重做的地方）：
+
+    1. 左栏分「上 / 中 / 下」三段而不是从上往下堆：项目名贴顶、进度环垂直居中、
+       统计与描述贴底。以前四行内容挤在顶部，弹窗下半截空出一大块，像没画完。
+    2. 左右之间用一条发丝竖线分栏，不再靠 20px 空白硬撑 —— 两栏是两种信息层级，
+       线比空白更能说明「这是两栏」。
+    3. 快速添加从「58 高的小输入框 + 角落小按钮」改成带分隔线与说明的独立区块，
+       输入框 96 高（可滚动到 150），按钮加宽加高到底对齐。
+  -->
+  <Grid ColumnDefinitions="252,*" RowDefinitions="*,Auto" Margin="26,22">
+
+    <!-- ============ 左栏：项目档案 ============ -->
+    <Border Grid.Column="0" Grid.Row="0"
+            BorderBrush="{DynamicResource SurfaceDivider}"
+            BorderThickness="0,0,1,0"
+            Padding="0,0,22,0">
+      <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" IsVisible="{Binding HasCard}">
+
+        <!-- 项目名 + 状态标签 -->
+        <StackPanel Grid.Row="0" Spacing="10">
+          <Grid ColumnDefinitions="Auto,*">
+            <Ellipse Width="9" Height="9"
+                     Fill="{Binding Card.AccentBrush}"
+                     IsVisible="{Binding Card.HasColor}"
+                     VerticalAlignment="Top"
+                     Margin="0,8,0,0" />
+            <TextBlock Grid.Column="1"
+                       Margin="8,0,0,0"
+                       Text="{Binding Card.Name}"
+                       FontSize="{DynamicResource FontSizeTitle}"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+          </Grid>
+
+          <Border Background="{DynamicResource SurfaceGlassRaised}"
+                  BorderBrush="{DynamicResource SurfaceStroke}"
+                  BorderThickness="1"
+                  CornerRadius="20"
+                  Padding="9,3"
+                  HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Ellipse Width="7" Height="7"
+                       Fill="{Binding Card.StatusBrush}"
+                       VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Card.StatusText}"
+                         FontSize="{DynamicResource FontSizeCaption}"
+                         Foreground="{DynamicResource SukiLowText}" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- 进度环：紧接标题，只留一段空白在它和底部脚注之间 -->
+        <suki:CircleProgressBar Grid.Row="1"
+                                Margin="0,24,0,0"
+                                Width="168" Height="168"
+                                StrokeWidth="10"
+                                Value="{Binding Card.Progress}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Top">
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+            <TextBlock Text="{Binding Card.ProgressText}"
+                       FontSize="{DynamicResource FontSizeMetric}"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource SukiLowText}" />
+            <TextBlock Text="完成度"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource SukiMuteText}" />
+          </StackPanel>
+        </suki:CircleProgressBar>
+
+        <!--
+          三个数字块紧接进度环：环说「完成了多少」，这三块说「摊开是多少」，
+          同一件事的两种读法，放在一起才连得上。
+          （原来只有一行「11 个任务 · 进行中 3」的纯文本，左栏下半截整个空掉。）
+        -->
+        <Grid Grid.Row="2" Margin="0,18,0,0" ColumnDefinitions="*,*,*" ColumnSpacing="8">
+          <StackPanel Spacing="1">
+            <TextBlock Text="{Binding Card.Counts.Total}"
+                       FontSize="{DynamicResource FontSizeMetric}"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource SukiLowText}" />
+            <TextBlock Text="任务"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       Foreground="{DynamicResource SukiMuteText}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Spacing="1">
+            <TextBlock Text="{Binding Card.Counts.Doing}"
+                       FontSize="{DynamicResource FontSizeMetric}"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource SukiLowText}" />
+            <TextBlock Text="进行中"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       Foreground="{DynamicResource SukiMuteText}" />
+          </StackPanel>
+          <StackPanel Grid.Column="2" Spacing="1">
+            <TextBlock Text="{Binding Card.Counts.Done}"
+                       FontSize="{DynamicResource FontSizeMetric}"
+                       FontWeight="Bold"
+                       Foreground="{DynamicResource SukiLowText}" />
+            <TextBlock Text="已完成"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       Foreground="{DynamicResource SukiMuteText}" />
+          </StackPanel>
+        </Grid>
+
+        <!-- 脚注贴底：日期 + 描述，给整栏收个口 -->
+        <StackPanel Grid.Row="4" Spacing="10">
+          <Border Height="1" Background="{DynamicResource SurfaceDivider}" />
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{Binding Card.OverdueText}"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource SukiDangerColor}"
+                       IsVisible="{Binding Card.HasOverdue}" />
+            <TextBlock Text="{Binding Card.DateRangeText}"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       Foreground="{DynamicResource SukiMuteText}"
+                       TextWrapping="Wrap" />
+          </StackPanel>
+
+          <Border Background="{DynamicResource SurfaceGlassSunken}"
+                  CornerRadius="10"
+                  Padding="12,10"
+                  IsVisible="{Binding Card.HasDescription}">
+            <TextBlock Text="{Binding Card.Description}"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       LineHeight="19"
+                       Foreground="{DynamicResource SukiMuteText}"
+                       TextWrapping="Wrap" />
+          </Border>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- ============ 右栏：清单 + 快速添加 ============ -->
+    <Grid Grid.Column="1" Grid.Row="0"
+          Margin="22,0,0,0"
+          RowDefinitions="Auto,*,Auto">
+
+      <!-- 头：标题 + 条数 + 关闭 -->
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,10">
+        <TextBlock Text="任务清单"
+                   FontSize="{DynamicResource FontSizeSubhead}"
+                   FontWeight="SemiBold"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource SukiLowText}" />
+        <Border Grid.Column="1"
+                Margin="8,0,0,0"
+                Padding="7,1"
+                CornerRadius="10"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource SurfaceStroke}"
+                Background="{DynamicResource SurfaceGlassRaised}"
+                VerticalAlignment="Center">
+          <TextBlock Text="{Binding Steps.Count}"
+                     FontSize="{DynamicResource FontSizeCaption}"
+                     Foreground="{DynamicResource SukiMuteText}" />
+        </Border>
+        <Button Grid.Column="3"
+                Classes="icon Basic"
+                Command="{Binding CloseCommand}"
+                ToolTip.Tip="关闭">
+          <PathIcon Data="{x:Static controls:AppIcons.Close}" Width="18" Height="18" />
+        </Button>
+      </Grid>
+
+      <ScrollViewer Grid.Row="1"
+                    HorizontalScrollBarVisibility="Disabled"
+                    Padding="0,0,6,0">
+        <!-- 清单本体由 code-behind 在每次数据变化时换成新的 VerticalStepper 实例，
+             原因见 RebuildStepper 的注释（SukiUI 原地刷新会留下残留行）。 -->
+        <Panel x:Name="StepperHost" />
+      </ScrollViewer>
+
+      <!-- 快速添加：分隔线 + 说明 + 加高的输入框 -->
+      <Border Grid.Row="2"
+              Margin="0,12,0,0"
+              Padding="0,12,0,0"
+              BorderThickness="0,1,0,0"
+              BorderBrush="{DynamicResource SurfaceDivider}">
+        <Grid RowDefinitions="Auto,Auto" RowSpacing="8">
+
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <TextBlock Text="快速添加"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource SukiLowText}" />
+            <TextBlock Grid.Column="1"
+                       Text="每行一个任务 · Ctrl+Enter 提交"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource SukiMuteText}" />
+          </Grid>
+
+          <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <TextBox Grid.Column="0"
+                     MinHeight="96" MaxHeight="150"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     VerticalContentAlignment="Top"
+                     Padding="10,9"
+                     Text="{Binding QuickAddText, Mode=TwoWay}"
+                     PlaceholderText="把要做的事写在这里，一次可以写好几条…">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Ctrl+Enter" Command="{Binding AddTasksCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Grid.Column="1"
+                    Content="添加"
+                    Classes="Flat"
+                    MinWidth="92" Height="40"
+                    VerticalAlignment="Bottom"
+                    Command="{Binding AddTasksCommand}" />
+          </Grid>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- 错误提示横跨两栏，落在最底下，不压住左栏标题 -->
+    <suki:InfoBar Grid.Row="1" Grid.ColumnSpan="2"
+                  IsVisible="{Binding HasError}"
+                  Margin="0,14,0,0"
+                  Message="{Binding Error}"
+                  Severity="Error"
+                  IsClosable="False" />
+
+  </Grid>
+</UserControl>

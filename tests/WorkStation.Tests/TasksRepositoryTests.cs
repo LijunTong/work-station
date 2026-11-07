@@ -42,6 +42,36 @@ public class TasksRepositoryTests : IDisposable
         Assert.Contains("YYYY-MM-DDTHH:mm", error.Message);
     }
 
+    /// <summary>任务也有起止两头：开始时间落库、读回、还能被清空。</summary>
+    [Fact]
+    public void Create_WithStartAt_StoresAndReadsBack()
+    {
+        var created = _tasks.Create(new CreateTaskInput
+        {
+            Title = "有起止",
+            StartAt = "2026-12-01T00:00",
+            DueAt = "2026-12-20T18:00"
+        });
+
+        Assert.Equal("2026-12-01T00:00", created.StartAt);
+        Assert.Equal("2026-12-20T18:00", created.DueAt);
+        Assert.Equal("2026-12-01T00:00", _tasks.Get(created.Id)?.StartAt);
+
+        var cleared = _tasks.Update(created.Id, new UpdateTaskInput { StartAt = Optional<string?>.Some(null) });
+        Assert.Null(cleared?.StartAt);
+        // 没传的字段保持原值
+        Assert.Equal("2026-12-20T18:00", cleared?.DueAt);
+    }
+
+    [Fact]
+    public void Create_RejectsInvalidStartAt()
+    {
+        var error = Assert.Throws<ArgumentException>(() =>
+            _tasks.Create(new CreateTaskInput { Title = "坏的开始时间", StartAt = "2026-12-01" }));
+
+        Assert.Contains("YYYY-MM-DDTHH:mm", error.Message);
+    }
+
     [Fact]
     public void Create_WithProject_StoresAssociation()
     {

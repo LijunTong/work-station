@@ -79,6 +79,90 @@ public class ProjectsViewModelTests : IDisposable
         Assert.Contains("不能早于", vm.Form.Error);
     }
 
+    /// <summary>
+    /// 项目的起止时间是必填的：项目内的任务默认落在这个区间里，
+    /// 项目没有区间，任务就无从继承。
+    /// </summary>
+    [Fact]
+    public void NewProject_MissingStartDate_ShowsValidationError()
+    {
+        var vm = CreateVm();
+        vm.NewProjectCommand.Execute(null);
+        vm.Form!.Name = "缺开始日期";
+        vm.Form.StartDate = null;
+
+        vm.Form.SaveCommand.Execute(null);
+
+        Assert.True(vm.IsFormOpen);
+        Assert.Equal("请填写项目开始日期", vm.Form.Error);
+        Assert.Empty(vm.Projects);
+    }
+
+    [Fact]
+    public void NewProject_MissingDueDate_ShowsValidationError()
+    {
+        var vm = CreateVm();
+        vm.NewProjectCommand.Execute(null);
+        vm.Form!.Name = "缺结束日期";
+        vm.Form.DueDate = null;
+
+        vm.Form.SaveCommand.Execute(null);
+
+        Assert.True(vm.IsFormOpen);
+        Assert.Equal("请填写项目结束日期", vm.Form.Error);
+        Assert.Empty(vm.Projects);
+    }
+
+    /// <summary>新建时先给一段默认区间，用户不用对着空的必填框发呆。</summary>
+    [Fact]
+    public void NewProject_PrefillsDateRange()
+    {
+        var vm = CreateVm();
+        vm.NewProjectCommand.Execute(null);
+
+        Assert.NotNull(vm.Form!.StartDate);
+        Assert.NotNull(vm.Form.DueDate);
+        Assert.True(vm.Form.DueDate > vm.Form.StartDate);
+    }
+
+    /// <summary>老项目没有起止日期时，卡片上要如实说「未设置」，不能装作没有这回事。</summary>
+    [Fact]
+    public void ProjectCard_ShowsDateRange()
+    {
+        var project = _service.ProjectsCreate(new CreateProjectInput
+        {
+            Name = "带区间的项目",
+            StartDate = "2026-12-01",
+            DueDate = "2026-12-20"
+        }).Data!;
+        var vm = CreateVm();
+
+        Assert.Equal("2026-12-01 ~ 2026-12-20", vm.Projects.Single(p => p.Project.Id == project.Id).DateRangeText);
+    }
+
+    /// <summary>项目按优先级给标识：与任务同一套颜色（高=危险色、中=警示色）。</summary>
+    [Fact]
+    public void ProjectCard_ShowsPriorityMarker()
+    {
+        var high = _service.ProjectsCreate(new CreateProjectInput
+        {
+            Name = "高优项目",
+            Priority = Priority.High
+        }).Data!;
+        var none = _service.ProjectsCreate(new CreateProjectInput { Name = "普通项目" }).Data!;
+
+        var vm = CreateVm();
+        var highCard = vm.Projects.Single(p => p.Project.Id == high.Id);
+        var noneCard = vm.Projects.Single(p => p.Project.Id == none.Id);
+
+        Assert.True(highCard.HasPriority);
+        Assert.Equal("高", highCard.PriorityText);
+        Assert.False(noneCard.HasPriority);
+
+        // 颜色来自主题资源，纯 ViewModel 单测拿不到主题时是中性灰 —— 只断言「有标识」
+        Assert.NotNull(highCard.PriorityBrush);
+    }
+
     [Fact]
     public void EditProject_PrefillsForm()
     {

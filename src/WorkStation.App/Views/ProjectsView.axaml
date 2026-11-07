@@ -2,46 +2,43 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WorkStation.App.ViewModels"
              xmlns:controls="using:WorkStation.App.Controls"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
              x:Class="WorkStation.App.Views.ProjectsView"
              x:DataType="vm:ProjectsViewModel"
              x:CompileBindings="True">
 
-  <UserControl.KeyBindings>
-    <KeyBinding Gesture="Escape" Command="{Binding CloseFormCommand}" />
-    <KeyBinding Gesture="Ctrl+Enter" Command="{Binding SaveFormCommand}" />
-  </UserControl.KeyBindings>
 
   <Grid RowDefinitions="Auto,Auto,*">
 
-    <!-- 工具栏：主操作靠右（与标题区同一视觉轴），次操作留左 -->
-    <Grid Grid.Row="0"
-          Margin="28,0,28,16"
-          ColumnDefinitions="Auto,*,Auto">
-      <CheckBox VerticalAlignment="Center"
-                Content="显示已归档"
-                IsChecked="{Binding IncludeArchived, Mode=TwoWay}" />
-      <TextBlock Grid.Column="1"
-                 Margin="16,0,0,0"
-                 VerticalAlignment="Center"
-                 Classes="dim"
-                 FontSize="{DynamicResource FontXs}"
-                 Text="{Binding Projects.Count, StringFormat='共 {0} 个项目'}" />
-      <Button Grid.Column="2"
-              Content="新建项目"
-              Classes="primary"
-              Command="{Binding NewProjectCommand}" />
-    </Grid>
-
-    <!-- 错误条：与空状态互斥，避免「加载失败」和「还没有项目」同屏 -->
-    <Border Grid.Row="1"
-            Classes="error-bar"
-            IsVisible="{Binding HasError}"
-            Margin="28,0,28,16">
-      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
+    <!-- 工具栏：主操作靠右（与标题区同一视觉轴），次操作留左；整条收进一张卡。
+         下边距 14：和页面头、和下面的项目卡片都要留出缝。 -->
+    <Border Grid.Row="0"
+            Classes="card"
+            Margin="{DynamicResource PageGutterBelowHeader}"
+            Padding="10,8">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <CheckBox VerticalAlignment="Center"
+                  Content="显示已归档"
+                  IsChecked="{Binding IncludeArchived, Mode=TwoWay}" />
+        <TextBlock Grid.Column="1"
+                   Margin="16,0,0,0"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource SukiMuteText}"
+                   Text="{Binding Projects.Count, StringFormat='共 {0} 个项目'}" />
+        <Button Grid.Column="2"
+                Content="新建项目"
+                Classes="Flat"
+                Command="{Binding NewProjectCommand}" />
+      </Grid>
     </Border>
 
+    <!-- 错误条：与空状态互斥，避免「加载失败」和「还没有项目」同屏 -->
+    <suki:InfoBar Grid.Row="1"
+            IsVisible="{Binding HasError}"
+            Margin="{DynamicResource PageGutter}" Message="{Binding Error}" Severity="Error" IsClosable="False" />
+
     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
-      <StackPanel Margin="{DynamicResource PagePadding}">
+      <StackPanel Margin="{DynamicResource PageGutterBottom}">
 
         <ItemsControl ItemsSource="{Binding Projects}" IsVisible="{Binding HasProjects}">
           <ItemsControl.ItemsPanel>
@@ -51,19 +48,40 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:ProjectCardViewModel">
-              <Border Classes="card" Width="306" Margin="0,0,16,16" Padding="16,15,16,0">
+              <suki:GlassCard Classes="card" Width="306" Margin="0,0,16,16" Padding="16,15,16,0">
                 <Grid RowDefinitions="Auto,Auto,Auto,Auto">
 
+                  <!--
+                    优先级不再用左边那条 3px 竖条。
+                    色条是从卡片内边距（16px）往里的，既不贴边也不圆角，
+                    看着像一条画歪的红线；而且它在 RowSpan 里一路贯到操作区，
+                    卡片被它劈成两半。改成标题行右侧的一枚小胶囊：
+                    淡色底 + 同色文字，位置和「进行中」一组，读起来是「属性」不是「装饰」。
+                  -->
                   <!-- 标题 + 状态 -->
                   <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
                     <TextBlock Text="{Binding Name}"
-                               FontSize="14.5"
+                               FontSize="{DynamicResource FontSizeHeading}"
                                FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="10,0,0,0">
-                      <Border Classes="chip" IsVisible="{Binding IsArchived}">
-                        <TextBlock Text="已归档" />
+                      <Panel IsVisible="{Binding HasPriority}" VerticalAlignment="Center">
+                        <Border Background="{Binding PriorityBrush}" Opacity="0.16" CornerRadius="4" />
+                        <TextBlock Text="{Binding PriorityText, StringFormat={}{0}优先}"
+                                   Margin="6,1"
+                                   FontSize="{DynamicResource FontSizeMicro}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{Binding PriorityBrush}" />
+                      </Panel>
+                      <Border IsVisible="{Binding IsArchived}"
+                              Padding="7,2"
+                              CornerRadius="4"
+                              Background="{DynamicResource SukiCardBackground}"
+                              VerticalAlignment="Center">
+                        <TextBlock Text="已归档"
+                                   FontSize="{DynamicResource FontSizeMicro}"
+                                   Foreground="{DynamicResource SukiMuteText}" />
                       </Border>
                       <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                         <Ellipse Width="6"
@@ -71,83 +89,86 @@
                                  Fill="{Binding StatusBrush}"
                                  VerticalAlignment="Center" />
                         <TextBlock Text="{Binding StatusText}"
-                                   FontSize="{DynamicResource FontMicro}"
-                                   Foreground="{DynamicResource TextDimBrush}" />
+                                   Foreground="{DynamicResource SukiMuteText}" />
                       </StackPanel>
                     </StackPanel>
                   </Grid>
 
-                  <!-- 描述占固定高度：卡片底部才能对齐，否则长短不一像没排版 -->
+                  <!-- 描述是辅助信息：弱化颜色、固定两行高度，卡片底部才能对齐 -->
                   <Border Grid.Row="1" Height="34" Margin="0,6,0,0">
                     <TextBlock Text="{Binding Description}"
-                               Classes="dim"
-                               FontSize="{DynamicResource FontSm}"
+                               Foreground="{DynamicResource SukiMuteText}"
                                MaxLines="2"
                                TextWrapping="Wrap"
                                TextTrimming="CharacterEllipsis"
                                IsVisible="{Binding HasDescription}" />
                   </Border>
 
-                  <!-- 进度 + 统计 -->
-                  <Grid Grid.Row="2" ColumnDefinitions="Auto,*" Margin="0,8,0,0">
-                    <Grid Width="42" Height="42" VerticalAlignment="Center">
-                      <controls:ProgressRing Value="{Binding Progress}"
-                                             Thickness="4"
-                                             RingBrush="{Binding RingBrush}"
-                                             TrackBrush="{DynamicResource BgSunkenBrush}" />
+                  <!-- 进度 + 统计：收窄进度环，把宽度让给统计文字。
+                       原 120px 圆环占了近半张卡，看起来像进度仪表盘而不是项目卡。 -->
+                  <Grid Grid.Row="2" ColumnDefinitions="72,*" ColumnSpacing="12" Margin="0,12,0,0">
+                    <suki:CircleProgressBar Grid.Column="0"
+                                            Width="72" Height="72"
+                                            StrokeWidth="6"
+                                            Value="{Binding Progress}"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center">
                       <TextBlock Text="{Binding ProgressText}"
-                                 FontSize="10.5"
+                                 FontSize="{DynamicResource FontSizeSubhead}"
                                  FontWeight="SemiBold"
-                                 HorizontalAlignment="Center"
-                                 VerticalAlignment="Center" />
-                    </Grid>
+                                 Foreground="{DynamicResource SukiLowText}" />
+                    </suki:CircleProgressBar>
 
-                    <StackPanel Grid.Column="1"
-                                Margin="12,0,0,0"
-                                Spacing="3"
-                                VerticalAlignment="Center">
+                    <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                       <TextBlock Text="{Binding MetaText}"
-                                 FontSize="{DynamicResource FontXs}"
-                                 Foreground="{DynamicResource TextSecondaryBrush}" />
-                      <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{Binding OverdueText}"
-                                   FontSize="{DynamicResource FontXs}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource DangerBrush}"
-                                   IsVisible="{Binding HasOverdue}" />
-                        <TextBlock Text="{Binding DueText}"
-                                   FontSize="{DynamicResource FontXs}"
-                                   Classes="dim" />
-                      </StackPanel>
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 Foreground="{DynamicResource SukiLowText}"
+                                 TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding OverdueText}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource SukiDangerColor}"
+                                 IsVisible="{Binding HasOverdue}" />
+                      <!-- 起止区间单独一行：和逾期数字挤在一行会被裁掉半句 -->
+                      <TextBlock Text="{Binding DateRangeText}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 Foreground="{DynamicResource SukiMuteText}"
+                                 TextWrapping="Wrap" />
                     </StackPanel>
                   </Grid>
 
-                  <!-- 操作：图标按钮，含义靠 tooltip 兜底；删除只在悬停时转红 -->
+                  <!-- 操作：图标按钮挪到右侧，含义靠 tooltip 兜底；删除只在悬停时转红。
+                       默认一律压成次要色 —— 之前「列表/编辑/归档」都是主色亮蓝、
+                       删除是纯红，四张彩图并排比项目名还抢眼。 -->
                   <Border Grid.Row="3"
                           Margin="0,14,-16,-1"
                           Padding="12,6"
                           BorderThickness="0,1,0,0"
-                          BorderBrush="{DynamicResource LineBrush}">
-                    <StackPanel Orientation="Horizontal" Spacing="2">
+                          BorderBrush="{DynamicResource SurfaceDivider}">
+                    <StackPanel Classes="card-actions"
+                                 Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right">
+                      <Button Classes="icon sm" Command="{Binding OpenTasksCommand}" ToolTip.Tip="查看该项目的任务列表">
+                        <PathIcon Data="{x:Static controls:AppIcons.Tasks}" Width="18" Height="18" />
+                      </Button>
                       <Button Classes="icon sm" Command="{Binding EditCommand}" ToolTip.Tip="编辑">
-                        <controls:Icon Kind="Edit" Size="13" />
+                        <PathIcon Data="{x:Static controls:AppIcons.Edit}" Width="18" Height="18" />
                       </Button>
                       <Button Classes="icon sm"
                               Command="{Binding ToggleArchiveCommand}"
                               ToolTip.Tip="{Binding ArchiveLabel}">
                         <Panel>
-                          <controls:Icon Kind="Archive" Size="13" IsVisible="{Binding !IsArchived}" />
-                          <controls:Icon Kind="Unarchive" Size="13" IsVisible="{Binding IsArchived}" />
+                          <PathIcon Data="{x:Static controls:AppIcons.Archive}" Width="18" Height="18" IsVisible="{Binding !IsArchived}" />
+                          <PathIcon Data="{x:Static controls:AppIcons.Unarchive}" Width="18" Height="18" IsVisible="{Binding IsArchived}" />
                         </Panel>
                       </Button>
-                      <Button Classes="icon sm dangerish" Command="{Binding DeleteCommand}" ToolTip.Tip="删除">
-                        <controls:Icon Kind="Trash" Size="13" />
+                      <Button Classes="icon sm danger" Command="{Binding DeleteCommand}" ToolTip.Tip="删除">
+                        <PathIcon Data="{x:Static controls:AppIcons.Trash}" Width="18" Height="18" />
                       </Button>
                     </StackPanel>
                   </Border>
 
                 </Grid>
-              </Border>
+              </suki:GlassCard>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
@@ -155,20 +176,18 @@
         <!-- 空状态 -->
         <Border IsVisible="{Binding ShowEmpty}"
                 Padding="48"
-                CornerRadius="{DynamicResource RadiusLg}"
                 BorderThickness="1"
-                BorderBrush="{DynamicResource LineBrush}">
+                BorderBrush="{DynamicResource SukiBorderBrush}">
           <StackPanel Spacing="7" HorizontalAlignment="Center">
             <TextBlock Text="还没有项目"
-                       FontSize="15"
+                       FontSize="{DynamicResource FontSizeSubhead}"
                        FontWeight="SemiBold"
                        HorizontalAlignment="Center" />
             <TextBlock Text="建一个项目，把相关任务收在一起，进度会自动算。"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontSm}"
+                       Foreground="{DynamicResource SukiMuteText}"
                        HorizontalAlignment="Center" />
             <Button Content="新建项目"
-                    Classes="primary"
+                    Classes="Flat"
                     HorizontalAlignment="Center"
                     Margin="0,10,0,0"
                     Command="{Binding NewProjectCommand}" />
@@ -178,138 +197,7 @@
       </StackPanel>
     </ScrollViewer>
 
-    <!-- 表单抽屉 -->
-    <Border Grid.RowSpan="3"
-            IsVisible="{Binding IsFormOpen}"
-            Background="{DynamicResource ScrimBrush}">
-      <Border Classes="drawer"
-              Width="460"
-              HorizontalAlignment="Right">
-        <ContentControl Content="{Binding Form}">
-          <ContentControl.ContentTemplate>
-            <DataTemplate x:DataType="vm:ProjectFormViewModel">
-              <Grid RowDefinitions="Auto,*,Auto">
 
-                <Border Grid.Row="0"
-                        Padding="22,18"
-                        BorderThickness="0,0,0,1"
-                        BorderBrush="{DynamicResource LineBrush}">
-                  <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="{Binding Title}" Classes="section-title" VerticalAlignment="Center" />
-                    <Button Grid.Column="1"
-                            Classes="icon"
-                            Command="{Binding CancelCommand}"
-                            ToolTip.Tip="关闭（Esc）">
-                      <controls:Icon Kind="Close" Size="13" />
-                    </Button>
-                  </Grid>
-                </Border>
-
-                <ScrollViewer Grid.Row="1">
-                  <StackPanel Margin="22,18,22,22" Spacing="16">
-
-                    <StackPanel Spacing="0">
-                      <TextBlock Text="名称" Classes="label" />
-                      <TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="例如：重构工作台" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="0">
-                      <TextBlock Text="描述" Classes="label" />
-                      <TextBox Text="{Binding Description, Mode=TwoWay}"
-                               AcceptsReturn="True"
-                               TextWrapping="Wrap"
-                               MinHeight="74"
-                               PlaceholderText="这个项目要达成什么" />
-                    </StackPanel>
-
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                      <StackPanel Spacing="0">
-                        <TextBlock Text="状态" Classes="label" />
-                        <ComboBox ItemsSource="{x:Static vm:ProjectFormViewModel.StatusOptions}"
-                                  SelectedIndex="{Binding StatusIndex, Mode=TwoWay}"
-                                  HorizontalAlignment="Stretch" />
-                      </StackPanel>
-                      <StackPanel Grid.Column="1" Spacing="0">
-                        <TextBlock Text="优先级" Classes="label" />
-                        <ComboBox ItemsSource="{x:Static vm:ProjectFormViewModel.PriorityOptions}"
-                                  SelectedIndex="{Binding PriorityIndex, Mode=TwoWay}"
-                                  HorizontalAlignment="Stretch" />
-                      </StackPanel>
-                    </Grid>
-
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                      <StackPanel Spacing="0">
-                        <TextBlock Text="开始日期" Classes="label" />
-                        <controls:DueDateField SelectedDate="{Binding StartDate, Mode=TwoWay}"
-                                               ShowTime="False"
-                                               Watermark="不设置" />
-                      </StackPanel>
-                      <StackPanel Grid.Column="1" Spacing="0">
-                        <TextBlock Text="目标日期" Classes="label" />
-                        <controls:DueDateField SelectedDate="{Binding DueDate, Mode=TwoWay}"
-                                               ShowTime="False"
-                                               Watermark="不设置" />
-                      </StackPanel>
-                    </Grid>
-
-                    <StackPanel Spacing="0">
-                      <TextBlock Text="进度" Classes="label" />
-                      <ComboBox ItemsSource="{x:Static vm:ProjectFormViewModel.ProgressModeOptions}"
-                                SelectedIndex="{Binding ProgressModeIndex, Mode=TwoWay}"
-                                HorizontalAlignment="Stretch" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="0" IsVisible="{Binding IsManualProgress}">
-                      <TextBlock Text="手动进度（0–100）" Classes="label" />
-                      <TextBox Text="{Binding ProgressManual, Mode=TwoWay}" PlaceholderText="0" />
-                    </StackPanel>
-
-                    <Border Classes="error-bar"
-                            IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
-                      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" />
-                    </Border>
-
-                  </StackPanel>
-                </ScrollViewer>
-
-                <Border Grid.Row="2"
-                        Padding="22,14"
-                        BorderThickness="0,1,0,0"
-                        BorderBrush="{DynamicResource LineBrush}">
-                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                    <Button Content="取消" Command="{Binding CancelCommand}" />
-                    <Button Content="保存" Classes="primary" Command="{Binding SaveCommand}" />
-                  </StackPanel>
-                </Border>
-
-              </Grid>
-            </DataTemplate>
-          </ContentControl.ContentTemplate>
-        </ContentControl>
-      </Border>
-    </Border>
-
-    <!-- 永久删除确认 -->
-    <Border Grid.RowSpan="3"
-            IsVisible="{Binding IsDeleteConfirmOpen}"
-            Background="{DynamicResource ScrimBrush}">
-      <Border Classes="card" Width="440" Padding="24" VerticalAlignment="Center" HorizontalAlignment="Center">
-        <StackPanel Spacing="14">
-          <TextBlock Text="永久删除项目？" Classes="section-title" />
-          <StackPanel Spacing="5">
-            <TextBlock Text="{Binding PendingDelete.Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
-            <TextBlock Text="该项目下的所有任务会一并删除，无法恢复。只想暂时隐藏，请用「归档」。"
-                       Classes="dim"
-                       FontSize="{DynamicResource FontSm}"
-                       TextWrapping="Wrap" />
-          </StackPanel>
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="取消" Command="{Binding CancelDeleteCommand}" />
-            <Button Content="永久删除" Classes="danger" Command="{Binding ConfirmDeleteCommand}" />
-          </StackPanel>
-        </StackPanel>
-      </Border>
-    </Border>
 
   </Grid>
 </UserControl>

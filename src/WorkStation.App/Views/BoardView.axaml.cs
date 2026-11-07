@@ -150,7 +150,7 @@ public partial class BoardView : UserControl
 
     private void OnColumnDragOver(object? sender, DragEventArgs e)
     {
-        if (sender is not Border column) return;
+        if (sender is not Control column) return;
 
         var accepts = column.DataContext switch
         {
@@ -166,12 +166,12 @@ public partial class BoardView : UserControl
 
     private void OnColumnDragLeave(object? sender, DragEventArgs e)
     {
-        if (sender is Border column) SetDragOver(column, false);
+        if (sender is Control column) SetDragOver(column, false);
     }
 
     private void OnColumnDrop(object? sender, DragEventArgs e)
     {
-        if (sender is not Border column) return;
+        if (sender is not Control column) return;
 
         SetDragOver(column, false);
 
@@ -191,7 +191,7 @@ public partial class BoardView : UserControl
         }
     }
 
-    private static void SetDragOver(Border column, bool value)
+    private static void SetDragOver(Control column, bool value)
     {
         switch (column.DataContext)
         {

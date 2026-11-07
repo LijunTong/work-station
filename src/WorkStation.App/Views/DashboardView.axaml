@@ -1,0 +1,462 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WorkStation.App.ViewModels"
+             xmlns:controls="using:WorkStation.App.Controls"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
+             x:Class="WorkStation.App.Views.DashboardView"
+             x:DataType="vm:DashboardViewModel"
+             x:CompileBindings="True">
+
+  <!-- 卡片外观统一走 App.axaml 的全局样式（Classes="card" / "card-row"），
+       这里不再单独定义圆角与描边 —— 各页面各写一份是之前不统一的根源。 -->
+
+  <UserControl.Styles>
+    <!-- 三张时间卡是「切换器」：选中的那张托亮一档（更实的玻璃底 + 半透明主色描边），
+         一眼能看出下面这块清单属于谁。描边用 50% 主色而不是实色，
+         避免又变成「整块彩色描边卡」那种廉价观感。 -->
+    <Style Selector="Border.period.selected">
+      <Setter Property="Background" Value="{DynamicResource SurfaceGlassRaised}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SukiPrimaryColor50}" />
+    </Style>
+  </UserControl.Styles>
+
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="{DynamicResource PageGutterBottom}" Spacing="16">
+
+      <!-- 顶部三张时间卡：今日 / 本周 / 本月。点一下切换下方清单显示哪一段。
+           每张卡带 12 的右间距，容器用 -12 抵消，最右一张才不会比下面的
+           内容块短一截（右侧基线也要对齐）。 -->
+      <ItemsControl ItemsSource="{Binding Periods}" Margin="0,0,-12,0">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Columns="3" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DashboardPeriodViewModel">
+            <Border Classes="card period"
+                    Classes.selected="{Binding IsSelected}"
+                    Margin="0,0,12,0"
+                    Padding="20,18">
+              <Button Background="Transparent"
+                      BorderThickness="0"
+                      Padding="0"
+                      HorizontalContentAlignment="Stretch"
+                      Command="{Binding $parent[UserControl].((vm:DashboardViewModel)DataContext).SelectPeriodCommand}"
+                      CommandParameter="{Binding}"
+                      ToolTip.Tip="切换下方清单显示的时间段">
+                <StackPanel Spacing="12">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding Label}"
+                               FontSize="{DynamicResource FontSizeHeading}"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Summary}"
+                               FontSize="{DynamicResource FontSizeCaption}"
+                               Foreground="{DynamicResource SukiMuteText}"
+                               VerticalAlignment="Center" />
+                  </Grid>
+
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel VerticalAlignment="Center" Spacing="5">
+                      <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Bottom">
+                        <TextBlock Text="{Binding Due}"
+                                   FontSize="{DynamicResource FontSizeMetric}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SukiText}" />
+                        <TextBlock Text="待完成"
+                                   FontSize="{DynamicResource FontSizeCaption}"
+                                   Foreground="{DynamicResource SukiMuteText}"
+                                   VerticalAlignment="Bottom"
+                                   Margin="0,0,0,4" />
+                      </StackPanel>
+                      <TextBlock Text="{Binding Completed, StringFormat='已完成 {0}'}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 Foreground="{DynamicResource SukiSuccessColor}" />
+                    </StackPanel>
+
+                    <suki:CircleProgressBar Grid.Column="1"
+                                            Width="56" Height="56"
+                                            StrokeWidth="5"
+                                            Value="{Binding Progress}"
+                                            VerticalAlignment="Center">
+                      <TextBlock Text="{Binding CompletionRate, StringFormat='{}{0}%'}"
+                                 FontSize="{DynamicResource FontSizeSubhead}"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource SukiLowText}" />
+                    </suki:CircleProgressBar>
+                  </Grid>
+                </StackPanel>
+              </Button>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- 主工作区：左「马上要动手的事 + 当前时间段的清单」，右「项目进度」。
+           两栏共用一个**固定高度**，解决三件事：
+           1. 清单常驻（默认今日），切今日/本周/本月 只换内容，页面高度不再跳；
+           2. 清单比卡片长就在卡片内部滚，不把整页撑开，也不留下半块空白；
+           3. 右栏跟着拉满，项目少的时候不会在右下角空出一块。
+           320 = 提示条 + 约 5 行任务；再多就在卡内滚动。 -->
+      <Grid ColumnDefinitions="1.7*,1*" ColumnSpacing="16" Height="320">
+
+        <Grid Grid.Column="0" RowDefinitions="Auto,*">
+
+          <!-- 需要立刻处理的：逾期 + 已阻塞。
+               用一层很淡的警示底表达紧急度，不再用亮红描边 —— 描边卡
+               视觉权重比页面标题还重，是这版最廉价的地方。
+               没有时整行高度归零，下面的清单自动占满。 -->
+          <Border Grid.Row="0"
+                  Classes="card attention"
+                  Margin="0,0,0,16"
+                  Padding="16,14"
+                  Background="{DynamicResource SurfaceAttention}"
+                  IsVisible="{Binding HasAttention}">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+              <PathIcon Data="{x:Static controls:AppIcons.Alert}"
+                        Width="18" Height="18"
+                        Foreground="{DynamicResource SukiDangerColor}"
+                        VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="需要立刻处理"
+                           FontSize="{DynamicResource FontSizeSubhead}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource SukiText}" />
+                <TextBlock Text="{Binding AttentionText}"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource SukiMuteText}" />
+              </StackPanel>
+              <Button Grid.Column="2"
+                      Content="去看板处理"
+                      Classes="Flat"
+                      Command="{Binding JumpToOverdueCommand}" />
+            </Grid>
+          </Border>
+
+          <!-- 清单：常驻，卡片高度由上面那行决定，内容超出就在卡片里滚 -->
+          <Border Grid.Row="1" Classes="card" Padding="18,16">
+            <Grid RowDefinitions="Auto,*">
+              <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding SelectedPeriod.Label, StringFormat='{}{0} 的任务清单'}"
+                           FontSize="{DynamicResource FontSizeHeading}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding SelectedPeriod.Summary}"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource SukiMuteText}"
+                           VerticalAlignment="Center" />
+              </Grid>
+
+              <Panel Grid.Row="1" Margin="0,10,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl ItemsSource="{Binding SelectedPeriod.Tasks}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DashboardTaskItem">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="0,4">
+                          <Border Width="7" Height="7"
+                                  CornerRadius="4"
+                                  Background="{Binding DotBrush}"
+                                  VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1"
+                                     Text="{Binding Title}"
+                                     FontSize="{DynamicResource FontSizeBody}"
+                                     TextTrimming="CharacterEllipsis"
+                                     VerticalAlignment="Center" />
+                          <!-- 行尾日期：今天到期的不显示（点开「今日」口径时每行都写同一天没有信息量） -->
+                          <TextBlock Grid.Column="2"
+                                     Text="{Binding DateLabel}"
+                                     IsVisible="{Binding HasDateLabel}"
+                                     FontSize="{DynamicResource FontSizeCaption}"
+                                     Foreground="{DynamicResource SukiMuteText}"
+                                     VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="3"
+                                     Text="{Binding StatusLabel}"
+                                     FontSize="{DynamicResource FontSizeCaption}"
+                                     Foreground="{DynamicResource SukiMuteText}"
+                                     VerticalAlignment="Center" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+
+                <!-- 空清单给一句话，别让固定高度的卡片空着一大片 -->
+                <TextBlock Text="这段时间没有到期的任务"
+                           IsVisible="{Binding !SelectedPeriod.HasTasks}"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource SukiMuteText}"
+                           VerticalAlignment="Top" />
+              </Panel>
+            </Grid>
+          </Border>
+        </Grid>
+
+        <Border Grid.Column="1"
+                Classes="card"
+                Padding="18,16"
+                IsVisible="{Binding HasProjects}"
+                VerticalAlignment="Stretch">
+          <Grid RowDefinitions="Auto,*">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+              <TextBlock Text="项目进度"
+                         FontSize="{DynamicResource FontSizeHeading}"
+                         FontWeight="SemiBold"
+                         VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1"
+                         Text="{Binding Projects.Count, StringFormat='共 {0} 个项目'}"
+                         FontSize="{DynamicResource FontSizeCaption}"
+                         Foreground="{DynamicResource SukiMuteText}"
+                         VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- 项目进度：实体数据。每行一个项目，带进度环、任务计数；点一下弹该项目的任务清单。
+                 项目多时在卡内滚动，不去撑高整行；提示语跟在列表末尾，
+                 不要钉在卡片底部 —— 项目少的时候会和列表隔出一大段空白。 -->
+            <ScrollViewer Grid.Row="1"
+                          Margin="0,10,0,0"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+              <StackPanel>
+                <ItemsControl ItemsSource="{Binding Projects}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DashboardProjectViewModel">
+                    <!-- 整行可点。用 Border + PointerPressed 而不是 Button：
+                         SukiUI 的 Button 模板把内容塞进横向 StackPanel，
+                         Grid 撑不满宽，右侧的「逾期」会贴在文字后面而不是靠右。 -->
+                    <Border Classes="card-row"
+                            Padding="10,6"
+                            Margin="0,0,0,6"
+                            PointerPressed="OnProjectRowPressed"
+                            ToolTip.Tip="查看该项目的任务清单">
+                      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <!-- 进度环 -->
+                        <suki:CircleProgressBar Grid.Column="0"
+                                                Width="44" Height="44"
+                                                StrokeWidth="4.5"
+                                                Value="{Binding Progress}"
+                                                VerticalAlignment="Center">
+                          <TextBlock Text="{Binding ProgressText}"
+                                     FontSize="{DynamicResource FontSizeCaption}"
+                                     FontWeight="SemiBold"
+                                     Foreground="{DynamicResource SukiLowText}" />
+                        </suki:CircleProgressBar>
+
+                        <!-- 项目名 + 状态 + 计数 -->
+                        <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Ellipse Width="6" Height="6"
+                                     Fill="{Binding StatusBrush}"
+                                     VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Name}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                          </StackPanel>
+                          <TextBlock Text="{Binding MetaText}"
+                                     FontSize="{DynamicResource FontSizeCaption}"
+                                     Foreground="{DynamicResource SukiMuteText}"
+                                     TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <!-- 逾期提示 -->
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding OverdueText}"
+                                   IsVisible="{Binding HasOverdue}"
+                                   FontSize="{DynamicResource FontSizeMicro}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SukiDangerColor}"
+                                   VerticalAlignment="Center" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+                <TextBlock Text="点项目行查看任务清单"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource SukiMuteText}"
+                           Margin="0,2,0,0" />
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <!-- 底部三块并排、等高：趋势 / 状态分布 / 优先级分布。
+           之前是「左趋势 + 右两个上下堆叠」，右栏比左栏高一倍，
+           趋势卡被拉到 400px 高却只有两根细柱子，中间全是空白。 -->
+      <Grid ColumnDefinitions="2*,1*,1*" ColumnSpacing="16">
+
+        <Border Classes="card" Padding="18,16" MinHeight="196">
+          <Grid RowDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Row="0"
+                       Text="近 7 天到期与完成"
+                       FontSize="{DynamicResource FontSizeHeading}"
+                       FontWeight="SemiBold" />
+
+            <controls:AppTrendChart Grid.Row="1"
+                                    Margin="0,12,0,0"
+                                    Items="{Binding Trend}"
+                                    PrimaryBrush="{DynamicResource SukiPrimaryColor}"
+                                    MutedBrush="{DynamicResource SukiMuteText}" />
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="14" Margin="0,10,0,0">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <Border Width="9" Height="9"
+                        Background="{DynamicResource SukiPrimaryColor}"
+                        CornerRadius="2" />
+                <TextBlock Text="完成"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource SukiMuteText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <Border Width="9" Height="9"
+                        Background="{DynamicResource SukiMuteText}"
+                        Opacity="0.35"
+                        CornerRadius="2" />
+                <TextBlock Text="到期"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource SukiMuteText}" />
+              </StackPanel>
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Border Grid.Column="1" Classes="card" Padding="18,16" MinHeight="196">
+            <StackPanel Spacing="10">
+              <TextBlock Text="任务状态分布"
+                         FontSize="{DynamicResource FontSizeHeading}"
+                         FontWeight="SemiBold" />
+
+              <ItemsControl ItemsSource="{Binding StatusBreakdown}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DashboardStatusSliceViewModel">
+                    <Grid ColumnDefinitions="52,*,Auto" ColumnSpacing="10" Margin="0,3">
+                      <TextBlock Text="{Binding Label}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 VerticalAlignment="Center" />
+                      <ProgressBar Grid.Column="1"
+                                   Height="8"
+                                   Minimum="0"
+                                   Maximum="100"
+                                   Value="{Binding Percent}"
+                                   Foreground="{Binding Brush}"
+                                   Background="{DynamicResource SukiControlTouchBackground}"
+                                   VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2"
+                                 Text="{Binding Count}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 FontWeight="SemiBold"
+                                 VerticalAlignment="Center" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Column="2" Classes="card" Padding="18,16" MinHeight="196">
+            <StackPanel Spacing="10">
+              <TextBlock Text="优先级分布（未完成）"
+                         FontSize="{DynamicResource FontSizeHeading}"
+                         FontWeight="SemiBold" />
+
+              <ItemsControl ItemsSource="{Binding PriorityBreakdown}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DashboardPrioritySliceViewModel">
+                    <Grid ColumnDefinitions="52,*,Auto" ColumnSpacing="10" Margin="0,3">
+                      <TextBlock Text="{Binding Label}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 VerticalAlignment="Center" />
+                      <ProgressBar Grid.Column="1"
+                                   Height="8"
+                                   Minimum="0"
+                                   Maximum="100"
+                                   Value="{Binding Percent}"
+                                   Foreground="{Binding Brush}"
+                                   Background="{DynamicResource SukiControlTouchBackground}"
+                                   VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2"
+                                 Text="{Binding Count}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 FontWeight="SemiBold"
+                                 VerticalAlignment="Center" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+        </Border>
+      </Grid>
+
+      <!-- 近期任务：全宽收尾，逾期的排最前；点一下打开编辑弹窗 -->
+      <Border Classes="card"
+              Padding="16,14"
+              IsVisible="{Binding HasUpcomingTasks}">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="近期任务"
+                       FontSize="{DynamicResource FontSizeHeading}"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1"
+                       Text="按紧急程度排序"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       Foreground="{DynamicResource SukiMuteText}"
+                       VerticalAlignment="Center" />
+          </Grid>
+
+          <ItemsControl ItemsSource="{Binding UpcomingTasks}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DashboardTaskViewModel">
+                <Border Classes="card-row"
+                        Padding="10,6"
+                        Margin="0,0,0,6"
+                        PointerPressed="OnTaskRowPressed"
+                        ToolTip.Tip="打开该任务的编辑弹窗">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <!-- 优先级圆点 -->
+                    <Border Width="7" Height="7"
+                            CornerRadius="4"
+                            Background="{Binding DotBrush}"
+                            VerticalAlignment="Center" />
+
+                    <!-- 标题 + 所属项目 -->
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Title}"
+                                 FontSize="{DynamicResource FontSizeBody}"
+                                 TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding ProjectName}"
+                                 IsVisible="{Binding HasProject}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 Foreground="{DynamicResource SukiMuteText}"
+                                 TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <!-- 截止时间：逾期的标红 -->
+                    <StackPanel Grid.Column="2" Spacing="2" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding DueText}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 Foreground="{DynamicResource SukiMuteText}"
+                                 HorizontalAlignment="Right" />
+                      <TextBlock Text="{Binding StatusLabel}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 Foreground="{DynamicResource SukiMuteText}"
+                                 HorizontalAlignment="Right" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

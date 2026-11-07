@@ -12,11 +12,13 @@ namespace WorkStation.App.ViewModels;
 /// </summary>
 public sealed partial class ProjectOption : ObservableObject
 {
-    public ProjectOption(string? id, string name, bool isArchived = false)
+    public ProjectOption(string? id, string name, bool isArchived = false, string? startDate = null, string? dueDate = null)
     {
         Id = id;
         _name = name;
         _isArchived = isArchived;
+        _startDate = startDate;
+        _dueDate = dueDate;
     }
 
     public string? Id { get; }
@@ -27,6 +29,17 @@ public sealed partial class ProjectOption : ObservableObject
 
     [ObservableProperty]
     private bool _isArchived;
+
+    /// <summary>
+    /// 项目的开始日期（本地日历日 yyyy-MM-dd）。
+    /// 任务表单用它给新任务预填开始时间 —— 任务的起止默认继承项目。
+    /// </summary>
+    [ObservableProperty]
+    private string? _startDate;
+
+    /// <summary>项目的结束日期（本地日历日 yyyy-MM-dd）。</summary>
+    [ObservableProperty]
+    private string? _dueDate;
 
     /// <summary>筛选用的「全部项目」。</summary>
     public static ProjectOption All { get; } = new(null, "全部项目");
@@ -72,6 +85,9 @@ internal static class ProjectOptionList
             var existing = target[at];
             existing.Name = want.Name;
             existing.IsArchived = want.IsArchived;
+            // 项目的起止日期也会变（改了项目的日期，任务的默认起止要跟着变）
+            existing.StartDate = want.StartDate;
+            existing.DueDate = want.DueDate;
 
             if (at != i) target.Move(at, i);
         }

@@ -56,6 +56,24 @@ public class MigrationsTests
         Assert.Equal(Migrations.All.Max(m => m.Version), Database.GetUserVersion(connection));
     }
 
+    /// <summary>任务有起止两头：开始时间是迁移 v2 加的列。</summary>
+    [Fact]
+    public void RunMigrations_AddsTaskStartAtColumn()
+    {
+        using var connection = TestDb.OpenMigrated();
+
+        var columns = new List<string>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "PRAGMA table_info(tasks)";
+            using var reader = command.ExecuteReader();
+            while (reader.Read()) columns.Add(reader.GetString(1));
+        }
+
+        Assert.Contains("start_at", columns);
+        Assert.Contains("due_at", columns);
+    }
+
     [Fact]
     public void RunMigrations_IsIdempotent()
     {
