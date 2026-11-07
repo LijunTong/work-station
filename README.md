@@ -56,7 +56,10 @@ M4（周报月报与统计）尚未开始；标签管理界面仍是 M2 遗留�
 ## 环境要求
 
 - 开发：.NET SDK **10.0** 或更高
-- 运行：目标机只需 **.NET 10 运行时**（Avalonia 是普通 NuGet 包，不需要 WindowsDesktop 运行时）
+- 运行：**目标机什么都不用装**。发布产物是自包含的，运行时已经打包进去了
+  （Avalonia 是普通 NuGet 包，不需要 WindowsDesktop 桌面运行时）
+
+Windows 上还有图形化安装包（`dist\installer\WorkStation-Setup-*.exe`），双击即可安装 —— 见下面「发布」。
 
 ## 开发
 
@@ -72,16 +75,17 @@ dotnet run --project src/WorkStation.App
 dotnet test
 ```
 
-当前 **313 个用例**，覆盖：
+当前 **432 个用例**，覆盖：
 
 | 层 | 内容 |
 | --- | --- |
 | Core 单元 | 时间三类格式、进度计算、任务分组（含周日边界）、格式化、看板口径（列顺序 / 已完成窗口 / 概览计数）、提醒排期（提前量 / 重复下一次 / 到点判定 / 站会去重） |
 | 数据层 | 迁移、完整性检查、损坏恢复、备份轮转、五个仓储的 CRUD 与聚合、任务截止时间与提醒的同步（幂等） |
 | 服务层 | Result 契约（不抛异常）、错误码映射、中文化错误文案、提醒三条写入口自动排期、站会时间校验 |
-| ViewModel | 快速添加、分组顺序、折叠保持、筛选与搜索、表单校验、归档与删除确认、看板拖拽改状态、命令面板检索、提醒页两组与行内动作、通知点击跳转 |
+| ViewModel | 快速添加、分组顺序、折叠保持、筛选与搜索、表单校验、归档与删除确认、看板拖拽改状态、命令面板检索、提醒页两组与行内动作、通知点击跳转、自定义主题色与字体选择 |
 | 调度器 | 单次节拍（先落状态后发通知）、重复规则顺延、任务已完结转忽略、通知失败落 `Failed`、站会一天只发一次 |
 | UI 冒烟 | 真实 XAML 加载（Headless）、主窗口导航（含提醒页）、键盘快捷键、看板双击开抽屉、命令面板键盘滚动跟随、主题切换落盘 |
+| 安装器 | 自包含发布配置、安装包源文件路径、免管理员安装、卸载项注册、卸载时询问是否删数据、语言包与向导图片编码、`rollForward` 配置 |
 
 UI 层用 `Avalonia.Headless` 承载，XAML 解析失败或编译绑定路径写错会直接让测试变红。
 
@@ -90,11 +94,100 @@ UI 层用 `Avalonia.Headless` 承载，XAML 解析失败或编译绑定路径写
 ```powershell
 tools\publish.ps1 -Rid win-x64                         # 只出 Windows
 tools\publish.ps1                                      # win-x64 / osx-arm64 / linux-x64
+tools\build-installer.ps1                              # 顺带构建 Windows 安装包
 ```
 
-产物在 `dist/<rid>/`，单文件、可直接双击。win-x64 实测 **31.4 MB**（含 Skia / HarfBuzz / SQLite 原生库），目标机需预装 .NET 10 运行时。
+产物形态是**自包含 + 单文件**：exe 里带着 .NET 运行时，目标机什么都不用装。
+win-x64 主程序实测 **49.8 MB**（含 Skia / HarfBuzz / SQLite 原生库与运行时）。
 
-> Windows PowerShell 5.1 读取无 BOM 的 UTF-8 脚本会按 GBK 解码，中文注释可能破坏语法。`tools/publish.ps1` 因此保存为 UTF-8 with BOM，改动时请保持。
+### Windows 安装包
+
+```powershell
+tools\build-installer.ps1
+```
+
+产出 `dist\installer\WorkStation-Setup-<版本>.exe`（约 **45 MB**），用
+[Inno Setup 6](https://jrsoftware.org/isdl.php) 编译。安装向导是中文的，
+流程跟装其它 Windows 软件一样：
+
+| 环节 | 行为 |
+| --- | --- |
+| 安装位置 | 默认 `%LOCALAPPDATA%\Programs\WorkStation`，可改 |
+| 权限 | 只装给当前用户（写 HKCU），**不弹 UAC** |
+| 快捷方式 | 开始菜单（含「卸载」项）+ 桌面（可选勾选） |
+| 卸载 | 「设置 → 应用 → 已安装的应用」里能卸载；卸载时会问一句「数据要不要一起删」，默认**保留** |
+| 依赖 | 无。运行时已经打包进去了 |
+
+安装包定义在 `tools\installer\WorkStation.iss`，向导横幅图由
+`tools\installer\make-wizard-images.py` 从应用图标生成（主色渐变 + 图标）。
+
+**为什么改成自包含**：早先的产物是框架依赖发布，目标机缺 .NET 10 运行时时，
+apphost 会在 CLR 加载**之前**就失败（弹一句英文的 "You must install .NET to run this application" 然后退出）。
+「启动时判断有没有运行时」这件事没法写在应用代码里 —— 能跑到代码里就说明运行时已经在了。
+所以前面必须有一个**不依赖 .NET** 的东西顶着，早先的方案是「脚本 + 现场下载运行时」，
+用户要多点几个界面，还得担心下载失败。自包含把这个问题从根上消掉：装完就能用。
+
+> **两个必须记住的坑**：
+> 1. Inno Setup 按 BOM 判断 `.isl` 的编码，没 BOM 就按 ANSI 读，中文会整段乱码。
+>    `build-installer.ps1` 每次编译前都会检查并补上 BOM。
+> 2. Inno Setup 6 的 `WizardImageFile` 只接受 **24 位无压缩 BMP**，
+>    PIL 默认存成 32 位带 alpha 的会被拒。`make-wizard-images.py` 里显式转 RGB 再存。
+
+> **不要用 `PublishTrimmed=true`**：SukiUI 的 `SettingsLayout` 用反射 Binding、
+> `System.Text.Json` 用反射序列化，裁剪会直接把它们裁掉而崩掉。
+> 而且 partial trim 对 Avalonia 几乎不省体积（裁剪版和自包含版都是 ~50 MB）。
+
+### Linux 安装包
+
+```powershell
+tools\linux\build-linux-packages.ps1
+```
+
+产出两个包（各约 45 MB，都在 `dist\linux\`）：
+
+| 包 | 给谁用 | 怎么装 |
+| --- | --- | --- |
+| `workstation_1.0.1_amd64.deb` | Debian / Ubuntu / 深度uos / UOS 等 | `sudo dpkg -i workstation_1.0.1_amd64.deb` |
+| `workstation-1.0.1-linux-x86_64.tar.gz` | Arch / Fedora / openSUSE 等 | 解压后 `bash install.sh` |
+
+两者都是自包含的，**目标机不用装 .NET**。
+
+**`.deb` 装完的样子**（Debian 惯例）：
+
+| 路径 | 内容 |
+| --- | --- |
+| `/opt/workstation/` | 应用本体 |
+| `/usr/bin/workstation` | 指向它的符号链接，命令行直接敲 `workstation` |
+| `/usr/share/applications/workstation.desktop` | 桌面菜单项（中文） |
+| `/usr/share/icons/hicolor/*/apps/workstation.png` | 16/24/32/48/64/128/256 各尺寸图标 |
+
+卸载：`sudo apt remove workstation`。数据留在 `~/.local/share/work-station`，不动。
+
+**绿色版**不碰系统目录，装到 `~/.local` 下（不需要 root）：`install.sh` 建软链和桌面图标，
+`uninstall.sh` 撤掉。
+
+**AppImage**：需要 `mksquashfs`（只有 Linux 上有），所以留了一个脚本 ——
+绿色版解压后跑 `./build-appimage.sh` 就能生成单文件的 `.AppImage`。
+
+**Linux 上的依赖**（写进了 `.deb` 的 `Depends`）：
+
+- `libfontconfig1` —— Skia 靠它找字体，缺了应用起不来
+- `liblttng-ust1` —— .NET 的 EventPipe tracing 硬链接了它
+- `libicu`（用 `|` 列出多个版本）—— .NET 8+ 在 Linux 上是 dlopen 系统 ICU 的，
+  而 ICU 的 soname 带版本号，各发行版不同（Ubuntu 22.04 是 libicu70、24.04 是 libicu74、
+  Debian 12 是 libicu72）。写死一个版本会让别的发行版装不上。
+- `libx11-6` / `libgl1` / `libegl1` 等 —— Avalonia 的窗口后端是**运行时 dlopen** 的，
+  ELF 依赖表里看不到，但没有它们开不了窗口。
+
+> **这台机器上没有 WSL、没有 Docker daemon、也没有 dpkg-deb / ar / mksquashfs**，
+> 所以 `.deb` 是**手写**出来的 —— 它本身就是「ar 归档 + 两个 tar.gz」，
+> ar 头格式固定、tar/gzip Python 原生支持。格式正确性靠
+> `tools\linux\verify-linux-packages.py` 保证：38 项检查覆盖 ar 头布局、
+> control 字段、文件权限、符号链接目标、md5sums 与实际内容是否一致。
+
+> **Linux 走目录式发布，不走单文件**：单文件 + `EnableCompressionInSingleFile`
+> 每次启动都要把原生库解压到 `/tmp`，桌面应用的启动延迟不能接受；
+> Debian 惯例本来就是 `/opt/app` 下放文件 + `/usr/bin` 放符号链接。
 
 ## 数据存放
 
