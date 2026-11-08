@@ -1530,9 +1530,18 @@ public class WorkStationServiceReportsTests : IDisposable
         var created = _service.ReportsEnsure(ReportKind.Daily, start).Data!;
         _service.ReportsUpdate(created.Id, "我写的补充");
 
+        // 汇总之后又加了一件事：重新汇总必须把它算进来。
+        // 少了这一步，「没重算、原样返回旧记录」的实现照样能通过断言。
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "重新汇总之后才加的事",
+            DueAt = LocalTime.ToLocalDateTime(DateTime.Today.AddHours(18))
+        });
+
         var regenerated = _service.ReportsRegenerate(created.Id).Data!;
 
         Assert.Equal("我写的补充", regenerated.ManualText);
+        Assert.Contains("重新汇总之后才加的事", regenerated.AutoMarkdown);
         Assert.Contains("### 统计", regenerated.AutoMarkdown);
         Assert.EndsWith("我写的补充", regenerated.FinalMarkdown);
     }
@@ -1550,11 +1559,26 @@ public class WorkStationServiceReportsTests : IDisposable
     [Fact]
     public void ReportsStats_ReturnsCurrentPeriodNumbers()
     {
+        // 上周到期的不算今天的日报 —— 统计必须按当前周期取数，
+        // 少了这条，用错周期（或者干脆统计全库）的实现照样能过。
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "上周到期的",
+            DueAt = LocalTime.ToLocalDateTime(DateTime.Today.AddDays(-7).AddHours(18))
+        });
+
+        _service.TasksCreate(new CreateTaskInput
+        {
+            Title = "今天到期的",
+            DueAt = LocalTime.ToLocalDateTime(DateTime.Today.AddHours(18))
+        });
+
         var stats = _service.ReportsStats(ReportKind.Daily).Data!;
 
         Assert.Equal(0, stats.Completed);
-        Assert.Equal(0, stats.CarriedOver);
-        Assert.Equal(0, stats.Total);
+        Assert.Equal(1, stats.CarriedOver);
+        Assert.Equal(1, stats.Total);
+        // Overdue 不断言：到期时刻过了没有取决于测试跑在几点
     }
 
     [Fact]
@@ -1584,6 +1608,9 @@ Expected: FAIL —— `ReportsEnsure` 等方法不存在
    `System.IO.NotFoundException` 是文件语义，用在这里不合适）。
    `Guard` 是所有服务方法共用的私有静态方法，现有代码里没有任何一条路径会抛
    `KeyNotFoundException`（字典访问全用 `TryGetValue`，没有裸下标读）—— 加这条 catch 不改变既有行为。
+   **这条 catch 的 Message 不要透传 `error.Message`**：将来任何裸字典下标读抛出的 BCL 消息都是英文
+   （`The given key 'x' was not present in the dictionary.`），会违反「Message 是可直接展示的中文文案」。
+   用固定中文模板，例如 `$"{operation}失败：未找到对应记录"`。
 5. 在「---------- 提醒 ----------」这一段**之前**插入新的一段：
 
 ```csharp
