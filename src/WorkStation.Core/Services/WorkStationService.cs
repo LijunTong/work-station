@@ -35,6 +35,13 @@ public sealed class WorkStationService
     private readonly string _userDataPath;
     private readonly string _version;
 
+    /// <summary>
+    /// 读旧设置用的解析选项：属性名不区分大小写。
+    /// daily_review 这个键历史上出现过两种写法（设计稿里是 enabled / time，
+    /// 本版实现写的是 Enabled / Time），两种都得认 —— 认不得就等于把老用户的设置丢了。
+    /// </summary>
+    private static readonly JsonSerializerOptions LegacyJson = new() { PropertyNameCaseInsensitive = true };
+
     public WorkStationService(SqliteConnection connection, string databasePath, string version = "0.1.0")
     {
         _connection = connection;
@@ -367,6 +374,130 @@ public sealed class WorkStationService
             _settings.Set("close_to_tray", value);
             return true;
         });
+
+    // ---------- 报告提醒 ----------
+
+    /// <summary>
+    /// 三类报告提醒的设置。
+    ///
+    /// 读不到新键时回落到旧的 daily_review：老用户设过的站会时间不该丢，
+    /// 把它填进日报那一项，其余用默认值。旧键保留不删。
+    /// </summary>
+    public Result<ReportReminderSettings> ReportRemindersGet() =>
+        Guard("读取报告提醒设置", () =>
+        {
+            var stored = _settings.Get("report_reminders");
+            if (stored is { } element && element.ValueKind == JsonValueKind.Object)
+            {
+                try
+                {
+                    var parsed = element.Deserialize<ReportReminderSettings>();
+                    if (parsed is not null) return parsed;
+                }
+                catch (JsonException)
+                {
+                    // 新键坏掉时当它不存在，往回落 —— 宁可给默认值，也别让设置页整个打不开
+                }
+            }
+
+            var defaults = new ReportReminderSettings();
+
+            // 老键的结构与 DailyReviewSettings 一致，直接复用同一个模型：
+            // 字段缺失时模型自带的默认值（启用、09:00）顶上，
+            // 不会因为「少一个字段」就把用户的日报关掉。
+            var legacy = ReadLegacyDailyReview();
+            if (legacy is null) return defaults;
+
+            // 老键的时间可能不是 HH:mm（手改过库、或老版本写坏了），
+            // 非法就退回默认时间 —— 一条永远不会响的日报等于没设。
+            var time = ReportReminderPlanner.IsValidTime(legacy.Time)
+                ? legacy.Time
+                : ReportReminderPlanner.DefaultTime;
+
+            return defaults with
+            {
+                Daily = defaults.Daily with { Enabled = legacy.Enabled, Time = time }
+            };
+        });
+
+    public Result<bool> ReportRemindersSet(ReportReminderSettings settings) =>
+        Guard("保存报告提醒设置", () =>
+        {
+            ValidateEntry(settings.Daily, "日报");
+            ValidateEntry(settings.Weekly, "周报");
+            ValidateEntry(settings.Monthly, "月报");
+
+            if (settings.Weekly.DayOfWeek is < 1 or > 7)
+            {
+                throw new ArgumentException("周报提醒的星期应为 1（周一）到 7（周日）");
+            }
+
+            if (settings.Monthly.DayOfMonth is < 1 or > 31)
+            {
+                throw new ArgumentException("月报提醒的几号应为 1 到 31");
+            }
+
+            _settings.Set("report_reminders", settings);
+            return true;
+        });
+
+    /// <summary>某类提醒上次触发的周期键；没触发过返回 null。</summary>
+    public Result<string?> ReportReminderLastFired(ReportKind kind) =>
+        Guard("读取报告提醒记录", () =>
+        {
+            var raw = _settings.GetString(LastFiredKey(kind), string.Empty);
+            return string.IsNullOrEmpty(raw) ? null : raw;
+        });
+
+    public Result<bool> ReportReminderMarkFired(ReportKind kind, string key) =>
+        Guard("记录报告提醒", () =>
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new ArgumentException("报告提醒的去重键不能为空");
+            }
+
+            _settings.Set(LastFiredKey(kind), key);
+            return true;
+        });
+
+    private static void ValidateEntry(ReportReminderEntry entry, string label)
+    {
+        if (!ReportReminderPlanner.IsValidTime(entry.Time))
+        {
+            throw new ArgumentException($"{label}提醒时间应形如 HH:mm");
+        }
+    }
+
+    /// <summary>
+    /// 读旧键 daily_review。老键的结构与 <see cref="DailyReviewSettings"/> 一致，
+    /// 属性名不区分大小写（enabled / time 与 Enabled / Time 都认）。
+    /// 读不出来当它不存在。
+    /// </summary>
+    private DailyReviewSettings? ReadLegacyDailyReview()
+    {
+        if (_settings.Get("daily_review") is not { } element
+            || element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        try
+        {
+            return element.Deserialize<DailyReviewSettings>(LegacyJson);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string LastFiredKey(ReportKind kind) => kind switch
+    {
+        ReportKind.Daily => "report_reminder_daily_last",
+        ReportKind.Weekly => "report_reminder_weekly_last",
+        _ => "report_reminder_monthly_last"
+    };
 
     // ---------- 设置 ----------
 
