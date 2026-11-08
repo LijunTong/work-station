@@ -33,7 +33,7 @@
 | 位置 | 设计文档写法 | 本计划写法 | 原因 |
 | --- | --- | --- | --- |
 | 唯一索引 | 新增 `idx_reports_kind_period` | **把已有的 `idx_reports_period` 改成 UNIQUE** | 同一组列不需要两个索引；索引名不变，`MigrationsTests.RunMigrations_CreatesAllSixIndexes` 也不用改 |
-| Markdown 统计行 | `完成 12 项 · 遗留未完成 5 项 · 逾期 2 项` | `完成 12 项 · 未完成 5 项（其中逾期 2 项）` | 「逾期」是「未完成」的子集，原写法两个数并列会被读成 5+2 |
+| Markdown 统计行 | `完成 12 项 · 遗留未完成 5 项 · 逾期 2 项` | `完成 12 项 · 遗留未完成 5 项（其中逾期 2 项）` | 「逾期」是「遗留未完成」的子集，原写法两个数并列会被读成 5+2；括号表达把包含关系写明 |
 | 报告统计取值 | 未写 | 新增 `WorkStationService.ReportsStats(kind)` | 通知正文要用周期统计，服务层是唯一数据入口 |
 | Markdown 渲染 | 「分段 TextBlock 渲染」 | Core 纯函数 `ReportMarkdown.Parse` + VM 行集合 | 解析逻辑可单测，XAML 只做渲染 |
 | 周报「未完成」的口径 | 未细分 | 「未完成」含逾期；清单里逾期的那几条**单列在「逾期」小节** | 两处数字必须各自对得上清单，不能重复计入 |
@@ -4051,8 +4051,9 @@ git commit -m "feat(reports): 提醒换成日报/周报/月报三类，移除站
 
 `docs/superpowers/specs/2026-11-08-report-feature-design.md`：
 把「唯一索引」那段改成复用 `idx_reports_period`（UNIQUE），
-把 Markdown 统计行改成 `完成 N 项 · 未完成 M 项（其中逾期 K 项）· 完成率 R%`，
+把 Markdown 统计行改成 `完成 N 项 · 遗留未完成 M 项（其中逾期 K 项）· 完成率 R%`，
 并加一句「服务层另提供 `ReportsStats(kind)` 供通知正文取数」。
+还要把 `ReportStats` 的 `CompletionRate` / `Total` 改成计算属性的说明补上（设计文档写的是 init 属性）。
 
 - [ ] **Step 5: 给 `VisualCheck` 加报告页截图**
 
