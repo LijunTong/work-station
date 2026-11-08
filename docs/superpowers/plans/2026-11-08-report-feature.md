@@ -37,6 +37,7 @@
 | 报告统计取值 | 未写 | 新增 `WorkStationService.ReportsStats(kind)` | 通知正文要用周期统计，服务层是唯一数据入口 |
 | Markdown 渲染 | 「分段 TextBlock 渲染」 | Core 纯函数 `ReportMarkdown.Parse` + VM 行集合 | 解析逻辑可单测，XAML 只做渲染 |
 | 周报「未完成」的口径 | 未细分 | 「未完成」含逾期；清单里逾期的那几条**单列在「逾期」小节** | 两处数字必须各自对得上清单，不能重复计入 |
+| `ReportStats.CompletionRate` | `public int CompletionRate { get; init; }` | 改成**计算属性**（`Total == 0 ? 0 : Math.Round(...)`），`Total` 也改成计算属性 | 完成率与总数都由已统计的三项推出，让调用方能改写其中一项却忘了重算另一个 |
 
 ---
 
