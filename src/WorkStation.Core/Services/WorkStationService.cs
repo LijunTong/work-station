@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using WorkStation.Core.Data;
 using WorkStation.Core.Data.Repositories;
 using WorkStation.Core.Models;
 using WorkStation.Core.Reminders;
+using WorkStation.Core.Reports;
 
 namespace WorkStation.Core.Services;
 
@@ -17,7 +19,8 @@ public sealed record AppInfo(string Version, string DatabasePath, string UserDat
 /// error.code 机器可读，error.message 是可直接展示给用户的中文文案。
 ///
 /// 数据不存在时返回 null / false（与 M1 的 Electron 版语义一致），
-/// 参数非法返回 VALIDATION_FAILED，数据库写失败返回 DB_WRITE_FAILED。
+/// 参数非法返回 VALIDATION_FAILED，数据库写失败返回 DB_WRITE_FAILED，
+/// 按 id 找不到记录返回 NOT_FOUND。
 /// </summary>
 public sealed class WorkStationService
 {
@@ -27,6 +30,7 @@ public sealed class WorkStationService
     private readonly TagsRepository _tags;
     private readonly SettingsRepository _settings;
     private readonly RemindersRepository _reminders;
+    private readonly ReportsRepository _reports;
     private readonly string _databasePath;
     private readonly string _userDataPath;
     private readonly string _version;
@@ -39,6 +43,7 @@ public sealed class WorkStationService
         _tags = new TagsRepository(connection);
         _settings = new SettingsRepository(connection);
         _reminders = new RemindersRepository(connection);
+        _reports = new ReportsRepository(connection);
         _databasePath = databasePath;
         _userDataPath = Path.GetDirectoryName(databasePath) ?? databasePath;
         _version = version;
@@ -187,6 +192,101 @@ public sealed class WorkStationService
     public Result<IReadOnlyList<Tag>> TagsListTaskTags(string taskId) =>
         Guard("读取任务标签", () => _tags.ListTaskTags(taskId));
 
+    // ---------- 报告 ----------
+
+    /// <summary>报告列表。kind 为 null 时返回全部类型，按周期起点倒序。</summary>
+    public Result<IReadOnlyList<Report>> ReportsList(ReportKind? kind = null) =>
+        Guard("读取报告列表", () => _reports.List(kind));
+
+    public Result<Report?> ReportsGet(string id) => Guard("读取报告", () => _reports.Get(id));
+
+    /// <summary>
+    /// 取某个周期的报告，没有就建一条并立即生成自动汇总。
+    ///
+    /// **幂等**：周期已存在就原样返回（人工补充必须留着，绝不能被自动汇总覆盖）。
+    /// </summary>
+    public Result<Report> ReportsEnsure(ReportKind kind, string periodStart) =>
+        Guard("生成报告", () =>
+        {
+            // 周期起点必须是 YYYY-MM-DD：后面的 ReportPeriods.FromStart 会按这个格式解析，
+            // 解析失败会抛英文的 FormatException，用户看不懂。
+            if (!DateTime.TryParseExact(
+                    periodStart,
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out _))
+            {
+                throw new ArgumentException("报告周期起点应为 YYYY-MM-DD");
+            }
+
+            var existing = _reports.GetByPeriod(kind, periodStart);
+            if (existing is not null) return existing;
+
+            var period = ReportPeriods.FromStart(kind, periodStart);
+            var auto = ReportComposer.Compose(period, _tasks.List(), _projects.List(true), DateTime.Now);
+
+            return _reports.Create(new Report
+            {
+                Id = string.Empty,
+                Kind = kind,
+                PeriodStart = period.PeriodStart,
+                PeriodEnd = period.PeriodEnd,
+                AutoMarkdown = auto,
+                ManualText = string.Empty,
+                FinalMarkdown = auto,
+                CreatedAt = string.Empty,
+                UpdatedAt = string.Empty
+            });
+        });
+
+    /// <summary>保存人工补充说明，并重算最终稿。</summary>
+    public Result<Report> ReportsUpdate(string id, string manualText) =>
+        Guard("保存报告补充说明", () =>
+        {
+            var existing = _reports.Get(id);
+            if (existing is null) throw new System.Collections.Generic.KeyNotFoundException("报告不存在");
+
+            return _reports.Update(existing with
+            {
+                ManualText = manualText,
+                FinalMarkdown = ReportComposer.Merge(existing.AutoMarkdown, manualText)
+            });
+        });
+
+    /// <summary>
+    /// 重新汇总：用当前任务数据重算自动汇总。
+    ///
+    /// **只动自动汇总与最终稿，人工补充一律保留** —— 周末做完几件事后
+    /// 点一下这个按钮，不该把手写的总结冲掉。
+    /// </summary>
+    public Result<Report> ReportsRegenerate(string id) =>
+        Guard("重新汇总报告", () =>
+        {
+            var existing = _reports.Get(id);
+            if (existing is null) throw new System.Collections.Generic.KeyNotFoundException("报告不存在");
+
+            var period = ReportPeriods.FromStart(existing.Kind, existing.PeriodStart);
+            var auto = ReportComposer.Compose(period, _tasks.List(), _projects.List(true), DateTime.Now);
+
+            return _reports.Update(existing with
+            {
+                AutoMarkdown = auto,
+                FinalMarkdown = ReportComposer.Merge(auto, existing.ManualText)
+            });
+        });
+
+    public Result<bool> ReportsRemove(string id) => Guard("删除报告", () => _reports.Remove(id));
+
+    /// <summary>当前周期的统计数字，报告提醒的通知正文用它。</summary>
+    public Result<ReportStats> ReportsStats(ReportKind kind) =>
+        Guard("统计报告数据", () =>
+        {
+            var now = DateTime.Now;
+            var period = ReportPeriods.Current(kind, now);
+            return ReportComposer.ComputeStats(period, _tasks.List(), now);
+        });
+
     // ---------- 提醒 ----------
 
     public Result<IReadOnlyList<ReminderItem>> RemindersList(ReminderScope scope = ReminderScope.Upcoming) =>
@@ -332,6 +432,12 @@ public sealed class WorkStationService
         catch (SqliteException error)
         {
             return Result<T>.Failure(ErrorCodes.DbWriteFailed, DescribeSqliteError(operation, error));
+        }
+        catch (System.Collections.Generic.KeyNotFoundException error)
+        {
+            // 「找不到记录」不是参数不合法，单独给一个机器可读的码。
+            // 必须排在兜底的 catch (Exception) 之前。
+            return Result<T>.Failure(ErrorCodes.NotFound, error.Message);
         }
         catch (Exception error)
         {
