@@ -1578,7 +1578,7 @@ public class WorkStationServiceReportsTests : IDisposable
         Assert.Equal(0, stats.Completed);
         Assert.Equal(1, stats.CarriedOver);
         Assert.Equal(1, stats.Total);
-        // Overdue 不断言：到期时刻过了没有取决于测试跑在几点
+        // Overdue 不断言：逾期比的是截止日历日与今天，今天到期的任务恒为 0，不断言是保守选择
     }
 
     [Fact]
