@@ -97,7 +97,11 @@ public class InstallerTests
     {
         var script = File.ReadAllText(PublishScript);
 
-        Assert.Contains("--self-contained true", script);
+        // 这两个值必须是数组里**相邻的两个元素**。合成一个带空格的字符串时，
+        // PowerShell 会整串透传，MSBuild 报 MSB1001「未知开关」—— 静态的
+        // Contains("--self-contained true") 恰好护不住这个真实失败，所以连合并写法一起禁掉。
+        Assert.Matches(@"'--self-contained',\s*'true'", script);
+        Assert.DoesNotContain("'--self-contained true'", script);
         Assert.Contains("PublishSingleFile=true", script);
         // 裁剪对 Avalonia 不安全：SukiUI 的 SettingsLayout 用反射 Binding，
         // System.Text.Json 用反射序列化，裁掉就崩。而且裁剪并不省多少体积。

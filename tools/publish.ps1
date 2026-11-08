@@ -60,7 +60,9 @@ foreach ($runtime in $Rid) {
     $project,
     '-c', $Configuration,
     '-r', $runtime,
-    '--self-contained true',
+    # 必须是**两个独立的数组元素**。合成一个带空格的字符串时，PowerShell 会把
+    # 整串当一个参数透传给 MSBuild，后者报 MSB1001「未知开关」并终止发布。
+    '--self-contained', 'true',
     '-p:PublishTrimmed=false',
     '-p:DebugType=None',
     '-o', $out

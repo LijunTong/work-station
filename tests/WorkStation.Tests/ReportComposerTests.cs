@@ -132,7 +132,7 @@ public class ReportComposerTests
             ### 逾期
             - 早就过期了（截止 11-03，逾期 2 天）
 
-            """, markdown);
+            """.Replace("\r\n", "\n"), markdown); // 原始字符串的换行跟着源码文件走，Compose 的契约是固定 \n
     }
 
     [Fact]
