@@ -11,7 +11,7 @@
        · /usr/share/applications/   桌面菜单项
        · /usr/share/icons/hicolor/  各尺寸图标
      卸载：`apt remove workstation`（或 dpkg -r），数据留在
-     ~/.local/share/work-station 不动。
+     ~/.config/work-station 不动。
 
   2. **.tar.gz 绿色版**（Arch/Fedora/openSUSE 等没有 deb 的发行版）
      解压后 `bash install.sh` 建软链和桌面图标，或者直接跑里面的
@@ -473,7 +473,7 @@ rm -rf "$PREFIX/share/icons/hicolor"/*/apps/workstation.png
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q "$PREFIX/share/applications" || true
 fi
-echo "已卸载（数据仍在 ~/.local/share/work-station）"
+echo "已卸载（数据仍在 ~/.config/work-station）"
 """
     (stage / "install.sh").write_text(install_sh, encoding="utf-8")
     (stage / "uninstall.sh").write_text(uninstall_sh, encoding="utf-8")
@@ -501,7 +501,7 @@ echo "已卸载（数据仍在 ~/.local/share/work-station）"
 依赖：libc6、libfontconfig1、libstdc++6、libicu、libx11-6 等常见桌面库。
 中文显示需要系统装有中文字体（如 fonts-noto-cjk）。
 
-数据：~/.local/share/work-station，不联网。
+数据：~/.config/work-station，不联网。
 """
     (stage / "README.txt").write_text(readme, encoding="utf-8")
 
