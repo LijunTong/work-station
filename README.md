@@ -7,7 +7,7 @@
 > **文档约定**：本文件是稳态事实入口 —— 环境、界面预览、发布与安装、项目结构、数据存放、测试流程。
 > 易变事实只在其权威文档写一份：功能与[快捷键](docs/功能说明.md#4-导航与快捷键)见
 > [功能说明](docs/功能说明.md)，界面规则见[设计系统](docs/设计系统.md)，
-> 开发硬约束与发版清单见 [AGENT.md](AGENT.md)。改代码时按 `AGENT.md` 的同步规则一并更新。
+> 开发硬约束与发版清单见 [AGENTS.md](AGENTS.md)。改代码时按 `AGENTS.md` 的同步规则一并更新。
 
 | 层 | 技术 |
 | --- | --- |
@@ -123,9 +123,9 @@ src/
 ├─ WorkStation.Core/           纯逻辑层，零 UI 依赖
 │  ├─ Models/                  实体、更新入参（Optional<T> 三态）、过滤条件
 │  ├─ Data/                    连接、迁移、完整性检查、备份、路径解析
-│  ├─ Data/Repositories/       projects / tasks / tags / settings / reminders
+│  ├─ Data/Repositories/       projects / tasks / tags / settings / reminders / reports
 │  ├─ Services/                WorkStationService（UI 唯一入口，Result 契约）
-│  ├─ Board/ Dashboard/ Projects/ Reminders/   看板口径、仪表盘统计、项目统计、提醒排期
+│  ├─ Board/ Dashboard/ Projects/ Reminders/ Reports/   看板口径、仪表盘统计、项目统计、提醒排期、报告汇总
 │  ├─ Time/                    本地时间口径、任务默认值
 │  └─ TaskOrdering.cs / TaskGrouping.cs / ProgressCalculator.cs / Formatting.cs
 └─ WorkStation.App/            Avalonia 界面层
@@ -170,10 +170,10 @@ python tools/sync-readme-images.py     # 把 .shots/ 同步到 docs/images/
 | 层 | 覆盖内容 |
 | --- | --- |
 | Core 单元 | 时间格式、进度计算、任务分组、看板口径、提醒排期、仪表盘统计、任务排序 |
-| 数据层 | 迁移、完整性检查、损坏恢复、备份轮转、五个仓储的 CRUD 与聚合、任务截止时间与提醒同步 |
+| 数据层 | 迁移、完整性检查、损坏恢复、备份轮转、六个仓储的 CRUD 与聚合、任务截止时间与提醒同步 |
 | 服务层 | Result 契约（不抛异常）、错误码映射、中文错误文案、提醒自动排期 |
 | ViewModel | 快速添加、分组折叠、筛选搜索、抽屉与校验、看板拖拽、命令面板、主题与字体、仪表盘统计 |
-| 调度器 | 单次节拍（先落状态后发通知）、重复顺延、通知失败落 `Failed`、站会一天一条 |
+| 调度器 | 单次节拍（先落状态后发通知）、重复顺延、通知失败落 `Failed`、三类报告提醒各一条 |
 | UI 冒烟 | 真实 XAML 加载（Headless）、导航、快捷键、主题切换落盘、排版与字号 |
 | 安装器 | 自包含配置、安装包路径、免管理员、卸载注册与数据保留、语言包与向导图片编码、`rollForward` |
 | Linux 打包 | `LinuxPackageTests` 断言打包脚本源码里的关键字符串；`control` 字段、权限、md5sums 等 38 项格式校验由 `verify-linux-packages.py` 在**打包阶段**执行 |
@@ -189,4 +189,4 @@ UI 层用 `Avalonia.Headless` 承载，XAML 解析失败或编译绑定路径写
 | --- | --- |
 | [docs/功能说明.md](docs/功能说明.md) | 功能清单、完整快捷键、已知限制 |
 | [docs/设计系统.md](docs/设计系统.md) | 现行 UI 令牌、组件规则与设计取舍 |
-| [AGENT.md](AGENT.md) | 给编码代理的硬约束、发版清单、代码→文档同步规则 |
+| [AGENTS.md](AGENTS.md) | 给编码代理的硬约束、发版清单、代码→文档同步规则 |

@@ -1712,5 +1712,12 @@ public class UiSmokeTests : IDisposable
         view.Arrange(new Rect(0, 0, 1000, 700));
 
         Assert.NotNull(view.Content);
+
+        // 自动汇总 / 人工补充必须各占一列。漏写 Grid.Column 时两张卡片叠在第 0 列，
+        // 编译绑定和 ViewModel 测试都发现不了，只有真渲染出来才是一屏重影。
+        var split = view.GetLogicalDescendants().OfType<Grid>()
+            .First(g => g.ColumnDefinitions.Count == 2 && g.Children.Count == 2);
+        Assert.Equal(0, Grid.GetColumn(split.Children[0]));
+        Assert.Equal(1, Grid.GetColumn(split.Children[1]));
     }
 }

@@ -3329,7 +3329,7 @@ git commit -m "feat(reports): 报告页与外壳接线（侧边栏第六项，�
 > 连同引用它们的测试，一起删干净。**站会提醒只弹三个数字、不产出任何东西**，
 > 而报告功能正好补上「到点提醒 + 产出正文」这件事。
 
-- [ ] **Step 1: 先改测试**
+- [x] **Step 1: 先改测试**
 
 `tests/WorkStation.Tests/ReminderPumpTests.cs`：
 
@@ -3458,12 +3458,12 @@ git commit -m "feat(reports): 报告页与外壳接线（侧边栏第六项，�
 换成 `settings.ReportDailyEnabled` / `settings.ReportDailyTime`（值仍是 `true` / `"09:00"`）。
 该文件需要 `using WorkStation.Core.Models;`（已有）。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReminderPumpTests"`
 Expected: 编译失败 —— `ReminderPumpResult.ReportRemindersFired` 不存在
 
-- [ ] **Step 3: 改造 `ReminderPump`**
+- [x] **Step 3: 改造 `ReminderPump`**
 
 `src/WorkStation.App/Services/ReminderPump.cs`：
 
@@ -3560,7 +3560,7 @@ public sealed record ReminderPumpResult(
 }
 ```
 
-- [ ] **Step 4: 改 `MainWindowViewModel` 的接线**
+- [x] **Step 4: 改 `MainWindowViewModel` 的接线**
 
 `src/WorkStation.App/ViewModels/MainWindowViewModel.cs`：
 
@@ -3579,7 +3579,7 @@ public sealed record ReminderPumpResult(
 
 3. `PumpReminders()` 里的 `new ReminderPumpResult([], false)` 改成 `new ReminderPumpResult([], [])`。
 
-- [ ] **Step 5: 删掉 Core 的站会提醒**
+- [x] **Step 5: 删掉 Core 的站会提醒**
 
 `src/WorkStation.Core/Services/WorkStationService.cs`：删掉这五个方法
 （`DailyReviewGet` / `DailyReviewSet` / `DailyReviewLastFired` / `DailyReviewMarkFired` / `DailyReviewCounts`）。
@@ -3589,7 +3589,7 @@ public sealed record ReminderPumpResult(
 
 删除 `src/WorkStation.Core/Reminders/DailyReviewPlanner.cs` 整个文件。
 
-- [ ] **Step 6: 改设置页的 ViewModel**
+- [x] **Step 6: 改设置页的 ViewModel**
 
 创建 `src/WorkStation.App/ViewModels/ReportReminderOptions.cs`：
 
@@ -3805,7 +3805,7 @@ public sealed class ReportMonthDayOption
 
 > `SettingsViewModel` 需要 `using WorkStation.Core;` 才能用 `Result<T>` —— 确认该 using 已在。
 
-- [ ] **Step 7: 改设置页的 XAML**
+- [x] **Step 7: 改设置页的 XAML**
 
 `src/WorkStation.App/Views/SettingsView.axaml`：把「提醒」分组里的这两块
 
@@ -3913,7 +3913,7 @@ public sealed class ReportMonthDayOption
       </Grid>
 ```
 
-- [ ] **Step 8: 写设置页的测试**
+- [x] **Step 8: 写设置页的测试**
 
 创建 `tests/WorkStation.Tests/SettingsViewModelReportReminderTests.cs`：
 
@@ -3992,17 +3992,17 @@ public class SettingsViewModelReportReminderTests : IDisposable
 }
 ```
 
-- [ ] **Step 9: 运行测试确认通过**
+- [x] **Step 9: 运行测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReminderPumpTests|FullyQualifiedName~SettingsViewModelReportReminderTests"`
 Expected: PASS
 
-- [ ] **Step 10: 全量测试**
+- [x] **Step 10: 全量测试**
 
 Run: `dotnet test`
 Expected: 全部 PASS
 
-- [ ] **Step 11: 提交**
+- [x] **Step 11: 提交**
 
 ```bash
 git add src/WorkStation.App/Services/ReminderPump.cs src/WorkStation.App/ViewModels/MainWindowViewModel.cs src/WorkStation.App/ViewModels/SettingsViewModel.cs src/WorkStation.App/ViewModels/ReportReminderOptions.cs src/WorkStation.App/Views/SettingsView.axaml src/WorkStation.Core/Reminders/DailyReviewPlanner.cs src/WorkStation.Core/Models/ReminderItem.cs src/WorkStation.Core/Services/WorkStationService.cs tests/WorkStation.Tests/ReminderPumpTests.cs tests/WorkStation.Tests/ReminderPlannerTests.cs tests/WorkStation.Tests/MainWindowViewModelTests.cs tests/WorkStation.Tests/SettingsViewModelReportReminderTests.cs
@@ -4024,9 +4024,9 @@ git commit -m "feat(reports): 提醒换成日报/周报/月报三类，移除站
 - Consumes: 全部前序任务
 - Produces: 与实现一致的文档 + `.shots/` 里的报告页浅深两套截图
 
-- [ ] **Step 1: 同步 `docs/功能说明.md`**
+- [x] **Step 1: 同步 `docs/功能说明.md`**
 
-按 AGENT.md §6 的同步表，逐项改：
+按 AGENTS.md §6 的同步表，逐项改：
 
 1. **「1. 页面与模块」**：在「提醒」这一节之后、「命令面板」之前插入新的一节：
 
@@ -4056,7 +4056,7 @@ git commit -m "feat(reports): 提醒换成日报/周报/月报三类，移除站
 
 6. 「设置」那一节的「站会时间」改成「日报 / 周报 / 月报提醒时间」。
 
-- [ ] **Step 2: 同步 `docs/设计系统.md`**
+- [x] **Step 2: 同步 `docs/设计系统.md`**
 
 在现有的组件规则里补一条：
 
@@ -4073,7 +4073,7 @@ git commit -m "feat(reports): 提醒换成日报/周报/月报三类，移除站
   `FontSizeCaption`、`PageGutter` / `PageGutterBottom`。
 ```
 
-- [ ] **Step 3: 同步 `README.md`**
+- [x] **Step 3: 同步 `README.md`**
 
 1. 「项目结构」里 `Board/ Dashboard/ Projects/ Reminders/` 改成
    `Board/ Dashboard/ Projects/ Reminders/ Reports/   看板口径、仪表盘统计、项目统计、提醒排期、报告汇总`，
@@ -4088,10 +4088,10 @@ git commit -m "feat(reports): 提醒换成日报/周报/月报三类，移除站
 
 3. 如果「界面预览」一节要加报告页截图：**不要动** —— README 的 9 段图片字面量与
    `tools/` 里的 `sync-readme-images.py` 的 `IMAGE_MAP` 是绑定的，
-   新增图片要同步改两处并重跑截图，否则 AGENT.md §7 的验收过不了。
+   新增图片要同步改两处并重跑截图，否则 AGENTS.md §7 的验收过不了。
    本次**不加** README 截图。
 
-- [ ] **Step 4: 回写设计文档的偏差**
+- [x] **Step 4: 回写设计文档的偏差**
 
 `docs/superpowers/specs/2026-11-08-report-feature-design.md`：
 把「唯一索引」那段改成复用 `idx_reports_period`（UNIQUE），
@@ -4099,7 +4099,7 @@ git commit -m "feat(reports): 提醒换成日报/周报/月报三类，移除站
 并加一句「服务层另提供 `ReportsStats(kind)` 供通知正文取数」。
 还要把 `ReportStats` 的 `CompletionRate` / `Total` 改成计算属性的说明补上（设计文档写的是 init 属性）。
 
-- [ ] **Step 5: 给 `VisualCheck` 加报告页截图**
+- [x] **Step 5: 给 `VisualCheck` 加报告页截图**
 
 `tests/WorkStation.Tests/VisualCheck.cs` 里，在仪表盘截图之后、任务弹框那段之前插入：
 
@@ -4126,12 +4126,12 @@ git commit -m "feat(reports): 提醒换成日报/周报/月报三类，移除站
 > 这段必须排在**所有需要主窗口渲染的截图之前** —— 该文件末尾的注释说明
 > 「`CaptureTemplate` 会临时换掉 window.Content，换回来之后主窗口在无头环境里就再也画不出东西」。
 
-- [ ] **Step 6: 全量测试**
+- [x] **Step 6: 全量测试**
 
 Run: `dotnet test`
 Expected: 全部 PASS
 
-- [ ] **Step 7: 肉眼复验截图**
+- [x] **Step 7: 肉眼复验截图**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~VisualCheck"`
 
@@ -4144,7 +4144,7 @@ Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "Ful
 
 **看到不对就改，改完重跑截图** —— 这一步不能只看测试绿。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add docs/功能说明.md docs/设计系统.md README.md docs/superpowers/specs/2026-11-08-report-feature-design.md tests/WorkStation.Tests/VisualCheck.cs
@@ -4157,14 +4157,14 @@ git commit -m "docs: 报告功能同步到功能说明、设计系统与 README"
 
 全部做完后逐条核对：
 
-- [ ] `dotnet test` 全绿
-- [ ] 侧边栏第六项是「报告」，图标正常；`6` / `Ctrl+6` 到报告页，`7` / `Ctrl+7` 到设置页
-- [ ] 报告页能切日报 / 周报 / 月报，能前后翻周期，不能翻到未来
-- [ ] 人工补充写完保存 → 「重新汇总」→ 补充还在，自动汇总已更新
-- [ ] 「复制 Markdown」与「导出 .md」都出内容，导出的文件名形如 `周报-2026-11-02.md`
-- [ ] 报告提醒三类各自到点弹一次，同一周期不重复弹；点通知进报告页对应类型
-- [ ] 设置页三类提醒都能改、能存回来
-- [ ] 老库（`user_version = 2`）能升到 3，`reports` 里的旧数据不丢
-- [ ] `docs/功能说明.md`、`docs/设计系统.md`、`README.md` 与实现一致
-- [ ] `.shots/` 里报告页浅深两套截图人工看过
+- [x] `dotnet test` 全绿
+- [x] 侧边栏第六项是「报告」，图标正常；`6` / `Ctrl+6` 到报告页，`7` / `Ctrl+7` 到设置页
+- [x] 报告页能切日报 / 周报 / 月报，能前后翻周期，不能翻到未来
+- [x] 人工补充写完保存 → 「重新汇总」→ 补充还在，自动汇总已更新
+- [x] 「复制 Markdown」与「导出 .md」都出内容，导出的文件名形如 `周报-2026-11-02.md`
+- [x] 报告提醒三类各自到点弹一次，同一周期不重复弹；点通知进报告页对应类型
+- [x] 设置页三类提醒都能改、能存回来
+- [x] 老库（`user_version = 2`）能升到 3，`reports` 里的旧数据不丢
+- [x] `docs/功能说明.md`、`docs/设计系统.md`、`README.md` 与实现一致
+- [x] `.shots/` 里报告页浅深两套截图人工看过
 - [ ] 提交前确认分支；**推送后用 `git ls-remote --heads origin` 核对 SHA**

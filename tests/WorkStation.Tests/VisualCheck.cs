@@ -228,6 +228,24 @@ public class VisualCheck
             Save(window, "s16-dashboard-bottom.png");
         }
 
+        // 报告页：自动汇总 + 人工补充左右分栏，浅色与深色各留一张
+        vm.ShowReportsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
+        window.UpdateLayout();
+        Save(window, "s25-report-light.png");
+
+        vm.ApplyThemeVariant("dark");
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
+        window.UpdateLayout();
+        Save(window, "s26-report-dark.png");
+        vm.ApplyThemeVariant("light");
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
         vm.ShowBoardCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();

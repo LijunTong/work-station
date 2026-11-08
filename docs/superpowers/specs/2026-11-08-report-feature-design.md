@@ -69,14 +69,12 @@ INSERT INTO reports_new SELECT id, kind, period_start, period_end,
        auto_markdown, manual_text, final_markdown, created_at, updated_at FROM reports;
 DROP TABLE reports;
 ALTER TABLE reports_new RENAME TO reports;
-CREATE INDEX idx_reports_period ON reports(kind, period_start);
+CREATE UNIQUE INDEX idx_reports_period ON reports(kind, period_start);
 ```
 
-再加一条唯一索引，保证「一个周期一条记录」（**必须在重建表之后建** —— 先建的话会被 `DROP TABLE` 一起删掉）：
-
-```sql
-CREATE UNIQUE INDEX idx_reports_kind_period ON reports(kind, period_start);
-```
+> **实现偏差**：唯一约束直接落在 `idx_reports_period` 上（UNIQUE），不再另建
+> `idx_reports_kind_period` —— 同一个 `(kind, period_start)` 上挂两条索引只是重复维护。
+> 索引必须在重建表**之后**建：先建的话会被 `DROP TABLE` 一起删掉。
 
 > 部署环境目前没有老用户数据，直接重建即可；但迁移仍按「老库可升」写，
 > 并用测试覆盖「v1/v2 老库升上来数据不丢」，避免将来有人用旧库时踩坑。
@@ -143,11 +141,15 @@ public static class ReportPeriods
 public sealed record ReportStats
 {
     public int Completed { get; init; }      // 周期内完成
-    public int CarriedOver { get; init; }    // 周期内到期但未完成
+    public int CarriedOver { get; init; }    // 周期内到期但未完成（含已逾期）
     public int Overdue { get; init; }        // 遗留里截至今天已过期的
-    public int CompletionRate { get; init; } // 0–100，Completed / (Completed + CarriedOver)
+    public int Total => Completed + CarriedOver;
+    public int CompletionRate => Total == 0 ? 0 : (int)Math.Round(Completed * 100.0 / Total);
 }
 ```
+
+> **实现偏差**：`Total` 与 `CompletionRate` 是**计算属性**（`=>`），不是 `init` 属性。
+> 它们完全由 `Completed` / `CarriedOver` 推出，允许写入就会出现「分母改了、百分比没改」的脏数据。
 
 ### 4.3 `ReportComposer` —— 自动汇总 Markdown
 
@@ -188,7 +190,7 @@ public static class ReportComposer
 ## 周报 2026-11-03 ~ 2026-11-09
 
 ### 统计
-- 完成 12 项 · 遗留未完成 5 项 · 逾期 2 项 · 完成率 71%
+- 完成 12 项 · 遗留未完成 5 项（其中逾期 2 项）· 完成率 71%
 
 ### 已完成
 - [项目名] 任务标题
@@ -258,7 +260,7 @@ public bool Remove(string id);
 `src/WorkStation.App/Views/ReportsView.axaml` + `src/WorkStation.App/ViewModels/ReportsViewModel.cs`。
 
 **顶部工具栏**：`Border Classes="card"` + `PageGutterBelowHeader`，
-与任务 / 项目 / 提醒三页统一（AGENT.md §3）。
+与任务 / 项目 / 提醒三页统一（AGENTS.md §3）。
 
 - 左侧：三个分段按钮「日报 / 周报 / 月报」。
 - 右侧：「重新汇总」「复制 Markdown」「导出 .md」。
@@ -380,9 +382,10 @@ public static class ReportReminderPlanner
 - 日报：「该写今天的日报了」
 - 周报：「该写本周周报了」
 - 月报：「该写本月月报了」
-- 正文用该周期的 `ReportStats` 合成，例如「完成 12 项 · 遗留 5 项 · 逾期 2 项」。
+- 正文用该周期的统计数字合成，例如「完成 12 项 · 逾期 2 项」。
+  服务层另提供 `ReportsStats(kind)` 供通知正文取数：只返回 `ReportStats`，不生成 Markdown。
 
-点击通知 → 跳到报告页、切到对应周期、调用 `ReportsEnsure` 自动生成。
+点击通知 → 跳到报告页、切到对应报告类型（页面再按需生成该周期的报告）。
 
 ### 7.5 删除旧站会提醒
 
@@ -408,7 +411,7 @@ public static class ReportReminderPlanner
 
 ## 9. 文档同步（实现完成后）
 
-按 AGENT.md §6 的同步规则：
+按 AGENTS.md §6 的同步规则：
 
 | 改了什么 | 同步到 |
 | --- | --- |

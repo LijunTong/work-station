@@ -155,7 +155,7 @@
           </Border>
 
           <!-- 右：人工补充（手写的，重新汇总不会覆盖） -->
-          <Border Classes="card" Padding="20,16">
+          <Border Grid.Column="1" Classes="card" Padding="20,16">
             <StackPanel Spacing="10">
               <TextBlock Text="人工补充"
                          FontSize="{DynamicResource FontSizeHeading}"
