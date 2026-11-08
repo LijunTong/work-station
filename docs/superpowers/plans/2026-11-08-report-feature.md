@@ -41,7 +41,7 @@
 | 「遗留未完成」行的补充说明 | 直接写 `ShortDate(dueAt)` → `（11-05）` | 改成 `PendingLabel(task)` → `（截止 11-05）` | 原写法漏了「截止」二字，与设计文档 `:197` 的示例、与本计划自带的测试期望都冲突 |
 | `ReportMarkdown.Parse` 对空行的处理 | 未明确（测试断言 5 行，按空行占位索引） | **空行不产生行**，测试改成断言 4 行 | 解析器只认标题、列表项与普通行三种；原测试的样例是 4 行内容 + 2 个空行，**没有任何自洽实现能得出 5 行** |
 | 报告预览的渲染 | `AutoLines` / `FinalLines` 直接是 `ObservableCollection<ReportMarkdownLine>`，XAML 一律按正文渲染 | App 层加一个显示用的 `ReportLineItem`（`Text` / `IsBullet` / `IsHeading` / `IsTitle`），XAML 按层级与列表标记分别渲染 | `ReportMarkdownLine` 特意带了 `Level` 与 `IsBullet`，全按正文渲染会把「### 统计」和「- 完成 1 项」画成同一行 —— 报告页是这功能的脸面，不能是一堵等大的字 |
-| 统计口径的实现方式 | `ComputeStats` 与 `Compose` 各自写一遍 Where 谓词 | 抽一个私有 `Classify(...)` 返回四堆，统计与正文共用 | 同一份口径写两遍，提醒消息里的数字迟早和报告正文对不上，且没有任何测试会红 |
+| 统计口径的实现方式 | `ComputeStats` 与 `Compose` 各自写一遍 Where 谓词 | 抽一个私有 `Classify(...)` 返回三堆（completed / pending / overdue），统计与正文共用 | 同一份口径写两遍，提醒消息里的数字迟早和报告正文对不上，且没有任何测试会红 |
 | 统计行的用词 | 统计行写「未完成 M 项」，小节标题写「遗留未完成」 | 统计行也写「**遗留未完成** M 项（其中逾期 K 项）」 | 同一概念两种叫法，读者会以为是两回事；括号仍保留「逾期 ⊂ 遗留未完成」的语义 |
 
 ---
