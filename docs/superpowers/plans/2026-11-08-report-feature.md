@@ -423,6 +423,7 @@ public sealed record ReportPeriod
 
 ```csharp
 using System.Globalization;
+using WorkStation.Core;
 using WorkStation.Core.Models;
 using WorkStation.Core.Time;
 
@@ -1215,6 +1216,7 @@ Expected: FAIL —— `ReportsRepository` 不存在
 
 ```csharp
 using Microsoft.Data.Sqlite;
+using WorkStation.Core;
 using WorkStation.Core.Models;
 using WorkStation.Core.Time;
 
