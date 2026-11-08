@@ -121,7 +121,7 @@ public class ReportComposerTests
             ## 周报 2026-11-02 ~ 2026-11-08
 
             ### 统计
-            - 完成 1 项 · 未完成 2 项（其中逾期 1 项）· 完成率 33%
+            - 完成 1 项 · 遗留未完成 2 项（其中逾期 1 项）· 完成率 33%
 
             ### 已完成
             - [官网改版] 已做完
@@ -143,6 +143,36 @@ public class ReportComposerTests
         Assert.Contains("### 已完成\n无\n", markdown);
         Assert.Contains("### 遗留未完成\n无\n", markdown);
         Assert.Contains("### 逾期\n无\n", markdown);
+    }
+
+    [Fact]
+    public void ComputeStats_IgnoresTasksCompletedOutsideThePeriod()
+    {
+        // 上周做完的，不算本周的完成 —— 完成按完成时间落窗
+        var tasks = new[]
+        {
+            Task("上周做完的", TaskStatus.Done, completed: "2026-10-28T02:00:00.000Z")
+        };
+
+        var stats = ReportComposer.ComputeStats(ReportPeriods.Weekly(At(11, 5)), tasks, At(11, 5));
+
+        Assert.Equal(0, stats.Completed);
+        Assert.Equal(0, stats.Total);
+    }
+
+    [Fact]
+    public void ComputeStats_IgnoresTasksDueOutsideThePeriod()
+    {
+        // 下周才到期的不算本周的遗留 —— 遗留按到期时间落窗
+        var tasks = new[]
+        {
+            Task("下周才到期", TaskStatus.Doing, due: "2026-11-10T18:00")
+        };
+
+        var stats = ReportComposer.ComputeStats(ReportPeriods.Weekly(At(11, 5)), tasks, At(11, 5));
+
+        Assert.Equal(0, stats.CarriedOver);
+        Assert.Equal(0, stats.Overdue);
     }
 
     [Fact]

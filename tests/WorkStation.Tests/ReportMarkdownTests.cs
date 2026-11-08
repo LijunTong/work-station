@@ -17,7 +17,7 @@ public class ReportMarkdownTests
             普通一行
             """);
 
-        // 空行不产生行 —— 解析结果只有标题、列表项和普通行三种
+        // 空行不产生行：解析器只认标题、列表项与普通行三种
         Assert.Equal(4, lines.Count);
         Assert.Equal(1, lines[0].Level);
         Assert.Equal("周报 2026-11-02 ~ 2026-11-08", lines[0].Text);
@@ -34,5 +34,15 @@ public class ReportMarkdownTests
     public void Parse_EmptyTextGivesNoLines()
     {
         Assert.Empty(ReportMarkdown.Parse(string.Empty));
+    }
+
+    [Fact]
+    public void Parse_SkipsWhitespaceOnlyLines()
+    {
+        var lines = ReportMarkdown.Parse("   \n\t\n- 真的一行");
+
+        var line = Assert.Single(lines);
+        Assert.True(line.IsBullet);
+        Assert.Equal("真的一行", line.Text);
     }
 }

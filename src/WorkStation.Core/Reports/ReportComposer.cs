@@ -25,23 +25,13 @@ public static class ReportComposer
     public static ReportStats ComputeStats(ReportPeriod period, IReadOnlyList<TaskItem> tasks, DateTime now)
     {
         var today = LocalTime.ToLocalDate(LocalTime.AsLocal(now));
-
-        var completed = tasks.Count(t =>
-            t.Status == TaskStatus.Done
-            && InPeriod(CompletedDate(t), period));
-
-        var carried = tasks.Where(t =>
-            t.Status != TaskStatus.Done
-            && t.Status != TaskStatus.Canceled
-            && InPeriod(DueDate(t), period)).ToList();
-
-        var overdue = carried.Count(t => string.CompareOrdinal(DueDate(t)!, today) < 0);
+        var (completed, pending, overdue) = Classify(tasks, period, today);
 
         return new ReportStats
         {
-            Completed = completed,
-            CarriedOver = carried.Count,
-            Overdue = overdue
+            Completed = completed.Count,
+            CarriedOver = pending.Count + overdue.Count,
+            Overdue = overdue.Count
         };
     }
 
@@ -59,32 +49,12 @@ public static class ReportComposer
         var today = LocalTime.ToLocalDate(LocalTime.AsLocal(now));
         var names = projects.ToDictionary(p => p.Id, p => p.Name);
 
-        var completed = tasks
-            .Where(t => t.Status == TaskStatus.Done && InPeriod(CompletedDate(t), period))
-            .OrderBy(t => t.CompletedAt ?? string.Empty, StringComparer.Ordinal)
-            .ThenBy(t => t.Title, StringComparer.Ordinal)
-            .ToList();
-
-        var carried = tasks
-            .Where(t => t.Status != TaskStatus.Done
-                        && t.Status != TaskStatus.Canceled
-                        && InPeriod(DueDate(t), period))
-            .OrderBy(t => t.DueAt ?? string.Empty, StringComparer.Ordinal)
-            .ThenBy(t => t.Title, StringComparer.Ordinal)
-            .ToList();
-
-        var overdue = carried
-            .Where(t => string.CompareOrdinal(DueDate(t)!, today) < 0)
-            .ToList();
-
-        var pending = carried
-            .Where(t => string.CompareOrdinal(DueDate(t)!, today) >= 0)
-            .ToList();
+        var (completed, pending, overdue) = Classify(tasks, period, today);
 
         var stats = new ReportStats
         {
             Completed = completed.Count,
-            CarriedOver = carried.Count,
+            CarriedOver = pending.Count + overdue.Count,
             Overdue = overdue.Count
         };
 
@@ -92,7 +62,7 @@ public static class ReportComposer
         sb.Append($"## {ReportPeriods.Label(period.Kind)} {ReportPeriods.Range(period)}\n\n");
 
         sb.Append("### 统计\n");
-        sb.Append($"- 完成 {stats.Completed} 项 · 未完成 {stats.CarriedOver} 项（其中逾期 {stats.Overdue} 项）· 完成率 {stats.CompletionRate}%\n\n");
+        sb.Append($"- 完成 {stats.Completed} 项 · 遗留未完成 {stats.CarriedOver} 项（其中逾期 {stats.Overdue} 项）· 完成率 {stats.CompletionRate}%\n\n");
 
         sb.Append("### 已完成\n");
         AppendItems(sb, completed.Select(t => Line(t, names, null)));
@@ -119,6 +89,42 @@ public static class ReportComposer
         if (auto.Length == 0) return manual;
         if (manual.Length == 0) return auto;
         return $"{auto}\n\n{manual}";
+    }
+
+    /// <summary>
+    /// 按周期把任务分成三堆：已完成、还在期限内的遗留、已逾期的遗留。
+    ///
+    /// 统计与正文都从这里取 —— 同一份口径写两遍，提醒消息里的数字迟早会和报告正文对不上，
+    /// 而且没有任何测试会红。
+    /// </summary>
+    private static (List<TaskItem> Completed, List<TaskItem> Pending, List<TaskItem> Overdue) Classify(
+        IReadOnlyList<TaskItem> tasks,
+        ReportPeriod period,
+        string today)
+    {
+        var completed = tasks
+            .Where(t => t.Status == TaskStatus.Done && InPeriod(CompletedDate(t), period))
+            .OrderBy(t => t.CompletedAt ?? string.Empty, StringComparer.Ordinal)
+            .ThenBy(t => t.Title, StringComparer.Ordinal)
+            .ToList();
+
+        var carried = tasks
+            .Where(t => t.Status != TaskStatus.Done
+                        && t.Status != TaskStatus.Canceled
+                        && InPeriod(DueDate(t), period))
+            .OrderBy(t => t.DueAt ?? string.Empty, StringComparer.Ordinal)
+            .ThenBy(t => t.Title, StringComparer.Ordinal)
+            .ToList();
+
+        var overdue = carried
+            .Where(t => string.CompareOrdinal(DueDate(t)!, today) < 0)
+            .ToList();
+
+        var pending = carried
+            .Where(t => string.CompareOrdinal(DueDate(t)!, today) >= 0)
+            .ToList();
+
+        return (completed, pending, overdue);
     }
 
     private static void AppendItems(StringBuilder sb, IEnumerable<string> lines)

@@ -29,7 +29,7 @@ public static class ReportMarkdown
         foreach (var raw in markdown.Split('\n'))
         {
             var line = raw.TrimEnd('\r');
-            if (line.Length == 0) continue;
+            if (line.Trim().Length == 0) continue;
 
             if (line.StartsWith("### ", StringComparison.Ordinal))
             {
