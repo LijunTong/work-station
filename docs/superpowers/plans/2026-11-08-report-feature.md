@@ -38,6 +38,11 @@
 | Markdown 渲染 | 「分段 TextBlock 渲染」 | Core 纯函数 `ReportMarkdown.Parse` + VM 行集合 | 解析逻辑可单测，XAML 只做渲染 |
 | 周报「未完成」的口径 | 未细分 | 「未完成」含逾期；清单里逾期的那几条**单列在「逾期」小节** | 两处数字必须各自对得上清单，不能重复计入 |
 | `ReportStats.CompletionRate` | `public int CompletionRate { get; init; }` | 改成**计算属性**（`Total == 0 ? 0 : Math.Round(...)`），`Total` 也改成计算属性 | 完成率与总数都由已统计的三项推出，让调用方能改写其中一项却忘了重算另一个 |
+| 「遗留未完成」行的补充说明 | 直接写 `ShortDate(dueAt)` → `（11-05）` | 改成 `PendingLabel(task)` → `（截止 11-05）` | 原写法漏了「截止」二字，与设计文档 `:197` 的示例、与本计划自带的测试期望都冲突 |
+| `ReportMarkdown.Parse` 对空行的处理 | 未明确（测试断言 5 行，按空行占位索引） | **空行不产生行**，测试改成断言 4 行 | 解析器只认标题、列表项与普通行三种；原测试的样例是 4 行内容 + 2 个空行，**没有任何自洽实现能得出 5 行** |
+| 报告预览的渲染 | `AutoLines` / `FinalLines` 直接是 `ObservableCollection<ReportMarkdownLine>`，XAML 一律按正文渲染 | App 层加一个显示用的 `ReportLineItem`（`Text` / `IsBullet` / `IsHeading` / `IsTitle`），XAML 按层级与列表标记分别渲染 | `ReportMarkdownLine` 特意带了 `Level` 与 `IsBullet`，全按正文渲染会把「### 统计」和「- 完成 1 项」画成同一行 —— 报告页是这功能的脸面，不能是一堵等大的字 |
+| 统计口径的实现方式 | `ComputeStats` 与 `Compose` 各自写一遍 Where 谓词 | 抽一个私有 `Classify(...)` 返回四堆，统计与正文共用 | 同一份口径写两遍，提醒消息里的数字迟早和报告正文对不上，且没有任何测试会红 |
+| 统计行的用词 | 统计行写「未完成 M 项」，小节标题写「遗留未完成」 | 统计行也写「**遗留未完成** M 项（其中逾期 K 项）」 | 同一概念两种叫法，读者会以为是两回事；括号仍保留「逾期 ⊂ 遗留未完成」的语义 |
 
 ---
 
@@ -667,7 +672,7 @@ public class ReportComposerTests
             ## 周报 2026-11-02 ~ 2026-11-08
 
             ### 统计
-            - 完成 1 项 · 未完成 2 项（其中逾期 1 项）· 完成率 33%
+            - 完成 1 项 · 遗留未完成 2 项（其中逾期 1 项）· 完成率 33%
 
             ### 已完成
             - [官网改版] 已做完
@@ -689,6 +694,36 @@ public class ReportComposerTests
         Assert.Contains("### 已完成\n无\n", markdown);
         Assert.Contains("### 遗留未完成\n无\n", markdown);
         Assert.Contains("### 逾期\n无\n", markdown);
+    }
+
+    [Fact]
+    public void ComputeStats_IgnoresTasksCompletedOutsideThePeriod()
+    {
+        // 上周做完的，不算本周的完成 —— 完成按完成时间落窗
+        var tasks = new[]
+        {
+            Task("上周做完的", TaskStatus.Done, completed: "2026-10-28T02:00:00.000Z")
+        };
+
+        var stats = ReportComposer.ComputeStats(ReportPeriods.Weekly(At(11, 5)), tasks, At(11, 5));
+
+        Assert.Equal(0, stats.Completed);
+        Assert.Equal(0, stats.Total);
+    }
+
+    [Fact]
+    public void ComputeStats_IgnoresTasksDueOutsideThePeriod()
+    {
+        // 下周才到期的不算本周的遗留 —— 遗留按到期时间落窗
+        var tasks = new[]
+        {
+            Task("下周才到期", TaskStatus.Doing, due: "2026-11-10T18:00")
+        };
+
+        var stats = ReportComposer.ComputeStats(ReportPeriods.Weekly(At(11, 5)), tasks, At(11, 5));
+
+        Assert.Equal(0, stats.CarriedOver);
+        Assert.Equal(0, stats.Overdue);
     }
 
     [Fact]
@@ -794,23 +829,13 @@ public static class ReportComposer
     public static ReportStats ComputeStats(ReportPeriod period, IReadOnlyList<TaskItem> tasks, DateTime now)
     {
         var today = LocalTime.ToLocalDate(LocalTime.AsLocal(now));
-
-        var completed = tasks.Count(t =>
-            t.Status == TaskStatus.Done
-            && InPeriod(CompletedDate(t), period));
-
-        var carried = tasks.Where(t =>
-            t.Status != TaskStatus.Done
-            && t.Status != TaskStatus.Canceled
-            && InPeriod(DueDate(t), period)).ToList();
-
-        var overdue = carried.Count(t => string.CompareOrdinal(DueDate(t)!, today) < 0);
+        var (completed, pending, overdue) = Classify(tasks, period, today);
 
         return new ReportStats
         {
-            Completed = completed,
-            CarriedOver = carried.Count,
-            Overdue = overdue
+            Completed = completed.Count,
+            CarriedOver = pending.Count + overdue.Count,
+            Overdue = overdue.Count
         };
     }
 
@@ -828,6 +853,59 @@ public static class ReportComposer
         var today = LocalTime.ToLocalDate(LocalTime.AsLocal(now));
         var names = projects.ToDictionary(p => p.Id, p => p.Name);
 
+        var (completed, pending, overdue) = Classify(tasks, period, today);
+
+        var stats = new ReportStats
+        {
+            Completed = completed.Count,
+            CarriedOver = pending.Count + overdue.Count,
+            Overdue = overdue.Count
+        };
+
+        var sb = new StringBuilder();
+        sb.Append($"## {ReportPeriods.Label(period.Kind)} {ReportPeriods.Range(period)}\n\n");
+
+        sb.Append("### 统计\n");
+        sb.Append($"- 完成 {stats.Completed} 项 · 遗留未完成 {stats.CarriedOver} 项（其中逾期 {stats.Overdue} 项）· 完成率 {stats.CompletionRate}%\n\n");
+
+        sb.Append("### 已完成\n");
+        AppendItems(sb, completed.Select(t => Line(t, names, null)));
+        sb.Append("\n");
+
+        sb.Append("### 遗留未完成\n");
+        AppendItems(sb, pending.Select(t => Line(t, names, PendingLabel(t))));
+        sb.Append("\n");
+
+        sb.Append("### 逾期\n");
+        AppendItems(sb, overdue.Select(t => Line(t, names, OverdueLabel(t, today))));
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 最终稿 = 自动汇总 + 人工补充。任一为空就只取另一个。
+    /// </summary>
+    public static string Merge(string autoMarkdown, string manualText)
+    {
+        var auto = autoMarkdown.Trim();
+        var manual = manualText.Trim();
+
+        if (auto.Length == 0) return manual;
+        if (manual.Length == 0) return auto;
+        return $"{auto}\n\n{manual}";
+    }
+
+    /// <summary>
+    /// 按周期把任务分成三堆：已完成、还在期限内的遗留、已逾期的遗留。
+    ///
+    /// 统计与正文都从这里取 —— 同一份口径写两遍，提醒消息里的数字迟早会和报告正文对不上，
+    /// 而且没有任何测试会红。
+    /// </summary>
+    private static (List<TaskItem> Completed, List<TaskItem> Pending, List<TaskItem> Overdue) Classify(
+        IReadOnlyList<TaskItem> tasks,
+        ReportPeriod period,
+        string today)
+    {
         var completed = tasks
             .Where(t => t.Status == TaskStatus.Done && InPeriod(CompletedDate(t), period))
             .OrderBy(t => t.CompletedAt ?? string.Empty, StringComparer.Ordinal)
@@ -850,44 +928,7 @@ public static class ReportComposer
             .Where(t => string.CompareOrdinal(DueDate(t)!, today) >= 0)
             .ToList();
 
-        var stats = new ReportStats
-        {
-            Completed = completed.Count,
-            CarriedOver = carried.Count,
-            Overdue = overdue.Count
-        };
-
-        var sb = new StringBuilder();
-        sb.Append($"## {ReportPeriods.Label(period.Kind)} {ReportPeriods.Range(period)}\n\n");
-
-        sb.Append("### 统计\n");
-        sb.Append($"- 完成 {stats.Completed} 项 · 未完成 {stats.CarriedOver} 项（其中逾期 {stats.Overdue} 项）· 完成率 {stats.CompletionRate}%\n\n");
-
-        sb.Append("### 已完成\n");
-        AppendItems(sb, completed.Select(t => Line(t, names, null)));
-        sb.Append("\n");
-
-        sb.Append("### 遗留未完成\n");
-        AppendItems(sb, pending.Select(t => Line(t, names, ShortDate(t.DueAt))));
-        sb.Append("\n");
-
-        sb.Append("### 逾期\n");
-        AppendItems(sb, overdue.Select(t => Line(t, names, OverdueLabel(t, today))));
-
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// 最终稿 = 自动汇总 + 人工补充。任一为空就只取另一个。
-    /// </summary>
-    public static string Merge(string autoMarkdown, string manualText)
-    {
-        var auto = autoMarkdown.Trim();
-        var manual = manualText.Trim();
-
-        if (auto.Length == 0) return manual;
-        if (manual.Length == 0) return auto;
-        return $"{auto}\n\n{manual}";
+        return (completed, pending, overdue);
     }
 
     private static void AppendItems(StringBuilder sb, IEnumerable<string> lines)
@@ -923,6 +964,13 @@ public static class ReportComposer
     /// <summary>截止日只写 MM-DD：报告是给人看的，完整年月日在前面的标题里。</summary>
     private static string ShortDate(string? dueAt) =>
         string.IsNullOrEmpty(dueAt) || dueAt.Length < 10 ? string.Empty : dueAt.Substring(5, 5);
+
+    /// <summary>遗留未完成行的补充说明：「截止 11-05」。</summary>
+    private static string PendingLabel(TaskItem task)
+    {
+        var date = ShortDate(task.DueAt);
+        return date.Length == 0 ? string.Empty : $"截止 {date}";
+    }
 
     private static string? CompletedDate(TaskItem task) => LocalTime.ToLocalDateOrNull(task.CompletedAt);
 
@@ -971,21 +1019,33 @@ public class ReportMarkdownTests
             普通一行
             """);
 
-        Assert.Equal(5, lines.Count);
+        // 空行不产生行：解析器只认标题、列表项与普通行三种
+        Assert.Equal(4, lines.Count);
         Assert.Equal(1, lines[0].Level);
         Assert.Equal("周报 2026-11-02 ~ 2026-11-08", lines[0].Text);
-        Assert.Equal(2, lines[2].Level);
-        Assert.Equal("统计", lines[2].Text);
-        Assert.True(lines[3].IsBullet);
-        Assert.Equal("完成 1 项", lines[3].Text);
-        Assert.Equal(0, lines[4].Level);
-        Assert.False(lines[4].IsBullet);
+        Assert.Equal(2, lines[1].Level);
+        Assert.Equal("统计", lines[1].Text);
+        Assert.True(lines[2].IsBullet);
+        Assert.Equal("完成 1 项", lines[2].Text);
+        Assert.Equal(0, lines[3].Level);
+        Assert.False(lines[3].IsBullet);
+        Assert.Equal("普通一行", lines[3].Text);
     }
 
     [Fact]
     public void Parse_EmptyTextGivesNoLines()
     {
         Assert.Empty(ReportMarkdown.Parse(string.Empty));
+    }
+
+    [Fact]
+    public void Parse_SkipsWhitespaceOnlyLines()
+    {
+        var lines = ReportMarkdown.Parse("   \n\t\n- 真的一行");
+
+        var line = Assert.Single(lines);
+        Assert.True(line.IsBullet);
+        Assert.Equal("真的一行", line.Text);
     }
 }
 ```
@@ -1031,7 +1091,7 @@ public static class ReportMarkdown
         foreach (var raw in markdown.Split('\n'))
         {
             var line = raw.TrimEnd('\r');
-            if (line.Length == 0) continue;
+            if (line.Trim().Length == 0) continue;
 
             if (line.StartsWith("### ", StringComparison.Ordinal))
             {
@@ -2138,8 +2198,8 @@ git commit -m "feat(reports): 三类报告提醒的设置与触发判定"
     - 构造：`ReportsViewModel(WorkStationService service, Action<string, bool> toast, Func<DateTime>? clock = null)`
     - `ObservableCollection<ReportKindOption> Kinds` —— 日报 / 周报 / 月报三项
     - `ObservableCollection<ReportHistoryItem> History` —— 已有的周期
-    - `ObservableCollection<ReportMarkdownLine> AutoLines` —— 自动汇总
-    - `ObservableCollection<ReportMarkdownLine> FinalLines` —— 最终稿
+    - `ObservableCollection<ReportLineItem> AutoLines` —— 自动汇总（显示用行）
+    - `ObservableCollection<ReportLineItem> FinalLines` —— 最终稿（显示用行）
     - `string ManualText { get; set; }` —— 人工补充（可编辑）
     - `string PeriodTitle { get; }` —— 周期区间文字
     - `string? Error { get; }`、`bool HasError { get; }`、`bool IsLoading { get; }`
@@ -2152,6 +2212,7 @@ git commit -m "feat(reports): 三类报告提醒的设置与触发判定"
     - 方法：`Reload()`
   - `sealed partial class ReportKindOption : ObservableObject` —— `ReportKind Kind`、`string Label`、`bool IsSelected`
   - `sealed class ReportHistoryItem` —— `ReportKind Kind`、`string Title`、`string PeriodStart`
+  - `sealed class ReportLineItem` —— `string Text`、`bool IsBullet`、`bool IsHeading`（由 `ReportMarkdownLine` 转来）
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -2326,6 +2387,34 @@ public sealed class ReportHistoryItem
 }
 
 /// <summary>
+/// 报告预览里的一行。
+///
+/// Core 的 <see cref="ReportMarkdownLine"/> 带着标题层级与列表标记，这里转成界面直接能用的形状：
+/// 标题行走标题样式，列表项前面补上项目符号 —— 全按正文渲染，报告就是一堵等大的字。
+/// </summary>
+public sealed class ReportLineItem
+{
+    public required string Text { get; init; }
+
+    /// <summary>是不是列表项。</summary>
+    public bool IsBullet { get; init; }
+
+    /// <summary>是不是小节标题（Markdown 的 ###）。</summary>
+    public bool IsHeading { get; init; }
+
+    /// <summary>是不是整篇的标题（Markdown 的 ##）。</summary>
+    public bool IsTitle { get; init; }
+
+    public static ReportLineItem From(ReportMarkdownLine line) => new()
+    {
+        Text = line.IsBullet ? $"• {line.Text}" : line.Text,
+        IsBullet = line.IsBullet,
+        IsHeading = line.Level == 2,
+        IsTitle = line.Level == 1
+    };
+}
+
+/// <summary>
 /// 报告页：日报 / 周报 / 月报。
 ///
 /// 左边是自动汇总（机器算的，随时可以重新汇总），
@@ -2373,9 +2462,9 @@ public sealed partial class ReportsViewModel : ObservableObject
 
     public ObservableCollection<ReportHistoryItem> History { get; } = [];
 
-    public ObservableCollection<ReportMarkdownLine> AutoLines { get; } = [];
+    public ObservableCollection<ReportLineItem> AutoLines { get; } = [];
 
-    public ObservableCollection<ReportMarkdownLine> FinalLines { get; } = [];
+    public ObservableCollection<ReportLineItem> FinalLines { get; } = [];
 
     /// <summary>人工补充说明。</summary>
     [ObservableProperty]
@@ -2556,13 +2645,13 @@ public sealed partial class ReportsViewModel : ObservableObject
         AutoLines.Clear();
         foreach (var line in ReportMarkdown.Parse(report.AutoMarkdown))
         {
-            AutoLines.Add(line);
+            AutoLines.Add(ReportLineItem.From(line));
         }
 
         FinalLines.Clear();
         foreach (var line in ReportMarkdown.Parse(report.FinalMarkdown))
         {
-            FinalLines.Add(line);
+            FinalLines.Add(ReportLineItem.From(line));
         }
     }
 
@@ -2767,6 +2856,25 @@ Expected: FAIL —— `ReportsView` / `ShowReportsCommand` / `AppIcons.Reports` 
       <Setter Property="Background" Value="{DynamicResource SurfaceGlassRaised}" />
       <Setter Property="BorderBrush" Value="{DynamicResource SukiPrimaryColor50}" />
     </Style>
+
+    <!-- 报告正文：标题、小节标题与普通行各走各的样式。
+         全按正文画，报告就是一堵等大的字，看不出哪句是标题。 -->
+    <Style Selector="TextBlock.report">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2" />
+    </Style>
+    <Style Selector="TextBlock.report.heading">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeSubhead}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,8,0,2" />
+    </Style>
+    <Style Selector="TextBlock.report.title">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeHeading}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,4,0,6" />
+    </Style>
   </UserControl.Styles>
 
   <Grid RowDefinitions="Auto,Auto,*">
@@ -2872,12 +2980,11 @@ Expected: FAIL —— `ReportsView` / `ShowReportsCommand` / `AppIcons.Reports` 
                          Foreground="{DynamicResource SukiMuteText}" />
               <ItemsControl ItemsSource="{Binding AutoLines}">
                 <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="core:ReportMarkdownLine">
-                    <TextBlock Text="{Binding Text}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               Foreground="{DynamicResource SukiText}"
-                               TextWrapping="Wrap"
-                               Margin="0,2" />
+                  <DataTemplate x:DataType="vm:ReportLineItem">
+                    <TextBlock Classes="report"
+                               Classes.heading="{Binding IsHeading}"
+                               Classes.title="{Binding IsTitle}"
+                               Text="{Binding Text}" />
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
@@ -2912,12 +3019,11 @@ Expected: FAIL —— `ReportsView` / `ShowReportsCommand` / `AppIcons.Reports` 
                        FontWeight="SemiBold" />
             <ItemsControl ItemsSource="{Binding FinalLines}">
               <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="core:ReportMarkdownLine">
-                  <TextBlock Text="{Binding Text}"
-                             FontSize="{DynamicResource FontSizeBody}"
-                             Foreground="{DynamicResource SukiText}"
-                             TextWrapping="Wrap"
-                             Margin="0,2" />
+                <DataTemplate x:DataType="vm:ReportLineItem">
+                  <TextBlock Classes="report"
+                             Classes.heading="{Binding IsHeading}"
+                             Classes.title="{Binding IsTitle}"
+                             Text="{Binding Text}" />
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
