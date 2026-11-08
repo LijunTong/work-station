@@ -1,6 +1,6 @@
 # 日报 / 周报 / 月报 实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 给工作台加一套可编辑、可导出的周期报告（日报 / 周报 / 月报），并把「每日站会提醒」换成三类报告提醒。
 
@@ -64,7 +64,7 @@
   - `DbEnum.ParseReportKind(string)` → `ReportKind`
   - 迁移 `3`（名字 `reports-daily-kind`）落地后：`reports.kind` CHECK 含 `daily`；`idx_reports_period` 为 UNIQUE 索引 `(kind, period_start)`
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 在 `tests/WorkStation.Tests/MigrationsTests.cs` 末尾追加：
 
@@ -121,12 +121,12 @@
     }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~MigrationsTests"`
 Expected: FAIL —— `CHECK constraint failed: kind` 与缺少 UNIQUE 约束（后两条测试会失败）
 
-- [ ] **Step 3: 枚举与映射**
+- [x] **Step 3: 枚举与映射**
 
 `src/WorkStation.Core/Models/Enums.cs`，把
 
@@ -175,7 +175,7 @@ public enum ReportKind
     };
 ```
 
-- [ ] **Step 4: 迁移 v3**
+- [x] **Step 4: 迁移 v3**
 
 `src/WorkStation.Core/Data/Migrations.cs`，在 `All` 里加一条：
 
@@ -224,17 +224,17 @@ public enum ReportKind
         """;
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~MigrationsTests"`
 Expected: PASS（全部 8 条）
 
-- [ ] **Step 6: 全量测试**
+- [x] **Step 6: 全量测试**
 
 Run: `dotnet test`
 Expected: 全部 PASS（`RunMigrations_CreatesAllSixIndexes` 断言的索引名没变，不受影响）
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add src/WorkStation.Core/Models/Enums.cs src/WorkStation.Core/Models/DbEnum.cs src/WorkStation.Core/Data/Migrations.cs tests/WorkStation.Tests/MigrationsTests.cs
@@ -280,7 +280,7 @@ git commit -m "feat(reports): 报告加日报类型，reports 表重建并加周
 > 与源文件用什么换行无关。所以测试里的 `"""..."""` 期望值与实现里显式写的 `"\n"` **逐字一致**，
 > Windows 上也不会差。
 
-- [ ] **Step 1: 写失败的测试（周期）**
+- [x] **Step 1: 写失败的测试（周期）**
 
 创建 `tests/WorkStation.Tests/ReportPeriodsTests.cs`：
 
@@ -399,12 +399,12 @@ public class ReportPeriodsTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportPeriodsTests"`
 Expected: FAIL —— `WorkStation.Core.Reports` 命名空间不存在（编译错误）
 
-- [ ] **Step 3: 实现 `ReportPeriod` 与 `ReportPeriods`**
+- [x] **Step 3: 实现 `ReportPeriod` 与 `ReportPeriods`**
 
 创建 `src/WorkStation.Core/Models/ReportPeriod.cs`：
 
@@ -541,12 +541,12 @@ public static class ReportPeriods
 }
 ```
 
-- [ ] **Step 4: 运行周期测试确认通过**
+- [x] **Step 4: 运行周期测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportPeriodsTests"`
 Expected: PASS（10 条）
 
-- [ ] **Step 5: 写失败的测试（统计与汇总）**
+- [x] **Step 5: 写失败的测试（统计与汇总）**
 
 创建 `tests/WorkStation.Tests/ReportComposerTests.cs`：
 
@@ -738,12 +738,12 @@ public class ReportComposerTests
 }
 ```
 
-- [ ] **Step 6: 运行测试确认失败**
+- [x] **Step 6: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportComposerTests"`
 Expected: FAIL —— `ReportComposer` / `ReportStats` 不存在
 
-- [ ] **Step 7: 给 `LocalTime` 加一个换算方法**
+- [x] **Step 7: 给 `LocalTime` 加一个换算方法**
 
 `src/WorkStation.Core/Time/LocalTime.cs` 末尾追加：
 
@@ -766,7 +766,7 @@ Expected: FAIL —— `ReportComposer` / `ReportStats` 不存在
     }
 ```
 
-- [ ] **Step 8: 实现 `ReportStats` 与 `ReportComposer`**
+- [x] **Step 8: 实现 `ReportStats` 与 `ReportComposer`**
 
 创建 `src/WorkStation.Core/Reports/ReportStats.cs`：
 
@@ -992,12 +992,12 @@ public static class ReportComposer
 }
 ```
 
-- [ ] **Step 9: 运行测试确认通过**
+- [x] **Step 9: 运行测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportComposerTests"`
 Expected: PASS（9 条）
 
-- [ ] **Step 10: 写失败的测试（Markdown 解析）**
+- [x] **Step 10: 写失败的测试（Markdown 解析）**
 
 创建 `tests/WorkStation.Tests/ReportMarkdownTests.cs`：
 
@@ -1052,12 +1052,12 @@ public class ReportMarkdownTests
 }
 ```
 
-- [ ] **Step 11: 运行测试确认失败**
+- [x] **Step 11: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportMarkdownTests"`
 Expected: FAIL —— `ReportMarkdown` 不存在
 
-- [ ] **Step 12: 实现 `ReportMarkdown`**
+- [x] **Step 12: 实现 `ReportMarkdown`**
 
 创建 `src/WorkStation.Core/Reports/ReportMarkdown.cs`：
 
@@ -1118,12 +1118,12 @@ public static class ReportMarkdown
 }
 ```
 
-- [ ] **Step 13: 全量测试**
+- [x] **Step 13: 全量测试**
 
 Run: `dotnet test`
 Expected: 全部 PASS
 
-- [ ] **Step 14: 提交**
+- [x] **Step 14: 提交**
 
 ```bash
 git add src/WorkStation.Core/Models/ReportPeriod.cs src/WorkStation.Core/Reports src/WorkStation.Core/Time/LocalTime.cs tests/WorkStation.Tests/ReportPeriodsTests.cs tests/WorkStation.Tests/ReportComposerTests.cs tests/WorkStation.Tests/ReportMarkdownTests.cs
@@ -1150,7 +1150,7 @@ git commit -m "feat(reports): 报告周期计算、统计口径与 Markdown 自�
     - `Report Update(Report report)` —— 只写 `auto_markdown` / `manual_text` / `final_markdown` 与 `updated_at`
     - `bool Remove(string id)`
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 创建 `tests/WorkStation.Tests/ReportsRepositoryTests.cs`：
 
@@ -1268,12 +1268,12 @@ public class ReportsRepositoryTests : IDisposable
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportsRepositoryTests"`
 Expected: FAIL —— `ReportsRepository` 不存在
 
-- [ ] **Step 3: 实现仓储**
+- [x] **Step 3: 实现仓储**
 
 创建 `src/WorkStation.Core/Data/Repositories/ReportsRepository.cs`：
 
@@ -1405,12 +1405,12 @@ public sealed class ReportsRepository
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportsRepositoryTests"`
 Expected: PASS（6 条）
 
-- [ ] **Step 5: 全量测试并提交**
+- [x] **Step 5: 全量测试并提交**
 
 Run: `dotnet test`
 Expected: 全部 PASS
@@ -1439,7 +1439,7 @@ git commit -m "feat(reports): 报告仓储，一个周期一条"
   - `Result<bool> ReportsRemove(string id)`
   - `Result<ReportStats> ReportsStats(ReportKind kind)` —— 当前周期的统计（通知正文用）
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 创建 `tests/WorkStation.Tests/WorkStationServiceReportsTests.cs`：
 
@@ -1589,12 +1589,12 @@ public class WorkStationServiceReportsTests : IDisposable
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~WorkStationServiceReportsTests"`
 Expected: FAIL —— `ReportsEnsure` 等方法不存在
 
-- [ ] **Step 3: 实现服务层方法**
+- [x] **Step 3: 实现服务层方法**
 
 `src/WorkStation.Core/Services/WorkStationService.cs`：
 
@@ -1705,12 +1705,12 @@ Expected: FAIL —— `ReportsEnsure` 等方法不存在
         });
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~WorkStationServiceReportsTests"`
 Expected: PASS（8 条）
 
-- [ ] **Step 5: 全量测试并提交**
+- [x] **Step 5: 全量测试并提交**
 
 Run: `dotnet test`
 Expected: 全部 PASS
@@ -1752,7 +1752,7 @@ git commit -m "feat(reports): 报告服务层，重新汇总保留人工补充"
     - `Result<string?> ReportReminderLastFired(ReportKind kind)`
     - `Result<bool> ReportReminderMarkFired(ReportKind kind, string key)`
 
-- [ ] **Step 1: 写失败的测试（判定）**
+- [x] **Step 1: 写失败的测试（判定）**
 
 创建 `tests/WorkStation.Tests/ReportReminderPlannerTests.cs`：
 
@@ -1880,12 +1880,12 @@ public class ReportReminderPlannerTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportReminderPlannerTests"`
 Expected: FAIL —— `ReportReminderPlanner` 不存在
 
-- [ ] **Step 3: 实现设置模型与判定**
+- [x] **Step 3: 实现设置模型与判定**
 
 创建 `src/WorkStation.Core/Models/ReportReminderSettings.cs`：
 
@@ -2007,12 +2007,12 @@ public static class ReportReminderPlanner
 }
 ```
 
-- [ ] **Step 4: 运行判定测试确认通过**
+- [x] **Step 4: 运行判定测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportReminderPlannerTests"`
 Expected: PASS（12 条）
 
-- [ ] **Step 5: 写失败的测试（设置存取）**
+- [x] **Step 5: 写失败的测试（设置存取）**
 
 创建 `tests/WorkStation.Tests/ReportReminderSettingsTests.cs`：
 
@@ -2111,12 +2111,12 @@ public class ReportReminderSettingsTests : IDisposable
 }
 ```
 
-- [ ] **Step 6: 运行测试确认失败**
+- [x] **Step 6: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportReminderSettingsTests"`
 Expected: FAIL —— `ReportRemindersGet` 等方法不存在
 
-- [ ] **Step 7: 实现服务层方法**
+- [x] **Step 7: 实现服务层方法**
 
 `src/WorkStation.Core/Services/WorkStationService.cs`：
 
@@ -2212,12 +2212,12 @@ Expected: FAIL —— `ReportRemindersGet` 等方法不存在
 
 > `WorkStationService.cs` 顶部原本就有 `using System.Text.Json;`（`JsonValueKind` 需要它），确认一下别丢。
 
-- [ ] **Step 8: 运行测试确认通过**
+- [x] **Step 8: 运行测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportReminderSettingsTests"`
 Expected: PASS（5 条）
 
-- [ ] **Step 9: 全量测试并提交**
+- [x] **Step 9: 全量测试并提交**
 
 Run: `dotnet test`
 Expected: 全部 PASS
@@ -2258,7 +2258,7 @@ git commit -m "feat(reports): 三类报告提醒的设置与触发判定"
   - `sealed class ReportHistoryItem` —— `ReportKind Kind`、`string Title`、`string PeriodStart`
   - `sealed class ReportLineItem` —— `string Text`、`bool IsBullet`、`bool IsHeading`（由 `ReportMarkdownLine` 转来）
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 创建 `tests/WorkStation.Tests/ReportsViewModelTests.cs`：
 
@@ -2379,12 +2379,12 @@ public class ReportsViewModelTests : IDisposable
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportsViewModelTests"`
 Expected: FAIL —— `ReportsViewModel` 不存在
 
-- [ ] **Step 3: 实现 ViewModel**
+- [x] **Step 3: 实现 ViewModel**
 
 创建 `src/WorkStation.App/ViewModels/ReportsViewModel.cs`：
 
@@ -2733,12 +2733,12 @@ public sealed partial class ReportsViewModel : ObservableObject
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportsViewModelTests"`
 Expected: PASS（7 条）
 
-- [ ] **Step 5: 全量测试并提交**
+- [x] **Step 5: 全量测试并提交**
 
 Run: `dotnet test`
 Expected: 全部 PASS
