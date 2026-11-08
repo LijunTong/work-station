@@ -46,4 +46,21 @@ public static class LocalTime
         DateTimeKind.Unspecified => DateTime.SpecifyKind(value, DateTimeKind.Local),
         _ => value
     };
+
+    /// <summary>
+    /// ISO 8601 UTC 时间戳 → 本地日历日。解析不了返回 null。
+    ///
+    /// 任务的 completed_at 是 UTC 时间戳，要落到「哪一天」必须先换算成本地时间，
+    /// 否则晚上完成的事会被算到第二天。
+    /// </summary>
+    public static string? ToLocalDateOrNull(string? isoUtc)
+    {
+        if (string.IsNullOrWhiteSpace(isoUtc)) return null;
+        if (!DateTime.TryParse(isoUtc, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+        {
+            return null;
+        }
+
+        return ToLocalDate(AsLocal(parsed));
+    }
 }
