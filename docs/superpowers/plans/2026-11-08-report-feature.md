@@ -43,7 +43,8 @@
 | 报告预览的渲染 | `AutoLines` / `FinalLines` 直接是 `ObservableCollection<ReportMarkdownLine>`，XAML 一律按正文渲染 | App 层加一个显示用的 `ReportLineItem`（`Text` / `IsBullet` / `IsHeading` / `IsTitle`），XAML 按层级与列表标记分别渲染 | `ReportMarkdownLine` 特意带了 `Level` 与 `IsBullet`，全按正文渲染会把「### 统计」和「- 完成 1 项」画成同一行 —— 报告页是这功能的脸面，不能是一堵等大的字 |
 | 统计口径的实现方式 | `ComputeStats` 与 `Compose` 各自写一遍 Where 谓词 | 抽一个私有 `Classify(...)` 返回三堆（completed / pending / overdue），统计与正文共用 | 同一份口径写两遍，提醒消息里的数字迟早和报告正文对不上，且没有任何测试会红 |
 | 统计行的用词 | 统计行写「未完成 M 项」，小节标题写「遗留未完成」 | 统计行也写「**遗留未完成** M 项（其中逾期 K 项）」 | 同一概念两种叫法，读者会以为是两回事；括号仍保留「逾期 ⊂ 遗留未完成」的语义 |
-| 「报告不存在」的错误码 | `ArgumentException` → `VALIDATION_FAILED` | `NotFoundException` → `NOT_FOUND`，并给 `Guard` 加一条 catch | `ErrorCodes.NotFound` 此前定义了却没人用过；「找不到」不是「参数不合法」，机器可读的码要能区分这两件事 |
+| 「报告不存在」的错误码 | `ArgumentException` → `VALIDATION_FAILED` | `KeyNotFoundException` → `NOT_FOUND`，并给 `Guard` 加一条 catch | `ErrorCodes.NotFound` 此前定义了却没人用过；「找不到」不是「参数不合法」，机器可读的码要能区分这两件事 |
+| 周期起点的格式校验 | 未写 | `ReportsEnsure` 前置 `TryParseExact("yyyy-MM-dd")` 校验，不合格抛 `ArgumentException` → `VALIDATION_FAILED` + 中文文案 | 不校验的话非法起点会落到兜底 catch，变成 `HANDLER_FAILED` + 英文的 `FormatException` 消息，违反「Message 是可直接展示的中文文案」 |
 
 ---
 
@@ -1576,10 +1577,13 @@ Expected: FAIL —— `ReportsEnsure` 等方法不存在
 1. 顶部 using 增加 `using WorkStation.Core.Reports;`
 2. 字段区增加 `private readonly ReportsRepository _reports;`
 3. 构造函数里增加 ` _reports = new ReportsRepository(connection);`
-4. **给 `Guard` 加一条 catch**：`NotFoundException` → `ErrorCodes.NotFound`。
+4. **给 `Guard` 加一条 catch**：`KeyNotFoundException` → `ErrorCodes.NotFound`。
    `ErrorCodes.NotFound` 此前定义了却没人用过，「报告不存在」这类错误现在有了机器可读的码。
-   注意 catch 顺序：`NotFoundException` 要排在兜底的 `catch (Exception)` **之前**。
-   `NotFoundException` 在 `System` 命名空间（`System.IO` 也有同名类型，用 `System.NotFoundException` 避免歧义）。
+   注意 catch 顺序：`KeyNotFoundException` 要排在兜底的 `catch (Exception)` **之前**。
+   用 `System.Collections.Generic.KeyNotFoundException`（BCL 里没有 `System.NotFoundException`；
+   `System.IO.NotFoundException` 是文件语义，用在这里不合适）。
+   `Guard` 是所有服务方法共用的私有静态方法，现有代码里没有任何一条路径会抛
+   `KeyNotFoundException`（字典访问全用 `TryGetValue`，没有裸下标读）—— 加这条 catch 不改变既有行为。
 5. 在「---------- 提醒 ----------」这一段**之前**插入新的一段：
 
 ```csharp
@@ -1599,6 +1603,13 @@ Expected: FAIL —— `ReportsEnsure` 等方法不存在
     public Result<Report> ReportsEnsure(ReportKind kind, string periodStart) =>
         Guard("生成报告", () =>
         {
+            // 周期起点必须形如 YYYY-MM-dd：格式不对时兜底 catch 会给出英文报错，
+            // 那不是能直接展示给用户的中文文案
+            if (!DateTime.TryParseExact(periodStart, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+            {
+                throw new ArgumentException("周期起点应形如 YYYY-MM-DD");
+            }
+
             var existing = _reports.GetByPeriod(kind, periodStart);
             if (existing is not null) return existing;
 
@@ -1624,7 +1635,7 @@ Expected: FAIL —— `ReportsEnsure` 等方法不存在
         Guard("保存报告补充说明", () =>
         {
             var existing = _reports.Get(id);
-            if (existing is null) throw new NotFoundException("报告不存在");
+            if (existing is null) throw new KeyNotFoundException("报告不存在");
 
             return _reports.Update(existing with
             {
@@ -1643,7 +1654,7 @@ Expected: FAIL —— `ReportsEnsure` 等方法不存在
         Guard("重新汇总报告", () =>
         {
             var existing = _reports.Get(id);
-            if (existing is null) throw new NotFoundException("报告不存在");
+            if (existing is null) throw new KeyNotFoundException("报告不存在");
 
             var period = ReportPeriods.FromStart(existing.Kind, existing.PeriodStart);
             var auto = ReportComposer.Compose(period, _tasks.List(), _projects.List(true), DateTime.Now);
