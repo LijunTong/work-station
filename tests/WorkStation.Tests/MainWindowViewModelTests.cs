@@ -515,6 +515,20 @@ public class MainWindowViewModelTests : IDisposable
         Assert.False(settings.CloseToTray);
     }
 
+    /// <summary>报告页是独立页面：快捷键 6 / Ctrl+6 都能到达</summary>
+    [AvaloniaFact]
+    public void NavigateToReports_SwitchesPage()
+    {
+        var vm = new MainWindowViewModel(_service);
+
+        vm.ShowReportsCommand.Execute(null);
+
+        Assert.Equal(AppPage.Reports, vm.Page);
+        Assert.IsType<ReportsViewModel>(vm.CurrentPage);
+        Assert.Equal("报告", vm.PageTitle);
+        Assert.True(vm.IsReportsActive);
+    }
+
     private sealed class RecordingSink : INotificationSink
     {
         public List<(string Title, string Message, Action Click)> Shown { get; } = [];

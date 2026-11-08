@@ -20,6 +20,7 @@ public enum AppPage
     Tasks,
     Projects,
     Reminders,
+    Reports,
     Settings,
     Dashboard
 }
@@ -51,6 +52,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     /// <summary>仪表盘：只读统计页，与看板的分工见 <see cref="DashboardViewModel"/>。</summary>
     public DashboardViewModel? Dashboard { get; }
+
+    /// <summary>报告页：日报 / 周报 / 月报。</summary>
+    public ReportsViewModel? Reports { get; }
 
     /// <summary>从项目卡片「查看任务」点进来时挂上的弹窗内容；为 null 表示没有弹窗。</summary>
     public ProjectTasksDialogViewModel? ProjectTasksDialog { get; private set; }
@@ -137,6 +141,8 @@ public partial class MainWindowViewModel : ObservableObject
 
     public bool IsRemindersActive => Page == AppPage.Reminders;
 
+    public bool IsReportsActive => Page == AppPage.Reports;
+
     public bool IsSettingsActive => Page == AppPage.Settings;
 
     public bool IsDashboardActive => Page == AppPage.Dashboard;
@@ -197,6 +203,7 @@ public partial class MainWindowViewModel : ObservableObject
         Reminders = new RemindersViewModel(service, ShowToast, null, RefreshBadge);
         Settings = new SettingsViewModel(service, ApplyThemeVariant, ApplyThemeColor, ShowToast, ApplyCustomThemeColor, ApplyFont);
         Dashboard = new DashboardViewModel(service, ShowToast);
+        Reports = new ReportsViewModel(service, ShowToast);
 
         Board.EditTaskRequested = OpenTaskEditorInPlace;
         Board.OpenProjectTasksRequested = ShowTasksForProject;
@@ -274,6 +281,7 @@ public partial class MainWindowViewModel : ObservableObject
         new("全部任务", "跳转", "任", ["tasks", "list", "清单"], () => Navigate(AppPage.Tasks)),
         new("全部项目", "跳转", "项", ["projects", "list"], () => Navigate(AppPage.Projects)),
         new("提醒", "跳转", "铃", ["reminder", "提醒", "alarm"], () => Navigate(AppPage.Reminders)),
+        new("报告", "跳转", "报", ["report", "报告", "日报", "周报", "月报"], () => Navigate(AppPage.Reports)),
         new("仪表盘", "跳转", "表", ["dashboard", "仪表盘", "统计", "概览"], () => Navigate(AppPage.Dashboard)),
         new("设置", "跳转", "设", ["settings", "主题", "theme"], () => Navigate(AppPage.Settings)),
         new("新建任务", "动作", "＋", ["add", "new", "task", "记录"], NewTask),
@@ -298,6 +306,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsTasksActive));
         OnPropertyChanged(nameof(IsProjectsActive));
         OnPropertyChanged(nameof(IsRemindersActive));
+        OnPropertyChanged(nameof(IsReportsActive));
         OnPropertyChanged(nameof(IsSettingsActive));
         OnPropertyChanged(nameof(IsDashboardActive));
 
@@ -327,6 +336,12 @@ public partial class MainWindowViewModel : ObservableObject
                 CurrentPage = Reminders;
                 Reminders?.Reload();
                 break;
+            case AppPage.Reports:
+                PageTitle = "报告";
+                PageSubtitle = "日报、周报、月报，写点总结的地方";
+                CurrentPage = Reports;
+                Reports?.Reload();
+                break;
             case AppPage.Settings:
                 PageTitle = "设置";
                 PageSubtitle = "外观偏好与本地数据位置";
@@ -355,6 +370,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     [RelayCommand]
     private void ShowReminders() => Navigate(AppPage.Reminders);
+
+    [RelayCommand]
+    private void ShowReports() => Navigate(AppPage.Reports);
 
     [RelayCommand]
     private void ShowSettings() => Navigate(AppPage.Settings);
@@ -480,6 +498,9 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             case AppPage.Reminders:
                 Reminders?.Reload();
+                break;
+            case AppPage.Reports:
+                Reports?.Reload();
                 break;
             case AppPage.Dashboard:
                 Dashboard?.Reload();

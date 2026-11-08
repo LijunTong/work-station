@@ -475,7 +475,7 @@
                 <TextBlock Grid.Row="1" Grid.Column="1" Text="聚焦当前页的搜索框" Foreground="{DynamicResource SukiMuteText}" />
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Ctrl + K" Foreground="{DynamicResource SukiLowText}" />
                 <TextBlock Grid.Row="2" Grid.Column="1" Text="命令面板：跳转、新建、找任务" Foreground="{DynamicResource SukiMuteText}" />
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="1 – 6 / Ctrl + 1 – 6" Foreground="{DynamicResource SukiLowText}" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="1 – 7 / Ctrl + 1 – 7" Foreground="{DynamicResource SukiLowText}" />
                 <TextBlock Grid.Row="3" Grid.Column="1" Text="切换到对应页面（顺序同左侧菜单）" Foreground="{DynamicResource SukiMuteText}" />
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="Ctrl + B" Foreground="{DynamicResource SukiLowText}" />
                 <TextBlock Grid.Row="4" Grid.Column="1" Text="折叠或展开左侧菜单" Foreground="{DynamicResource SukiMuteText}" />
@@ -507,6 +507,9 @@
     </DataTemplate>
     <DataTemplate DataType="vm:RemindersViewModel">
       <views:RemindersView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:ReportsViewModel">
+      <views:ReportsView />
     </DataTemplate>
     <DataTemplate DataType="vm:SettingsViewModel">
       <views:SettingsView />
@@ -582,6 +585,11 @@
                               Appearance="Error" />
             </DataTemplate>
           </suki:SukiSideMenuItem.SideDisplayTemplate>
+        </suki:SukiSideMenuItem>
+        <suki:SukiSideMenuItem Header="报告" IsContentMovable="False" Tag="Reports">
+          <suki:SukiSideMenuItem.Icon>
+            <PathIcon Data="{x:Static controls:AppIcons.Reports}" Width="20" Height="20" />
+          </suki:SukiSideMenuItem.Icon>
         </suki:SukiSideMenuItem>
       </suki:SukiSideMenu.Items>
 

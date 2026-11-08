@@ -61,6 +61,18 @@ public static class AppIcons
     public static readonly StreamGeometry Trend = Parse(
         "M16,6H22V12H20V9.41L11.83,17.59L10.41,16.17L18.59,8H16V6M4,5H9V7H6V18H17V15H19V20H4V5Z");
 
+    /// <summary>
+    /// 报告页：一沓带折角的纸（MDI file-document-outline）。
+    ///
+    /// 与 MDI 其它图标对得齐：全部同一套 24×24 网格，轮廓风格一致。
+    /// </summary>
+    public static readonly StreamGeometry Reports = Parse(
+        "M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M9,13V15H15V13H9M9,17V19H13V17H9");
+
+    /// <summary>上一期：和标题栏那枚 ArrowRight 成对，翻周期的左右箭头用。</summary>
+    public static readonly StreamGeometry ArrowLeft = Parse(
+        "M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z");
+
     // —— 标题栏用的「描边版」图标 ——
     //
     // 标题栏的最小化/最大化/关闭是 SukiUI 自己的细线条图标（约 1.1px 线宽），

@@ -1,0 +1,199 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WorkStation.App.ViewModels"
+             xmlns:controls="using:WorkStation.App.Controls"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
+             x:Class="WorkStation.App.Views.ReportsView"
+             x:DataType="vm:ReportsViewModel"
+             x:CompileBindings="True">
+
+  <UserControl.Styles>
+    <!-- 类型切换按钮：未选中的沉一档，选中的托亮并加一条半透明主色描边，
+         和仪表盘时间卡的选中态是同一套语言。 -->
+    <Style Selector="Border.kind">
+      <Setter Property="Background" Value="{DynamicResource SurfaceGlassSunken}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.kind.selected">
+      <Setter Property="Background" Value="{DynamicResource SurfaceGlassRaised}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SukiPrimaryColor50}" />
+    </Style>
+
+    <!-- 报告预览：标题、小节标题、正文行各有各的排法。
+         全按正文渲染的话，报告就是一堵等大的字，找不着重点。 -->
+    <Style Selector="TextBlock.report">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+      <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2" />
+    </Style>
+    <Style Selector="TextBlock.report.heading">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeSubhead}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,8,0,2" />
+    </Style>
+    <Style Selector="TextBlock.report.title">
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeHeading}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,4,0,6" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,*">
+
+    <!-- 顶部工具栏：类型切换 + 三个动作，和任务 / 项目页同一套卡片式工具栏 -->
+    <Border Grid.Row="0"
+            Classes="card"
+            Margin="{DynamicResource PageGutterBelowHeader}"
+            Padding="10,8">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+
+        <ItemsControl ItemsSource="{Binding Kinds}" VerticalAlignment="Center">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="6" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ReportKindOption">
+              <Border Classes="kind"
+                      Classes.selected="{Binding IsSelected}"
+                      Margin="0,0,6,0"
+                      Padding="14,6"
+                      CornerRadius="10">
+                <Button Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Content="{Binding Label}"
+                        Command="{Binding $parent[UserControl].((vm:ReportsViewModel)DataContext).SelectKindCommand}"
+                        CommandParameter="{Binding Kind}" />
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Content="重新汇总"
+                  Command="{Binding RegenerateCommand}" />
+          <Button Content="复制 Markdown"
+                  Command="{Binding CopyCommand}" />
+          <Button Content="导出 .md"
+                  Classes="Flat"
+                  Command="{Binding ExportCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- 周期切换：上一期 / 当前区间 / 下一期，右侧是历史下拉 -->
+    <Border Grid.Row="1"
+            Classes="card"
+            Margin="{DynamicResource PageGutterBelowHeader}"
+            Padding="10,8">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="10">
+        <Button Classes="icon Basic"
+                Command="{Binding PreviousPeriodCommand}"
+                ToolTip.Tip="上一期">
+          <PathIcon Data="{x:Static controls:AppIcons.ArrowLeft}" Width="18" Height="18" />
+        </Button>
+
+        <TextBlock Grid.Column="1"
+                   Text="{Binding PeriodTitle}"
+                   FontSize="{DynamicResource FontSizeSubhead}"
+                   FontWeight="SemiBold"
+                   VerticalAlignment="Center" />
+
+        <Button Grid.Column="3"
+                Classes="icon Basic"
+                IsEnabled="{Binding CanGoNext}"
+                Command="{Binding NextPeriodCommand}"
+                ToolTip.Tip="下一期">
+          <PathIcon Data="{x:Static controls:AppIcons.ArrowRight}" Width="18" Height="18" />
+        </Button>
+
+        <ComboBox Grid.Column="4"
+                  Width="200"
+                  VerticalAlignment="Center"
+                  ItemsSource="{Binding History}"
+                  SelectedItem="{Binding SelectedHistory, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ReportHistoryItem">
+              <TextBlock Text="{Binding Title}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </Grid>
+    </Border>
+
+    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="{DynamicResource PageGutterBottom}" Spacing="16">
+
+        <suki:InfoBar IsVisible="{Binding HasError}" Message="{Binding Error}" Severity="Error" IsClosable="False" />
+
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+
+          <!-- 左：自动汇总（机器算的，重新汇总会覆盖） -->
+          <Border Classes="card" Padding="20,16">
+            <StackPanel Spacing="10">
+              <TextBlock Text="自动汇总"
+                         FontSize="{DynamicResource FontSizeHeading}"
+                         FontWeight="SemiBold" />
+              <TextBlock Text="这部分由数据自动生成，随时可以重新汇总。"
+                         FontSize="{DynamicResource FontSizeCaption}"
+                         Foreground="{DynamicResource SukiMuteText}" />
+              <ItemsControl ItemsSource="{Binding AutoLines}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ReportLineItem">
+                    <TextBlock Classes="report"
+                               Classes.heading="{Binding IsHeading}"
+                               Classes.title="{Binding IsTitle}"
+                               Text="{Binding Text}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <!-- 右：人工补充（手写的，重新汇总不会覆盖） -->
+          <Border Classes="card" Padding="20,16">
+            <StackPanel Spacing="10">
+              <TextBlock Text="人工补充"
+                         FontSize="{DynamicResource FontSizeHeading}"
+                         FontWeight="SemiBold" />
+              <TextBlock Text="想写什么写什么，只进最终稿，重新汇总不会动它。"
+                         FontSize="{DynamicResource FontSizeCaption}"
+                         Foreground="{DynamicResource SukiMuteText}" />
+              <TextBox Text="{Binding ManualText, Mode=TwoWay}"
+                       AcceptsReturn="True"
+                       TextWrapping="Wrap"
+                       MinHeight="220" />
+              <Button Content="保存人工补充"
+                      HorizontalAlignment="Right"
+                      Command="{Binding SaveCommand}" />
+            </StackPanel>
+          </Border>
+        </Grid>
+
+        <!-- 最终稿：复制与导出的就是它 -->
+        <Border Classes="card" Padding="20,16">
+          <StackPanel Spacing="10">
+            <TextBlock Text="最终稿"
+                       FontSize="{DynamicResource FontSizeHeading}"
+                       FontWeight="SemiBold" />
+            <ItemsControl ItemsSource="{Binding FinalLines}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ReportLineItem">
+                  <TextBlock Classes="report"
+                             Classes.heading="{Binding IsHeading}"
+                             Classes.title="{Binding IsTitle}"
+                             Text="{Binding Text}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

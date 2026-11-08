@@ -2772,7 +2772,7 @@ git commit -m "feat(reports): 报告页视图模型"
   - `AppIcons.Reports`、`AppIcons.ArrowLeft`
   - 快捷键：`6` / `Ctrl+6` → 报告页，`7` / `Ctrl+7` → 设置页
 
-- [ ] **Step 1: 写失败的测试**
+- [x] **Step 1: 写失败的测试**
 
 `tests/WorkStation.Tests/UiSmokeTests.cs` 里追加：
 
@@ -2846,12 +2846,12 @@ public class AppIconsTests
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportsView|FullyQualifiedName~NavigateToReports|FullyQualifiedName~AppIconsTests"`
 Expected: FAIL —— `ReportsView` / `ShowReportsCommand` / `AppIcons.Reports` 不存在
 
-- [ ] **Step 3: 加图标**
+- [x] **Step 3: 加图标**
 
 `src/WorkStation.App/Controls/AppIcons.cs` 追加两个几何（Material Design Icons，与既有图标同源同 24×24 网格）：
 
@@ -2874,7 +2874,7 @@ Expected: FAIL —— `ReportsView` / `ShowReportsCommand` / `AppIcons.Reports` 
 > Avalonia 的 `StreamGeometry.Parse` 下不成立 —— 换一个可用的 MDI 路径
 > （或改用 `Icons.Calendar`）再跑测试。**不要**把测试改成「不报错就算过」。
 
-- [ ] **Step 4: 写 `ReportsView.axaml`**
+- [x] **Step 4: 写 `ReportsView.axaml`**
 
 创建 `src/WorkStation.App/Views/ReportsView.axaml`：
 
@@ -3080,7 +3080,7 @@ Expected: FAIL —— `ReportsView` / `ShowReportsCommand` / `AppIcons.Reports` 
 </UserControl>
 ```
 
-- [ ] **Step 5: 写 `ReportsView.axaml.cs`**
+- [x] **Step 5: 写 `ReportsView.axaml.cs`**
 
 创建 `src/WorkStation.App/Views/ReportsView.axaml.cs`：
 
@@ -3149,7 +3149,7 @@ public partial class ReportsView : UserControl
 }
 ```
 
-- [ ] **Step 6: 接外壳**
+- [x] **Step 6: 接外壳**
 
 `src/WorkStation.App/ViewModels/MainWindowViewModel.cs`：
 
@@ -3281,17 +3281,17 @@ public enum AppPage
 
 3. 上面那段注释「数字键与侧边栏菜单顺序一一对应：仪表盘 → 看板 → 任务 → 项目 → 提醒，设置在标题栏不在菜单里，所以排最后。」改成「数字键与侧边栏菜单顺序一一对应：仪表盘 → 看板 → 任务 → 项目 → 提醒 → 报告，设置在标题栏不在菜单里，所以排最后。」
 
-- [ ] **Step 7: 运行测试**
+- [x] **Step 7: 运行测试**
 
 Run: `dotnet test tests/WorkStation.Tests/WorkStation.Tests.csproj --filter "FullyQualifiedName~ReportsView|FullyQualifiedName~NavigateToReports|FullyQualifiedName~AppIconsTests"`
 Expected: PASS
 
-- [ ] **Step 8: 全量测试**
+- [x] **Step 8: 全量测试**
 
 Run: `dotnet test`
 Expected: 全部 PASS
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add src/WorkStation.App/Views/ReportsView.axaml src/WorkStation.App/Views/ReportsView.axaml.cs src/WorkStation.App/Controls/AppIcons.cs src/WorkStation.App/ViewModels/MainWindowViewModel.cs src/WorkStation.App/Views/MainWindow.axaml src/WorkStation.App/Views/MainWindow.axaml.cs tests/WorkStation.Tests/UiSmokeTests.cs tests/WorkStation.Tests/MainWindowViewModelTests.cs tests/WorkStation.Tests/AppIconsTests.cs

@@ -851,7 +851,7 @@ public partial class MainWindow : SukiWindow
                 FocusSearch();
                 e.Handled = true;
                 break;
-            // 数字键与侧边栏菜单顺序一一对应：仪表盘 → 看板 → 任务 → 项目 → 提醒，
+            // 数字键与侧边栏菜单顺序一一对应：仪表盘 → 看板 → 任务 → 项目 → 提醒 → 报告，
             // 设置在标题栏不在菜单里，所以排最后。
             case Key.D1:
             case Key.NumPad1:
@@ -880,6 +880,11 @@ public partial class MainWindow : SukiWindow
                 break;
             case Key.D6:
             case Key.NumPad6:
+                vm.ShowReportsCommand.Execute(null);
+                e.Handled = true;
+                break;
+            case Key.D7:
+            case Key.NumPad7:
                 vm.ShowSettingsCommand.Execute(null);
                 e.Handled = true;
                 break;
@@ -887,8 +892,8 @@ public partial class MainWindow : SukiWindow
     }
 
     /// <summary>
-    /// 数字键与侧边栏顺序一致：仪表盘 → 看板 → 任务 → 项目 → 提醒 → 设置。
-    /// 设置不在菜单里，所以单独排第 6。
+    /// 数字键与侧边栏顺序一致：仪表盘 → 看板 → 任务 → 项目 → 提醒 → 报告 → 设置。
+    /// 设置不在菜单里，所以单独排第 7。
     /// </summary>
     private static AppPage? PageFromDigit(Key key) => key switch
     {
@@ -897,7 +902,8 @@ public partial class MainWindow : SukiWindow
         Key.D3 or Key.NumPad3 => AppPage.Tasks,
         Key.D4 or Key.NumPad4 => AppPage.Projects,
         Key.D5 or Key.NumPad5 => AppPage.Reminders,
-        Key.D6 or Key.NumPad6 => AppPage.Settings,
+        Key.D6 or Key.NumPad6 => AppPage.Reports,
+        Key.D7 or Key.NumPad7 => AppPage.Settings,
         _ => null
     };
 

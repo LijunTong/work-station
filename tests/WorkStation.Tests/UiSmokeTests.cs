@@ -1700,4 +1700,17 @@ public class UiSmokeTests : IDisposable
 
         Assert.Equal("light", _service.SettingsGet<string>("theme").Data);
     }
+
+    [AvaloniaFact]
+    public void ReportsView_LoadsXaml()
+    {
+        var vm = new ReportsViewModel(_service, (_, _) => { });
+        vm.Reload();
+
+        var view = new ReportsView { DataContext = vm };
+        view.Measure(new Size(1000, 700));
+        view.Arrange(new Rect(0, 0, 1000, 700));
+
+        Assert.NotNull(view.Content);
+    }
 }

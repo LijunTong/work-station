@@ -165,6 +165,10 @@ public class MenuInteractionTests : IDisposable
 
         Press(window, Key.D6, RawInputModifiers.Control);
         Dispatcher.UIThread.RunJobs();
+        Assert.IsType<ReportsViewModel>(vm.CurrentPage);
+
+        Press(window, Key.D7, RawInputModifiers.Control);
+        Dispatcher.UIThread.RunJobs();
         Assert.IsType<SettingsViewModel>(vm.CurrentPage);
 
         window.Close();
