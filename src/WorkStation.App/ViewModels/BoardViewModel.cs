@@ -463,7 +463,7 @@ public partial class BoardViewModel : ObservableObject
         IsTaskBoard = !string.Equals(mode, nameof(BoardMode.Projects), StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>外部入口（站会通知）：切到「今日」口径。已经在今日时就只刷新。</summary>
+    /// <summary>切到「今日」口径并刷新。已经在今日时也重新拉一次数据。</summary>
     public void ShowToday()
     {
         TimeScope = BoardTimeScope.Today;

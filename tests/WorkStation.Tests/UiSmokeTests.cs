@@ -103,8 +103,8 @@ public class UiSmokeTests : IDisposable
         var reminders = (Control)view.Resources["RemindersContent"]!;
         var descendants = reminders.GetLogicalDescendants().ToList();
 
-        // 「每日站会提醒」和「关窗驻留托盘」两处都用 Switch（ToggleSwitch），不再用 CheckBox
-        Assert.Equal(2, descendants.OfType<ToggleSwitch>().Count());
+        // 日报 / 周报 / 月报三处提醒 + 「关窗驻留托盘」都用 Switch（ToggleSwitch），不再用 CheckBox
+        Assert.Equal(4, descendants.OfType<ToggleSwitch>().Count());
         Assert.Empty(descendants.OfType<CheckBox>());
     }
 

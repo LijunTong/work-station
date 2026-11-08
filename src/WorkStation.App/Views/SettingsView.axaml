@@ -202,21 +202,81 @@
 
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
         <StackPanel Spacing="2" VerticalAlignment="Center">
-          <TextBlock Text="每日站会提醒" />
-          <TextBlock Text="每天固定时间汇报昨日完成、逾期和今晚到期。" TextWrapping="Wrap" />
+          <TextBlock Text="日报提醒" />
+          <TextBlock Text="每天到点提醒你写当天的日报。" TextWrapping="Wrap" />
         </StackPanel>
         <ToggleSwitch Grid.Column="1"
-                      IsChecked="{Binding DailyReviewEnabled, Mode=TwoWay}"
+                      IsChecked="{Binding ReportDailyEnabled, Mode=TwoWay}"
                       VerticalAlignment="Center" />
       </Grid>
 
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-        <TextBlock Text="站会时间" VerticalAlignment="Center" />
+        <TextBlock Text="日报时间" VerticalAlignment="Center" />
         <ComboBox Grid.Column="1"
                   Width="112"
-                  ItemsSource="{Binding DailyReviewTimeOptions}"
-                  SelectedItem="{Binding DailyReviewTime, Mode=TwoWay}"
-                  IsEnabled="{Binding DailyReviewEnabled}" />
+                  ItemsSource="{Binding ReportTimeOptions}"
+                  SelectedItem="{Binding ReportDailyTime, Mode=TwoWay}"
+                  IsEnabled="{Binding ReportDailyEnabled}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Spacing="2" VerticalAlignment="Center">
+          <TextBlock Text="周报提醒" />
+          <TextBlock Text="每周固定那天到点提醒你写周报。" TextWrapping="Wrap" />
+        </StackPanel>
+        <ToggleSwitch Grid.Column="1"
+                      IsChecked="{Binding ReportWeeklyEnabled, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+      </Grid>
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <TextBlock Text="周报时间" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <ComboBox Width="96"
+                    ItemsSource="{Binding ReportWeekdayOptions}"
+                    SelectedItem="{Binding SelectedReportWeekday, Mode=TwoWay}"
+                    IsEnabled="{Binding ReportWeeklyEnabled}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ReportWeekdayOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <ComboBox Width="112"
+                    ItemsSource="{Binding ReportTimeOptions}"
+                    SelectedItem="{Binding ReportWeeklyTime, Mode=TwoWay}"
+                    IsEnabled="{Binding ReportWeeklyEnabled}" />
+        </StackPanel>
+      </Grid>
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Spacing="2" VerticalAlignment="Center">
+          <TextBlock Text="月报提醒" />
+          <TextBlock Text="每月固定几号到点提醒你写月报。没有该号的月份按最后一天算。" TextWrapping="Wrap" />
+        </StackPanel>
+        <ToggleSwitch Grid.Column="1"
+                      IsChecked="{Binding ReportMonthlyEnabled, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+      </Grid>
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <TextBlock Text="月报时间" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <ComboBox Width="96"
+                    ItemsSource="{Binding ReportMonthDayOptions}"
+                    SelectedItem="{Binding SelectedReportMonthDay, Mode=TwoWay}"
+                    IsEnabled="{Binding ReportMonthlyEnabled}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ReportMonthDayOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <ComboBox Width="112"
+                    ItemsSource="{Binding ReportTimeOptions}"
+                    SelectedItem="{Binding ReportMonthlyTime, Mode=TwoWay}"
+                    IsEnabled="{Binding ReportMonthlyEnabled}" />
+        </StackPanel>
       </Grid>
 
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">

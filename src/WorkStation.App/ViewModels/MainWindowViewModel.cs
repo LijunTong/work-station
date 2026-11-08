@@ -547,7 +547,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         _reminderPump = new ReminderPump(_service) { Sink = _notificationSink };
         _reminderPump.OpenReminder = OpenReminderFromNotification;
-        _reminderPump.OpenDailyReview = OpenTodayBoard;
+        _reminderPump.OpenReport = OpenReportFromNotification;
 
         // 启动先修一次漂移：应用没开的时候改过的截止时间，在这里补上或清掉
         _service.RemindersSync();
@@ -572,7 +572,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     /// <summary>跑一次调度节拍。测试直接调用，不必等定时器。</summary>
     public ReminderPumpResult PumpReminders() =>
-        _reminderPump?.Tick() ?? new ReminderPumpResult([], false);
+        _reminderPump?.Tick() ?? new ReminderPumpResult([], []);
 
     private void PumpOnce()
     {
@@ -589,10 +589,11 @@ public partial class MainWindowViewModel : ObservableObject
         ShowRemindersCommand.Execute(null);
     }
 
-    private void OpenTodayBoard()
+    /// <summary>报告提醒点了通知：进报告页并切到对应的报告类型。</summary>
+    private void OpenReportFromNotification(ReportKind kind)
     {
-        Navigate(AppPage.Board);
-        Board?.ShowToday();
+        Navigate(AppPage.Reports);
+        Reports?.SelectKindCommand.Execute(kind);
     }
 
     /// <summary>按 Id 打开任务编辑抽屉。通知点击时只知道 task_id。</summary>

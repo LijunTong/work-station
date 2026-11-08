@@ -4,7 +4,6 @@ using Microsoft.Data.Sqlite;
 using WorkStation.Core.Data;
 using WorkStation.Core.Data.Repositories;
 using WorkStation.Core.Models;
-using WorkStation.Core.Reminders;
 using WorkStation.Core.Reports;
 
 namespace WorkStation.Core.Services;
@@ -331,40 +330,6 @@ public sealed class WorkStationService
             return changed;
         });
 
-    public Result<DailyReviewSettings> DailyReviewGet() =>
-        Guard("读取站会提醒设置", () => _settings.Get("daily_review")?.Deserialize<DailyReviewSettings>() ?? new DailyReviewSettings());
-
-    public Result<bool> DailyReviewSet(DailyReviewSettings settings) =>
-        Guard("保存站会提醒设置", () =>
-        {
-            if (!DailyReviewPlanner.IsValidTime(settings.Time))
-            {
-                throw new ArgumentException("站会提醒时间应形如 09:00");
-            }
-
-            _settings.Set("daily_review", settings);
-            return true;
-        });
-
-    public Result<string?> DailyReviewLastFired() =>
-        Guard("读取站会提醒记录", () =>
-        {
-            var raw = _settings.GetString("daily_review_last", string.Empty);
-            return string.IsNullOrEmpty(raw) ? null : raw;
-        });
-
-    public Result<bool> DailyReviewMarkFired(string date) =>
-        Guard("记录站会提醒", () =>
-        {
-            _settings.Set("daily_review_last", date);
-            return true;
-        });
-
-    /// <summary>站会提醒的三个数字，按调度时刻实时算。</summary>
-    public Result<DailyReviewCounts> DailyReviewCounts(string nowLocalDateTime) =>
-        Guard("统计站会提醒数据", () =>
-            DailyReviewPlanner.ComputeCounts(_tasks.List(), nowLocalDateTime));
-
     public Result<bool> CloseToTrayGet() =>
         Guard("读取窗口关闭行为", () => _settings.GetBoolean("close_to_tray", true));
 
@@ -402,7 +367,7 @@ public sealed class WorkStationService
 
             var defaults = new ReportReminderSettings();
 
-            // 老键的结构与 DailyReviewSettings 一致，直接复用同一个模型：
+            // 老键的结构与 ReportReminderEntry 一致，直接复用同一个模型：
             // 字段缺失时模型自带的默认值（启用、09:00）顶上，
             // 不会因为「少一个字段」就把用户的日报关掉。
             var legacy = ReadLegacyDailyReview();
@@ -470,11 +435,11 @@ public sealed class WorkStationService
     }
 
     /// <summary>
-    /// 读旧键 daily_review。老键的结构与 <see cref="DailyReviewSettings"/> 一致，
-    /// 属性名不区分大小写（enabled / time 与 Enabled / Time 都认）。
+    /// 读旧键 daily_review。老键的结构与 <see cref="ReportReminderEntry"/> 一致
+    /// （enabled / time），属性名不区分大小写（enabled / time 与 Enabled / Time 都认）。
     /// 读不出来当它不存在。
     /// </summary>
-    private DailyReviewSettings? ReadLegacyDailyReview()
+    private ReportReminderEntry? ReadLegacyDailyReview()
     {
         if (_settings.Get("daily_review") is not { } element
             || element.ValueKind != JsonValueKind.Object)
@@ -484,7 +449,20 @@ public sealed class WorkStationService
 
         try
         {
-            return element.Deserialize<DailyReviewSettings>(LegacyJson);
+            var entry = element.Deserialize<ReportReminderEntry>(LegacyJson);
+            if (entry is null) return null;
+
+            // ReportReminderEntry.Enabled 默认 false，但旧站会键缺这个字段时语义是「默认开启」。
+            // 直接吃反序列化的默认值会把老用户的日报悄悄关掉（回归过一次），所以缺字段就补 true。
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, "Enabled", StringComparison.OrdinalIgnoreCase))
+                {
+                    return entry;
+                }
+            }
+
+            return entry with { Enabled = true };
         }
         catch (JsonException)
         {

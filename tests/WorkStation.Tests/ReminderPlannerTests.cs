@@ -1,10 +1,9 @@
 using WorkStation.Core.Models;
 using WorkStation.Core.Reminders;
-using WorkStation.Core.Time;
 
 namespace WorkStation.Tests;
 
-/// <summary>提醒的纯计算：提前量、重复规则的下一次、站会提醒的判定与文案。</summary>
+/// <summary>提醒的纯计算：提前量与重复规则的下一次。</summary>
 public class ReminderPlannerTests
 {
     [Theory]
@@ -78,82 +77,5 @@ public class ReminderPlannerTests
         Assert.True(ReminderPlanner.IsDue("2026-11-05T09:00", "2026-11-05T09:00"));
         Assert.True(ReminderPlanner.IsDue("2026-11-05T08:59", "2026-11-05T09:00"));
         Assert.False(ReminderPlanner.IsDue("2026-11-05T09:01", "2026-11-05T09:00"));
-    }
-
-    [Theory]
-    [InlineData("09:00", true)]
-    [InlineData("23:59", true)]
-    [InlineData("9:00", false)]
-    [InlineData("24:00", false)]
-    [InlineData("", false)]
-    public void IsValidTime_Accepts24HourClock(string value, bool expected)
-    {
-        Assert.Equal(expected, DailyReviewPlanner.IsValidTime(value));
-    }
-
-    [Fact]
-    public void ShouldFire_RespectsEnableTimeAndAlreadyFiredToday()
-    {
-        var enabled = new DailyReviewSettings { Enabled = true, Time = "09:00" };
-
-        Assert.False(DailyReviewPlanner.ShouldFire(enabled, "2026-11-05T08:59", null));
-        Assert.True(DailyReviewPlanner.ShouldFire(enabled, "2026-11-05T09:00", null));
-        Assert.True(DailyReviewPlanner.ShouldFire(enabled, "2026-11-05T21:00", "2026-11-04"));
-
-        // 今天已经发过：哪怕时间已过也不再发
-        Assert.False(DailyReviewPlanner.ShouldFire(enabled, "2026-11-05T21:00", "2026-11-05"));
-        Assert.False(DailyReviewPlanner.ShouldFire(enabled with { Enabled = false }, "2026-11-05T21:00", null));
-
-        // 设置里写了非法时间：退回默认的 09:00，而不是整条提醒失灵
-        Assert.True(DailyReviewPlanner.ShouldFire(new DailyReviewSettings { Time = "25:00" }, "2026-11-05T10:00", null));
-    }
-
-    [Fact]
-    public void ComputeCounts_UsesTaskGroupingSemantics()
-    {
-        var now = LocalTime.ToLocalDateTime(DateTime.Today.AddHours(12));
-
-        // 必须从「本地昨天」换算成 UTC，不能拿 UtcNow.Date 直接减一天：
-        // 本地处于 UTC+8 时，本地 00:00–08:00 这段时间的 UtcNow 还是前一天，
-        // 算出来的「昨天」会比真正的本地昨天再早一天，测试于是只在白天通过。
-        var yesterdayInstant = DateTime.Today.AddDays(-1).AddHours(12)
-            .ToUniversalTime()
-            .ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
-
-        var tasks = new List<TaskItem>
-        {
-            new()
-            {
-                Id = "done-yesterday", Title = "昨天完成的", Status = TaskStatus.Done,
-                CreatedAt = "", UpdatedAt = "", CompletedAt = yesterdayInstant
-            },
-            new()
-            {
-                Id = "overdue", Title = "逾期的", Status = TaskStatus.Todo,
-                CreatedAt = "", UpdatedAt = "", DueAt = LocalTime.ToLocalDateTime(DateTime.Today.AddHours(9))
-            },
-            new()
-            {
-                Id = "today", Title = "今晚到期", Status = TaskStatus.Doing,
-                CreatedAt = "", UpdatedAt = "", DueAt = LocalTime.ToLocalDateTime(DateTime.Today.AddHours(18))
-            },
-            new()
-            {
-                Id = "later", Title = "下周的", Status = TaskStatus.Todo,
-                CreatedAt = "", UpdatedAt = "", DueAt = LocalTime.ToLocalDateTime(DateTime.Today.AddDays(5))
-            },
-            new()
-            {
-                Id = "canceled", Title = "取消的", Status = TaskStatus.Canceled,
-                CreatedAt = "", UpdatedAt = "", DueAt = LocalTime.ToLocalDateTime(DateTime.Today.AddHours(8))
-            }
-        };
-
-        var counts = DailyReviewPlanner.ComputeCounts(tasks, now);
-
-        Assert.Equal(1, counts.YesterdayDone);
-        Assert.Equal(1, counts.Overdue);
-        Assert.Equal(1, counts.DueToday);
-        Assert.Contains("昨日完成 1 项", counts.Message);
     }
 }

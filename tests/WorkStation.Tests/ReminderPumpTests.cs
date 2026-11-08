@@ -21,8 +21,13 @@ public class ReminderPumpTests : IDisposable
         _connection = TestDb.OpenMigrated();
         _service = new WorkStationService(_connection, ":memory:");
 
-        // 默认的站会提醒会让每个用例都多出一条通知，这里先关掉，需要它的用例自己打开
-        _service.DailyReviewSet(new DailyReviewSettings { Enabled = false, Time = "09:00" });
+        // 三类报告提醒默认都开着，会让每个用例都多出一条通知，这里先全部关掉，需要它的用例自己打开
+        _service.ReportRemindersSet(new ReportReminderSettings
+        {
+            Daily = new ReportReminderEntry { Enabled = false, Time = "09:00" },
+            Weekly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfWeek = 5 },
+            Monthly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfMonth = 31 }
+        });
     }
 
     public void Dispose() => _connection.Dispose();
@@ -150,47 +155,84 @@ public class ReminderPumpTests : IDisposable
     }
 
     [Fact]
-    public void Tick_DailyReviewFiresOncePerDay()
+    public void Tick_ReportReminderFiresOncePerDay()
     {
-        _service.DailyReviewSet(new DailyReviewSettings { Enabled = true, Time = "09:00" });
+        _service.ReportRemindersSet(new ReportReminderSettings
+        {
+            Daily = new ReportReminderEntry { Enabled = true, Time = "09:00" },
+            Weekly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfWeek = 5 },
+            Monthly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfMonth = 31 }
+        });
 
         var pump = PumpAt(At(5, 9, 5));
         var first = pump.Tick();
 
-        Assert.True(first.DailyReviewFired);
-        Assert.Contains(_sink.Shown, n => n.Title == "今日站会");
+        Assert.Contains(ReportKind.Daily, first.ReportRemindersFired);
+        Assert.Contains(_sink.Shown, n => n.Title == "该写今天的日报了");
 
-        // 同一天再跑：已经记过今天，不再发
-        Assert.False(pump.Tick().DailyReviewFired);
+        // 同一周期（已经是今天）不再发
+        Assert.DoesNotContain(ReportKind.Daily, pump.Tick().ReportRemindersFired);
 
         // 第二天到点：照常发
-        Assert.True(PumpAt(At(6, 9, 1)).Tick().DailyReviewFired);
+        Assert.Contains(ReportKind.Daily, PumpAt(At(6, 9, 1)).Tick().ReportRemindersFired);
     }
 
     [Fact]
-    public void Tick_DailyReviewBeforeTimeOrDisabled_DoesNotFire()
+    public void Tick_ReportReminderBeforeTimeOrDisabled_DoesNotFire()
     {
-        _service.DailyReviewSet(new DailyReviewSettings { Enabled = true, Time = "09:00" });
-        Assert.False(PumpAt(At(5, 8, 59)).Tick().DailyReviewFired);
+        _service.ReportRemindersSet(new ReportReminderSettings
+        {
+            Daily = new ReportReminderEntry { Enabled = true, Time = "09:00" },
+            Weekly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfWeek = 5 },
+            Monthly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfMonth = 31 }
+        });
 
-        _service.DailyReviewSet(new DailyReviewSettings { Enabled = false, Time = "09:00" });
-        Assert.False(PumpAt(At(5, 10)).Tick().DailyReviewFired);
+        Assert.DoesNotContain(ReportKind.Daily, PumpAt(At(5, 8, 59)).Tick().ReportRemindersFired);
+
+        _service.ReportRemindersSet(new ReportReminderSettings
+        {
+            Daily = new ReportReminderEntry { Enabled = false, Time = "09:00" },
+            Weekly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfWeek = 5 },
+            Monthly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfMonth = 31 }
+        });
+
+        Assert.DoesNotContain(ReportKind.Daily, PumpAt(At(5, 10)).Tick().ReportRemindersFired);
     }
 
     [Fact]
-    public void Tick_DailyReviewClickNavigatesToTodayBoard()
+    public void Tick_ReportReminderClickOpensThatReport()
     {
-        _service.DailyReviewSet(new DailyReviewSettings { Enabled = true, Time = "09:00" });
-        var opened = false;
+        _service.ReportRemindersSet(new ReportReminderSettings
+        {
+            Daily = new ReportReminderEntry { Enabled = true, Time = "09:00" },
+            Weekly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfWeek = 5 },
+            Monthly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfMonth = 31 }
+        });
 
+        ReportKind? opened = null;
         var pump = PumpAt(At(5, 9, 5));
-        pump.OpenDailyReview = () => opened = true;
+        pump.OpenReport = kind => opened = kind;
         pump.Tick();
 
-        var review = _sink.Shown.First(n => n.Title == "今日站会");
-        review.Click();
+        _sink.Shown.First(n => n.Title == "该写今天的日报了").Click();
 
-        Assert.True(opened);
+        Assert.Equal(ReportKind.Daily, opened);
+    }
+
+    [Fact]
+    public void Tick_WeeklyReportReminderFiresOnConfiguredWeekday()
+    {
+        // 2026-11-06 是周五
+        _service.ReportRemindersSet(new ReportReminderSettings
+        {
+            Daily = new ReportReminderEntry { Enabled = false, Time = "09:00" },
+            Weekly = new ReportReminderEntry { Enabled = true, Time = "17:00", DayOfWeek = 5 },
+            Monthly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfMonth = 31 }
+        });
+
+        Assert.DoesNotContain(ReportKind.Weekly, PumpAt(At(5, 17, 0)).Tick().ReportRemindersFired);
+        Assert.Contains(ReportKind.Weekly, PumpAt(At(6, 17, 0)).Tick().ReportRemindersFired);
+        Assert.Contains(_sink.Shown, n => n.Title == "该写本周周报了");
     }
 
     private sealed class FakeSink : INotificationSink

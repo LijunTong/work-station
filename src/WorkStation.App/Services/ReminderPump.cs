@@ -1,6 +1,7 @@
 using WorkStation.Core;
 using WorkStation.Core.Models;
 using WorkStation.Core.Reminders;
+using WorkStation.Core.Reports;
 using WorkStation.Core.Services;
 using WorkStation.Core.Time;
 
@@ -30,8 +31,8 @@ public sealed class ReminderPump
     /// <summary>点提醒通知：定位到对应任务 / 提醒页。</summary>
     public Action<ReminderItem>? OpenReminder { get; set; }
 
-    /// <summary>点站会通知：看板 + 今日筛选。</summary>
-    public Action? OpenDailyReview { get; set; }
+    /// <summary>点报告提醒：进报告页的对应类型。</summary>
+    public Action<ReportKind>? OpenReport { get; set; }
 
     public ReminderPumpResult Tick()
     {
@@ -39,9 +40,9 @@ public sealed class ReminderPump
         var nowLocal = LocalTime.ToLocalDateTime(now);
 
         var fired = FireDueReminders(nowLocal);
-        var reviewFired = FireDailyReview(nowLocal);
+        var reportFired = FireReportReminders(now);
 
-        return new ReminderPumpResult(fired, reviewFired);
+        return new ReminderPumpResult(fired, reportFired);
     }
 
     private IReadOnlyList<ReminderItem> FireDueReminders(string nowLocal)
@@ -86,31 +87,60 @@ public sealed class ReminderPump
         return fired;
     }
 
-    private bool FireDailyReview(string nowLocal)
+    /// <summary>
+    /// 三类报告提醒：日报 / 周报 / 月报。
+    ///
+    /// **先记去重键、再发通知** —— 跟任务提醒同一个道理：
+    /// 通知发出瞬间崩溃了，下次不该把同一个周期再报一遍。
+    /// </summary>
+    private IReadOnlyList<ReportKind> FireReportReminders(DateTime now)
     {
-        var settings = _service.DailyReviewGet();
-        if (!settings.Ok || settings.Data is not { } config) return false;
+        var fired = new List<ReportKind>();
 
-        var lastFired = _service.DailyReviewLastFired();
-        if (!DailyReviewPlanner.ShouldFire(config, nowLocal, lastFired.Data)) return false;
+        var settings = _service.ReportRemindersGet();
+        if (!settings.Ok || settings.Data is not { } config) return fired;
 
-        // 先记「今天发过」：站会没有落表记录，这条设置就是它的去重依据
-        _service.DailyReviewMarkFired(nowLocal[..10]);
-
-        var counts = _service.DailyReviewCounts(nowLocal);
-        var message = counts is { Ok: true, Data: { } data } ? data.Message : "开始今天的站会吧";
-
-        try
+        foreach (var kind in new[] { ReportKind.Daily, ReportKind.Weekly, ReportKind.Monthly })
         {
-            Sink?.Show("今日站会", message, () => OpenDailyReview?.Invoke());
-        }
-        catch (Exception)
-        {
-            // 站会提醒没有历史记录，发送失败不记状态，明天照常
+            var entry = kind switch
+            {
+                ReportKind.Daily => config.Daily,
+                ReportKind.Weekly => config.Weekly,
+                _ => config.Monthly
+            };
+
+            var lastFired = _service.ReportReminderLastFired(kind);
+            if (!ReportReminderPlanner.ShouldFire(kind, entry, now, lastFired.Data)) continue;
+
+            var key = ReportReminderPlanner.PeriodKey(kind, now);
+            _service.ReportReminderMarkFired(kind, key);
+
+            try
+            {
+                var stats = _service.ReportsStats(kind);
+                var message = stats is { Ok: true, Data: { } data }
+                    ? $"完成 {data.Completed} 项 · 逾期 {data.Overdue} 项"
+                    : "该写报告了";
+
+                Sink?.Show(TitleOf(kind), message, () => OpenReport?.Invoke(kind));
+                fired.Add(kind);
+            }
+            catch (Exception)
+            {
+                // 去重键按「先落状态」的约定保留：通知没发出去也不在这一周期重弹。
+                // 报告提醒没有历史记录，所以不像任务提醒那样还能落一条 Failed 给用户看。
+            }
         }
 
-        return true;
+        return fired;
     }
+
+    private static string TitleOf(ReportKind kind) => kind switch
+    {
+        ReportKind.Daily => "该写今天的日报了",
+        ReportKind.Weekly => "该写本周周报了",
+        _ => "该写本月月报了"
+    };
 
     private static string TitleOf(ReminderItem item) =>
         item.Kind == ReminderKind.TaskDue ? "任务提醒" : "提醒";
@@ -127,8 +157,10 @@ public sealed class ReminderPump
     }
 }
 
-/// <summary>一次节拍的结果：弹了哪些提醒、站会是否触发。测试与徽标刷新都靠它。</summary>
-public sealed record ReminderPumpResult(IReadOnlyList<ReminderItem> Fired, bool DailyReviewFired)
+/// <summary>一次节拍的结果：弹了哪些提醒、哪些报告提醒触发了。测试与徽标刷新都靠它。</summary>
+public sealed record ReminderPumpResult(
+    IReadOnlyList<ReminderItem> Fired,
+    IReadOnlyList<ReportKind> ReportRemindersFired)
 {
-    public bool Any => Fired.Count > 0 || DailyReviewFired;
+    public bool Any => Fired.Count > 0 || ReportRemindersFired.Count > 0;
 }

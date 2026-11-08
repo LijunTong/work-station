@@ -5,7 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using SukiUI.Enums;
 using WorkStation.Core;
 using WorkStation.Core.Models;
-using WorkStation.Core.Reminders;
+using WorkStation.Core.Reports;
 using WorkStation.Core.Services;
 
 namespace WorkStation.App.ViewModels;
@@ -49,6 +49,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly Action<string>? _applyFont;
     private readonly Action<string, bool> _toast;
     private bool _initialized;
+    private bool _applyingReportReminders;
 
     public SettingsViewModel(
         WorkStationService service,
@@ -76,16 +77,13 @@ public partial class SettingsViewModel : ObservableObject
 
         _selectedFont = NormalizeFont(service.SettingsGet<string>(FontKey).Data);
 
-        var review = service.DailyReviewGet();
-        _dailyReviewEnabled = review is { Ok: true, Data: { } config } && config.Enabled;
-        _dailyReviewTime = review is { Ok: true, Data: { } conf } ? conf.Time : DailyReviewPlanner.DefaultTime;
+        BuildReportOptions();
+        ApplyReportReminders(service.ReportRemindersGet());
 
         var closeToTray = service.CloseToTrayGet();
         _closeToTray = closeToTray is not { Ok: true } || closeToTray.Data;
 
         _dataDirectory = service.Info().UserDataPath;
-
-        BuildTimeOptions(_dailyReviewTime);
 
         foreach (var option in ColorOptions) option.IsSelected = option.Name == _themeColorName;
     }
@@ -259,44 +257,59 @@ public partial class SettingsViewModel : ObservableObject
         _toast("数据目录已更改，重启应用后生效", false);
     }
 
-    // ---------- 提醒 ----------
+    // ---------- 报告提醒 ----------
 
     [ObservableProperty]
-    private bool _dailyReviewEnabled;
+    private bool _reportDailyEnabled = true;
 
     [ObservableProperty]
-    private string _dailyReviewTime = DailyReviewPlanner.DefaultTime;
+    private string _reportDailyTime = "09:00";
+
+    [ObservableProperty]
+    private bool _reportWeeklyEnabled = true;
+
+    [ObservableProperty]
+    private string _reportWeeklyTime = "17:00";
+
+    [ObservableProperty]
+    private bool _reportMonthlyEnabled = true;
+
+    [ObservableProperty]
+    private string _reportMonthlyTime = "17:00";
 
     [ObservableProperty]
     private bool _closeToTray;
 
-    /// <summary>整点与半点：站会时间几乎都落在这些点上，避免手输 9:00 / 09:0 这类格式差异。</summary>
-    public ObservableCollection<string> DailyReviewTimeOptions { get; } = [];
+    /// <summary>提醒时间：整点与半点最常用，避免手输 9:00 / 09:0 这类格式差异。</summary>
+    public ObservableCollection<string> ReportTimeOptions { get; } = [];
 
-    private void BuildTimeOptions(string current)
-    {
-        DailyReviewTimeOptions.Clear();
-        for (var hour = 6; hour <= 22; hour++)
-        {
-            DailyReviewTimeOptions.Add($"{hour:00}:00");
-            DailyReviewTimeOptions.Add($"{hour:00}:30");
-        }
+    public ObservableCollection<ReportWeekdayOption> ReportWeekdayOptions { get; } = [];
 
-        // 历史值不在预设里（比如 09:15）：补进去，否则下拉会显示空白
-        if (!DailyReviewTimeOptions.Contains(current)) DailyReviewTimeOptions.Add(current);
-    }
+    public ObservableCollection<ReportMonthDayOption> ReportMonthDayOptions { get; } = [];
 
-    partial void OnDailyReviewEnabledChanged(bool value)
-    {
-        if (!_initialized) return;
-        SaveDailyReview();
-    }
+    /// <summary>周报选中的星期。用选项对象而不是整数：下拉框按引用记选中项。</summary>
+    [ObservableProperty]
+    private ReportWeekdayOption? _selectedReportWeekday;
 
-    partial void OnDailyReviewTimeChanged(string value)
-    {
-        if (!_initialized) return;
-        SaveDailyReview();
-    }
+    /// <summary>月报选中的几号。</summary>
+    [ObservableProperty]
+    private ReportMonthDayOption? _selectedReportMonthDay;
+
+    partial void OnReportDailyEnabledChanged(bool value) => SaveReportReminders();
+
+    partial void OnReportDailyTimeChanged(string value) => SaveReportReminders();
+
+    partial void OnReportWeeklyEnabledChanged(bool value) => SaveReportReminders();
+
+    partial void OnReportWeeklyTimeChanged(string value) => SaveReportReminders();
+
+    partial void OnReportMonthlyEnabledChanged(bool value) => SaveReportReminders();
+
+    partial void OnReportMonthlyTimeChanged(string value) => SaveReportReminders();
+
+    partial void OnSelectedReportWeekdayChanged(ReportWeekdayOption? value) => SaveReportReminders();
+
+    partial void OnSelectedReportMonthDayChanged(ReportMonthDayOption? value) => SaveReportReminders();
 
     partial void OnCloseToTrayChanged(bool value)
     {
@@ -306,17 +319,91 @@ public partial class SettingsViewModel : ObservableObject
         if (!result.Ok) _toast(result.Error?.Message ?? "窗口行为保存失败", true);
     }
 
-    private void SaveDailyReview()
+    /// <summary>提醒的可选项：时间、星期、几号。</summary>
+    private void BuildReportOptions()
     {
-        var result = _service.DailyReviewSet(new DailyReviewSettings
+        ReportTimeOptions.Clear();
+        for (var hour = 6; hour <= 22; hour++)
         {
-            Enabled = DailyReviewEnabled,
-            Time = DailyReviewTime
+            ReportTimeOptions.Add($"{hour:00}:00");
+            ReportTimeOptions.Add($"{hour:00}:30");
+        }
+
+        ReportWeekdayOptions.Clear();
+        var weekdayLabels = new[] { "周一", "周二", "周三", "周四", "周五", "周六", "周日" };
+        for (var i = 0; i < weekdayLabels.Length; i++)
+        {
+            ReportWeekdayOptions.Add(new ReportWeekdayOption(i + 1, weekdayLabels[i]));
+        }
+
+        ReportMonthDayOptions.Clear();
+        for (var day = 1; day <= 31; day++)
+        {
+            ReportMonthDayOptions.Add(new ReportMonthDayOption(day, $"{day} 号"));
+        }
+    }
+
+    /// <summary>库里存的时间可能是 07:45 这类非整点半点，补进下拉否则选中项显示为空白。</summary>
+    private void EnsureReportTimeOption(string? time)
+    {
+        if (string.IsNullOrWhiteSpace(time) || ReportTimeOptions.Contains(time)) return;
+        ReportTimeOptions.Add(time);
+    }
+
+    /// <summary>把库里存的设置摊到界面属性上。</summary>
+    private void ApplyReportReminders(Result<ReportReminderSettings> result)
+    {
+        if (result is not { Ok: true, Data: { } config }) return;
+
+        // 读回来不是「用户改了设置」：逐个赋值会触发八次保存，甚至把半途的混合值写回库。
+        _applyingReportReminders = true;
+        try
+        {
+            EnsureReportTimeOption(config.Daily.Time);
+            EnsureReportTimeOption(config.Weekly.Time);
+            EnsureReportTimeOption(config.Monthly.Time);
+
+            ReportDailyEnabled = config.Daily.Enabled;
+            ReportDailyTime = config.Daily.Time;
+            ReportWeeklyEnabled = config.Weekly.Enabled;
+            ReportWeeklyTime = config.Weekly.Time;
+            ReportMonthlyEnabled = config.Monthly.Enabled;
+            ReportMonthlyTime = config.Monthly.Time;
+
+            SelectedReportWeekday = ReportWeekdayOptions.FirstOrDefault(o => o.Value == config.Weekly.DayOfWeek);
+            SelectedReportMonthDay = ReportMonthDayOptions.FirstOrDefault(o => o.Value == config.Monthly.DayOfMonth);
+        }
+        finally
+        {
+            _applyingReportReminders = false;
+        }
+    }
+
+    /// <summary>保存三类报告提醒。存失败只提示，不打断设置页其它操作。</summary>
+    private void SaveReportReminders()
+    {
+        if (!_initialized || _applyingReportReminders) return;
+
+        var result = _service.ReportRemindersSet(new ReportReminderSettings
+        {
+            Daily = new ReportReminderEntry { Enabled = ReportDailyEnabled, Time = ReportDailyTime },
+            Weekly = new ReportReminderEntry
+            {
+                Enabled = ReportWeeklyEnabled,
+                Time = ReportWeeklyTime,
+                DayOfWeek = SelectedReportWeekday?.Value ?? 5
+            },
+            Monthly = new ReportReminderEntry
+            {
+                Enabled = ReportMonthlyEnabled,
+                Time = ReportMonthlyTime,
+                DayOfMonth = SelectedReportMonthDay?.Value ?? 31
+            }
         });
 
         if (!result.Ok)
         {
-            _toast(result.Error?.Message ?? "站会提醒保存失败", true);
+            _toast(result.Error?.Message ?? "报告提醒保存失败", true);
         }
     }
 
@@ -419,13 +506,7 @@ public partial class SettingsViewModel : ObservableObject
 
         SelectedFont = NormalizeFont(_service.SettingsGet<string>(FontKey).Data);
 
-        var review = _service.DailyReviewGet();
-        if (review is { Ok: true, Data: { } config })
-        {
-            DailyReviewEnabled = config.Enabled;
-            if (!DailyReviewTimeOptions.Contains(config.Time)) BuildTimeOptions(config.Time);
-            DailyReviewTime = config.Time;
-        }
+        ApplyReportReminders(_service.ReportRemindersGet());
 
         var closeToTray = _service.CloseToTrayGet();
         if (closeToTray is { Ok: true }) CloseToTray = closeToTray.Data;

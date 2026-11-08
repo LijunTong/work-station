@@ -320,24 +320,6 @@ public class WorkStationServiceTests : IDisposable
     }
 
     [Fact]
-    public void DailyReviewSet_InvalidTime_ReturnsValidationFailed()
-    {
-        var result = _service.DailyReviewSet(new DailyReviewSettings { Enabled = true, Time = "25:00" });
-
-        Assert.False(result.Ok);
-        Assert.Equal(ErrorCodes.ValidationFailed, result.Error?.Code);
-    }
-
-    [Fact]
-    public void DailyReviewSettings_DefaultToEnabledNineOClock()
-    {
-        var settings = _service.DailyReviewGet().Data!;
-
-        Assert.True(settings.Enabled);
-        Assert.Equal("09:00", settings.Time);
-    }
-
-    [Fact]
     public void CloseToTray_DefaultsTrue_AndPersists()
     {
         Assert.True(_service.CloseToTrayGet().Data);

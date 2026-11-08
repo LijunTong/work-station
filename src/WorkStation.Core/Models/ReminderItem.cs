@@ -72,12 +72,3 @@ public sealed record CreateReminderInput
 
     public RepeatRule RepeatRule { get; init; } = RepeatRule.None;
 }
-
-/// <summary>每日站会提醒的设置（存在 settings.daily_review）。</summary>
-public sealed record DailyReviewSettings
-{
-    public bool Enabled { get; init; } = true;
-
-    /// <summary>HH:mm，24 小时制。</summary>
-    public string Time { get; init; } = "09:00";
-}

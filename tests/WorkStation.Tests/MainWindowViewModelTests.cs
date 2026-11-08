@@ -442,8 +442,13 @@ public class MainWindowViewModelTests : IDisposable
     [AvaloniaFact]
     public void StartReminderPump_FiresOverdueReminder_AndClickOpensTask()
     {
-        // 站会提醒默认开启，会让本用例多出一条通知：先关掉，只验任务提醒
-        _service.DailyReviewSet(new DailyReviewSettings { Enabled = false, Time = "09:00" });
+        // 三类报告提醒默认都开着，会让本用例多出一条通知：先全部关掉，只验任务提醒
+        _service.ReportRemindersSet(new ReportReminderSettings
+        {
+            Daily = new ReportReminderEntry { Enabled = false, Time = "09:00" },
+            Weekly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfWeek = 5 },
+            Monthly = new ReportReminderEntry { Enabled = false, Time = "17:00", DayOfMonth = 31 }
+        });
 
         // 昨天 09:00 截止、提前 1 小时：提醒时刻早就过了
         var task = _service.TasksCreate(new CreateTaskInput
@@ -495,23 +500,23 @@ public class MainWindowViewModelTests : IDisposable
         var vm = new MainWindowViewModel(_service);
         var settings = vm.Settings!;
 
-        Assert.True(settings.DailyReviewEnabled);
-        Assert.Equal("09:00", settings.DailyReviewTime);
+        Assert.True(settings.ReportDailyEnabled);
+        Assert.Equal("09:00", settings.ReportDailyTime);
         Assert.True(settings.CloseToTray);
 
-        settings.DailyReviewEnabled = false;
-        settings.DailyReviewTime = "10:30";
+        settings.ReportDailyEnabled = false;
+        settings.ReportDailyTime = "10:30";
         settings.CloseToTray = false;
 
-        var saved = _service.DailyReviewGet().Data!;
-        Assert.False(saved.Enabled);
-        Assert.Equal("10:30", saved.Time);
+        var saved = _service.ReportRemindersGet().Data!;
+        Assert.False(saved.Daily.Enabled);
+        Assert.Equal("10:30", saved.Daily.Time);
         Assert.False(_service.CloseToTrayGet().Data);
 
         // 重新进入设置页：值从库里读回来
         settings.Reload();
-        Assert.False(settings.DailyReviewEnabled);
-        Assert.Equal("10:30", settings.DailyReviewTime);
+        Assert.False(settings.ReportDailyEnabled);
+        Assert.Equal("10:30", settings.ReportDailyTime);
         Assert.False(settings.CloseToTray);
     }
 
