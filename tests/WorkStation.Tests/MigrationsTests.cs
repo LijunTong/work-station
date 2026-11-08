@@ -169,7 +169,13 @@ public class MigrationsTests
         Assert.Contains("UNIQUE", error.Message);
     }
 
-    /// <summary>不同类型的同一周期互不冲突：日报与周报可以落在同一天。</summary>
+    /// <summary>
+    /// 不同类型的同一周期互不冲突：日报、周报、月报可以落在同一天。
+    ///
+    /// period_start 三行故意相同 —— 唯一索引建在 (kind, period_start) 上，
+    /// 要验证的是「索引按 kind 分组」，而不是靠日期错开蒙混过关。
+    /// 三种 kind 都要能写进库：新 CHECK 约束漏掉任何一个，这里就会红。
+    /// </summary>
     [Fact]
     public void RunMigrations_AllowsSamePeriodAcrossDifferentKinds()
     {
@@ -183,11 +189,21 @@ public class MigrationsTests
             INSERT INTO reports (id, kind, period_start, period_end, created_at, updated_at)
             VALUES ('r-2', 'weekly', '2026-11-02', '2026-11-08', '2026-11-02T00:00:00.000Z', '2026-11-02T00:00:00.000Z')
             """);
+        TestDb.Execute(connection, """
+            INSERT INTO reports (id, kind, period_start, period_end, created_at, updated_at)
+            VALUES ('r-3', 'monthly', '2026-11-02', '2026-11-30', '2026-11-02T00:00:00.000Z', '2026-11-02T00:00:00.000Z')
+            """);
 
-        Assert.Equal(2L, TestDb.Scalar(connection, "SELECT COUNT(*) FROM reports"));
+        Assert.Equal(3L, TestDb.Scalar(connection, "SELECT COUNT(*) FROM reports"));
+        Assert.Equal("monthly", TestDb.Scalar(connection, "SELECT kind FROM reports WHERE id = 'r-3'"));
     }
 
-    /// <summary>老库升上来不能丢数据：v1/v2 建出来的报告行迁移后还在。</summary>
+    /// <summary>
+    /// 老库升上来不能丢数据：v1/v2 建出来的报告行迁移后还在。
+    ///
+    /// 拷贝走的是新表的 CHECK，所以老库里存的 monthly（产品原本就有的类型）
+    /// 也必须拷得动 —— 新 CHECK 漏掉 monthly 的话，迁移会在这一步直接失败。
+    /// </summary>
     [Fact]
     public void RunMigrations_UpgradesOldDatabaseWithoutLosingReports()
     {
@@ -197,12 +213,17 @@ public class MigrationsTests
             INSERT INTO reports (id, kind, period_start, period_end, created_at, updated_at)
             VALUES ('r-old', 'weekly', '2026-11-02', '2026-11-08', '2026-11-02T00:00:00.000Z', '2026-11-02T00:00:00.000Z')
             """);
+        TestDb.Execute(connection, """
+            INSERT INTO reports (id, kind, period_start, period_end, created_at, updated_at)
+            VALUES ('r-old-monthly', 'monthly', '2026-10-01', '2026-10-31', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')
+            """);
 
         Database.RunMigrations(connection);
 
         Assert.Equal(3, Database.GetUserVersion(connection));
         Assert.Equal("weekly", TestDb.Scalar(connection, "SELECT kind FROM reports WHERE id = 'r-old'"));
         Assert.Equal("2026-11-02", TestDb.Scalar(connection, "SELECT period_start FROM reports WHERE id = 'r-old'"));
+        Assert.Equal("monthly", TestDb.Scalar(connection, "SELECT kind FROM reports WHERE id = 'r-old-monthly'"));
     }
 
     /// <summary>
