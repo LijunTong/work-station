@@ -111,7 +111,7 @@ def verify_deb(path: pathlib.Path) -> None:
     pkg = next(line for line in control.splitlines() if line.startswith("Package:"))
     check(pkg == "Package: workstation", f"{pkg}")
     ver = next(line for line in control.splitlines() if line.startswith("Version:"))
-    check(ver == "Version: 1.0.1", f"{ver}")
+    check(ver == "Version: 1.0.2", f"{ver}")
     arch = next(line for line in control.splitlines() if line.startswith("Architecture:"))
     check(arch == "Architecture: amd64", f"{arch}")
 

@@ -4,7 +4,7 @@
 产出两种：
 
   1. **.deb**（Debian/Ubuntu/深度uos/UOS 等）
-     `dpkg -i workstation_1.0.1_amd64.deb` 就能装；图形化环境下双击
+     `dpkg -i workstation_1.0.2_amd64.deb` 就能装；图形化环境下双击
      也会被「软件」中心识别。装完：
        · /opt/workstation/          应用本体
        · /usr/bin/workstation       指向它的符号链接（命令行直接敲 workstation）
@@ -50,7 +50,7 @@ ROOT = HERE.parent.parent
 
 APP_NAME = "workstation"
 APP_TITLE = "WorkStation 工作台"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 ARCH = "amd64"
 MAINTAINER = "Joont"
 MAINTAINER_EMAIL = "joont@local"
@@ -393,7 +393,7 @@ def build_tarball(app_dir: pathlib.Path, tar_path: pathlib.Path, tmp: pathlib.Pa
     """打包绿色版 tar.gz。
 
     解压后目录结构：
-        workstation-1.0.1-linux-x86_64/
+        workstation-1.0.2-linux-x86_64/
             WorkStation            应用本体
             install.sh             建软链 + 桌面图标
             uninstall.sh           撤掉上面那些

@@ -37,7 +37,7 @@ EOF
 fi
 
 APP_NAME="WorkStation"
-APP_VERSION="1.0.1"
+APP_VERSION="1.0.2"
 BUILD_DIR="$(mktemp -d)"
 APPDIR="$BUILD_DIR/${APP_NAME}.AppDir"
 OUT="${APP_NAME}-${APP_VERSION}-x86_64.AppImage"

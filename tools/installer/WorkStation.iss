@@ -13,7 +13,7 @@
 
 #define AppName "WorkStation 工作台"
 #define AppNameEn "WorkStation"
-#define AppVersion "1.0.1"
+#define AppVersion "1.0.2"
 #define AppPublisher "Joont"
 #define AppExeName "WorkStation.exe"
 
