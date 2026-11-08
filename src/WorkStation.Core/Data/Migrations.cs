@@ -15,8 +15,47 @@ public static class Migrations
 
         // 任务补一个「开始时间」：项目有起止，任务也需要起止，
         // 新增任务时默认继承所属项目的区间。ALTER TABLE 是加列，老库直接升。
-        new Migration(2, "task-start-at", AddTaskStartAt)
+        new Migration(2, "task-start-at", AddTaskStartAt),
+
+        // 报告加日报类型：CHECK 约束改不了，只能重建表。
+        // 顺带把 (kind, period_start) 变成唯一索引 —— 一个周期只允许一条报告。
+        new Migration(3, "reports-daily-kind", ReportsDailyKind)
     };
+
+    /// <summary>
+    /// 重建 reports 表：放开 kind 约束到 daily，并把 (kind, period_start) 变成唯一索引。
+    ///
+    /// SQLite 不能 ALTER 一个 CHECK 约束，只能建新表 → 拷数据 → 删旧表 → 改名。
+    /// 拷贝时按 (kind, period_start) 去重（保留最早的一行）：唯一索引建在
+    /// 有重复数据的旧库上会失败，那属于「数据本来就不合法」，不能让整个应用起不来。
+    /// </summary>
+    private const string ReportsDailyKind = """
+        CREATE TABLE reports_new (
+          id             TEXT PRIMARY KEY,
+          kind           TEXT NOT NULL CHECK (kind IN ('daily','weekly','monthly')),
+          period_start   TEXT NOT NULL,
+          period_end     TEXT NOT NULL,
+          auto_markdown  TEXT NOT NULL DEFAULT '',
+          manual_text    TEXT NOT NULL DEFAULT '',
+          final_markdown TEXT NOT NULL DEFAULT '',
+          created_at     TEXT NOT NULL,
+          updated_at     TEXT NOT NULL
+        );
+
+        INSERT INTO reports_new (id, kind, period_start, period_end, auto_markdown, manual_text, final_markdown, created_at, updated_at)
+        SELECT r.id, r.kind, r.period_start, r.period_end, r.auto_markdown, r.manual_text, r.final_markdown, r.created_at, r.updated_at
+        FROM reports r
+        WHERE r.rowid = (
+          SELECT MIN(r2.rowid) FROM reports r2
+          WHERE r2.kind = r.kind AND r2.period_start = r.period_start
+        );
+
+        DROP TABLE reports;
+
+        ALTER TABLE reports_new RENAME TO reports;
+
+        CREATE UNIQUE INDEX idx_reports_period ON reports(kind, period_start);
+        """;
 
     private const string AddTaskStartAt = """
         ALTER TABLE tasks ADD COLUMN start_at TEXT;

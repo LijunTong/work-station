@@ -55,8 +55,15 @@ public enum RepeatRule
     Weekly
 }
 
+/// <summary>
+/// 报告类型。数据库里存的是小写字符串（见 DbEnum）。
+///
+/// 说明：Electron 版只有 weekly / monthly，本项目新增 daily ——
+/// 迁移 v3 重建了 reports 表并放开 CHECK 约束，老库照常能升。
+/// </summary>
 public enum ReportKind
 {
+    Daily,
     Weekly,
     Monthly
 }

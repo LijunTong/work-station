@@ -129,6 +129,7 @@ public static class DbEnum
 
     public static string ToDb(this ReportKind value) => value switch
     {
+        ReportKind.Daily => "daily",
         ReportKind.Weekly => "weekly",
         ReportKind.Monthly => "monthly",
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
@@ -136,6 +137,7 @@ public static class DbEnum
 
     public static ReportKind ParseReportKind(string value) => value switch
     {
+        "daily" => ReportKind.Daily,
         "weekly" => ReportKind.Weekly,
         "monthly" => ReportKind.Monthly,
         _ => throw new ArgumentException($"未知的报告类型：{value}", nameof(value))
