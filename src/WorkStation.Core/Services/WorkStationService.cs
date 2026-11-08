@@ -217,7 +217,7 @@ public sealed class WorkStationService
                     DateTimeStyles.None,
                     out _))
             {
-                throw new ArgumentException("报告周期起点应为 YYYY-MM-DD");
+                throw new ArgumentException("周期起点应形如 YYYY-MM-DD");
             }
 
             var existing = _reports.GetByPeriod(kind, periodStart);
@@ -433,11 +433,13 @@ public sealed class WorkStationService
         {
             return Result<T>.Failure(ErrorCodes.DbWriteFailed, DescribeSqliteError(operation, error));
         }
-        catch (System.Collections.Generic.KeyNotFoundException error)
+        catch (System.Collections.Generic.KeyNotFoundException)
         {
             // 「找不到记录」不是参数不合法，单独给一个机器可读的码。
             // 必须排在兜底的 catch (Exception) 之前。
-            return Result<T>.Failure(ErrorCodes.NotFound, error.Message);
+            // Message 不透传 error.Message：将来任何裸字典下标读抛出的 BCL 消息都是英文
+            // （The given key 'x' was not present in the dictionary.），不能直接展示给用户。
+            return Result<T>.Failure(ErrorCodes.NotFound, $"{operation}失败：未找到对应记录");
         }
         catch (Exception error)
         {
