@@ -77,13 +77,13 @@ Windows / macOS 走**单文件**（运行时压缩进一个 exe，含 Skia / Har
 `tools\build-installer.ps1` 产出 `dist\installer\WorkStation-Setup-<版本>.exe`，用 Inno Setup 6 编译，
 向导是中文的：
 
-| 环节 | 行为 |
-| --- | --- |
+| 环节   | 行为                                          |
+| ---- | ------------------------------------------- |
 | 安装位置 | 默认 `%LOCALAPPDATA%\Programs\WorkStation`，可改 |
-| 权限 | 只装给当前用户（写 HKCU），**不弹 UAC** |
-| 快捷方式 | 开始菜单（含「卸载」项）+ 桌面（可选） |
-| 卸载 | 「设置 → 应用」里可卸载；卸载时问一句「数据要不要一起删」，默认**保留** |
-| 依赖 | 无，运行时已打包 |
+| 权限   | 只装给当前用户（写 HKCU），**不弹 UAC**                  |
+| 快捷方式 | 开始菜单（含「卸载」项）+ 桌面（可选）                        |
+| 卸载   | 「设置 → 应用」里可卸载；卸载时问一句「数据要不要一起删」，默认**保留**     |
+| 依赖   | 无，运行时已打包                                    |
 
 定义在 `tools\installer\WorkStation.iss`；向导横幅图由 `tools\installer\make-wizard-images.py` 生成。
 
