@@ -190,3 +190,8 @@ UI 层用 `Avalonia.Headless` 承载，XAML 解析失败或编译绑定路径写
 | [docs/功能说明.md](docs/功能说明.md) | 功能清单、完整快捷键、已知限制 |
 | [docs/设计系统.md](docs/设计系统.md) | 现行 UI 令牌、组件规则与设计取舍 |
 | [AGENTS.md](AGENTS.md) | 给编码代理的硬约束、发版清单、代码→文档同步规则 |
+
+## 开源协议
+
+本项目基于 [MIT 协议](LICENSE) 开源：可自由使用、修改与分发（含商业用途），
+只需保留版权声明与许可声明。Copyright (c) 2026 joont。
